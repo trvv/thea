@@ -25,7 +25,7 @@ Tests are executable Bun scripts using assertions, not a `bun test` discovery
 suite. Run from the repository root:
 
 ```sh
-for test in recipes recipe-shaders pipeline point-factors point-configuration appearance \
+for test in recipes recipe-shaders hilbert pipeline point-factors point-configuration appearance \
   data-scroll context-menu render-engine render-thread-smoke trigraph \
   trigraph-opacity coordinates adaptive-resolution scroll-performance digraph fourier
 do
@@ -72,6 +72,7 @@ permission to launch processes and bind a local port in restricted environments.
 | `trigraph`, `trigraph-opacity` | Sliding tuple boundaries, exact incremental/fresh equivalence, owner repair, soft edges, projection, white opacity updates. |
 | `coordinates`, `point-configuration` | Coordinate conventions, repeated mappings, all spaces, sample/camera/raster cache boundaries. |
 | `point-factors` | Laziness, exact neighbors, entropy/histogram/FFT reuse, hidden axes, selection boundaries, empty/short inputs. |
+| `hilbert` | True 3D Hilbert orientation, exhaustive small-cube uniqueness/adjacency, exact large indices, vec3 sharing, menu deduplication, and population semantics. |
 | `recipes` | Typed DAGs, sharing, named references, cycle/type limits, menu edits, configurable entropy, serialization, shader emission. |
 | `recipe-shaders` | Representative generated GLSL compiled, linked, executed, and compared against CPU results; WGSL structural generation checks. |
 | `appearance`, `scroll-performance` | Palette parity, fractional rounding, source/cache reuse and bounded overview storage. |

@@ -7,7 +7,10 @@ carry an `op` and inputs/parameters. They are data rather than executable
 JavaScript, and survive structured cloning to the worker. Menu labels are
 summaries, not a textual language that can be parsed back into a recipe.
 
-The menus expose **Source**, **Transform**, and operation parameters. **Save
+The menus expose **Source**, **Transform**, and operation parameters. Source has
+one canonical entry per primitive plus exact byte/population quantities and
+constants; saved factors have their own group. Configurable byte/entropy/spectrum
+lookups and coordinate conversions live under Transform. **Save
 Factor** creates a named scalar definition; **Factors** edits definitions. A
 reference is explicit (`{op: 'ref', name: 'Neighbor'}`), so custom names cannot
 silently shadow built-in factor strings. Definitions remain available when
@@ -54,10 +57,52 @@ from selected length; orders 1–15 choose side `2 ** order`. Coordinates are
 normalized cell centers. `linear` instead uses the current sample grid. Neither
 expression requires the global Layout setting to be the same traversal.
 
-`f32`, exact CPU `index`, and `vec2` are currently implemented. A display channel and a saved named
-factor must end in a scalar (including an index). A vector can be shared inside multiple scalar
-expressions, but saving an unprojected vector as a named definition is rejected.
-There are no general vector constructors or 3D Hilbert operations yet.
+`f32`, exact CPU `index`, `vec2`, and `vec3` are implemented. A display
+channel and a saved named factor must end in a scalar (including an index).
+Vectors can be shared inside multiple scalar expressions. General vector
+constructors are not implemented.
+
+### Three-dimensional Hilbert coordinates
+
+```js
+import { hilbert3DCoordinate } from './recipes.js';
+view.pointConfiguration = {
+  ...view.pointConfiguration,
+  space: 'cube',
+  footprint: 'point',
+  position: [0, 1, 2].map(axis => hilbert3DCoordinate(axis))
+};
+```
+
+The helper constructs scalar projections of
+`{op: 'hilbert3d', input: {op: 'pointIndex'}, order: 0}`. X/Y/Z share one
+compiled `vec3` evaluation. In the menu, choose Source → Point Index and then
+Transform → Hilbert 3D → X/Y/Z for the respective position channels.
+
+For an integer (`index`) input, the value is an exact cell index, clamped to
+`[0, side ** 3 - 1]`. For an `f32` input, its clamped 0–1 value spans the entire
+curve, with 1 reaching the final cell. Use Point Index for exact adjacency beyond
+float32's adjacent-integer limit. Normalized Position remains available when a
+proportional traversal is intended.
+
+Order 0 chooses `ceil(log2(max(1, pointCount)) / 3)`, capped at 10. Explicit
+orders 1–10 use a cube with side `2 ** order` and `2 ** (3 * order)` cells.
+A one-point automatic curve has one centered cell. The shared CPU/shader limit
+keeps curve indices within signed 32-bit arithmetic; integer inputs beyond the
+chosen cube's capacity clamp to its endpoint. Coordinates are normalized cell
+centers. The orientation follows Skilling's transpose/Gray-decode construction
+([paper](https://doi.org/10.1063/1.1751381)) and is locked by an order-1 fixture.
+
+Point Index/Count refer to the unsampled population: selection-relative byte
+index/length for byte points, distinct-tuple ordinal/count for tuple points, and
+frequency-bin index/count for bins. Sample limits do not renumber surviving
+points. These operations do not read bytes or execute an FFT by themselves;
+tuple discovery still needs to inspect the selected bytes.
+
+This is an explicit coordinate expression, independent of display space and
+global Layout. It does not reorder the input to FFT, entropy, or occurrence
+providers. Existing 2D Hilbert expressions and Layout retain their conventions.
+
 
 ## Built-in sources
 
@@ -95,7 +140,8 @@ sentinel, not an arithmetic expression; use a constant inside a recipe.
 | `constant` | `value` | Scalar literal. |
 | `factor` | `name` | Scalar primitive source. |
 | `ref` | `name` | Named scalar definition, expanded during compilation. |
-| `offset`, `length` | none | Current sample offset or selected byte length. |
+| `offset`, `length` | none | Current compatibility byte offset or selected byte length, as an exact index. |
+| `pointIndex`, `pointCount` | none | Exact unsampled population ordinal/count, independent of byte addressing. |
 | `add`, `subtract`, `multiply`, `divide` | `a`, `b` | Scalar arithmetic; division by zero returns zero. |
 | `invert` | `input` | `1 - input`. |
 | `abs`, `floor`, `fract` | `input` | Absolute, floor, or input minus floor. |
@@ -107,7 +153,8 @@ sentinel, not an arithmetic expression; use a constant inside a recipe.
 | `spectrum` | `input`, `kind` | Sample normalized one-sided spectrum position; kind is `phase`, `frequency`, or `amplitude`. |
 | `linear` | `input` | vec2 cell center from a normalized traversal input and current sample grid. |
 | `hilbert` | `input`, `order` | vec2 cell center along a power-of-two Hilbert square. |
-| `component` | `input`, `component` | Extract X (0) or Y (1) from a vec2. |
+| `hilbert3d` | `input`, `order` | vec3 cell center on a Hilbert cube; exact index or normalized scalar input. |
+| `component` | `input`, `component` | Extract X (0), Y (1), or Z (2); Z requires vec3. |
 
 Vector inputs cannot be passed directly to scalar arithmetic. Shapes and camera
 transforms are outside this expression language; recipe outputs supply their
@@ -168,13 +215,13 @@ changes reuse prepared points. See [cache ownership](rendering.md#what-gets-cach
 Validation limits currently include 32 levels of recursion, 256 distinct compiled
 operations, 2048 traversal visits, 64 named definitions, 64-character names, finite
 numeric parameters within ±1,000,000, power exponents 0–16, entropy windows 1–4096,
-and Hilbert orders 0–15. Named definitions are validated even when unused, although
+2D Hilbert orders 0–15, and 3D Hilbert orders 0–10. Named definitions are validated even when unused, although
 their providers do not run until reachable. Direct and indirect cycles are errors.
 
 ### Precision is part of the contract
 
 Visual scalar/vector intermediates round to float32 after each instruction.
-`offset` and `length` instead produce `index` values. Addition, subtraction, and
+`offset`, `length`, `pointIndex`, and `pointCount` instead produce `index` values. Addition, subtraction, and
 multiplication involving indices and integer constants preserve that type. CPU
 index arithmetic uses JavaScript safe integers and throws on overflow rather than
 silently addressing another byte. Other operations convert to visual scalar
@@ -214,11 +261,13 @@ const { source, bindings } = emitRecipeShader(program, 'wgsl'); // or 'glsl'
 
 The result is a **function library**, not a complete shader module with a stage
 entry point or a configured GPU pipeline. It provides
-`evaluateRecipes(sourceFactors, pointOffset, selectionLength, grid)` returning a
+`evaluateRecipes(sourceFactors, pointOffset, selectionLength, grid, pointIndex, pointCount)` returning a
 `RecipeResult` whose fields match the requested roots. The built-in source array
 has the canonical factor-slot layout; only `program.required` slots need values.
 
-The returned binding descriptors identify externally supplied functions:
+The final two integer arguments describe the unsampled point population; they
+are distinct from byte-offset/selection-length inputs. The returned binding
+descriptors identify externally supplied functions:
 
 | Function | Required return value |
 | --- | --- |

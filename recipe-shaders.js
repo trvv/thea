@@ -19,7 +19,7 @@ import { factorIndices as indices, factorCount } from './factor-catalog.js';
  */
 export function emitRecipeShader(program, language = 'glsl') {
  if (!['glsl','wgsl'].includes(language)) throw new TypeError('Unknown shader language');
- const wgsl = language === 'wgsl', scalar = wgsl ? 'f32' : 'float', integer = wgsl ? 'i32' : 'int', vector = wgsl ? 'vec2<f32>' : 'vec2';
+ const wgsl = language === 'wgsl', scalar = wgsl ? 'f32' : 'float', integer = wgsl ? 'i32' : 'int', vector = wgsl ? 'vec2<f32>' : 'vec2', vector3 = wgsl ? 'vec3<f32>' : 'vec3', integers3 = wgsl ? 'vec3<i32>' : 'ivec3';
  const literal = value => /[.eE]/.test(String(value)) ? String(value) : `${value}.0`;
  const declaration = (type, name, expression) => wgsl ? `let ${name}: ${type} = ${expression};` : `${type} ${name} = ${expression};`;
  const parameters = list => list.map(([type,name]) => wgsl ? `${name}: ${type}` : `${type} ${name}`).join(', ');
@@ -52,6 +52,8 @@ export function emitRecipeShader(program, language = 'glsl') {
    case 'constant':expression=literal(node.value);break;
    case 'offset':expression='pointOffset';break;
    case 'length':expression='selectionLength';break;
+   case 'pointIndex':expression='pointIndex';break;
+   case 'pointCount':expression='pointCount';break;
    case 'add':case 'subtract':case 'multiply':expression=node.type==='index'?`(${asIndex(node.args[0])} ${{add:'+',subtract:'-',multiply:'*'}[node.op]} ${asIndex(node.args[1])})`:`(${a} ${{add:'+',subtract:'-',multiply:'*'}[node.op]} ${b})`;break;
    case 'divide':
     helpers.set('divide',fn(scalar,'recipeDivide',[[scalar,'a'],[scalar,'b']],`if (b == 0.0) { return 0.0; }\nreturn a / b;`));expression=`recipeDivide(${a}, ${b})`;break;
@@ -66,10 +68,41 @@ export function emitRecipeShader(program, language = 'glsl') {
    case 'spectrum':
     if(node.kind==='frequency')expression=`(2.0 * min(floor(${scalar}(selectionLength) / 2.0), floor(clamp(${a}, 0.0, 1.0) * (floor(${scalar}(selectionLength) / 2.0) + 1.0))) / max(1.0, ${scalar}(selectionLength)))`;
     else expression=`${provider('spectrum',node.kind)}(${a}, ${scalar}(selectionLength))`;break;
-   case 'component':expression=`${a}.${node.component===0?'x':'y'}`;break;
+   case 'component':expression=`${a}.${['x','y','z'][node.component]}`;break;
    case 'linear': {
     helpers.set('linear',fn(vector,'recipeLinear',[[scalar,'position'],[vector,'grid']],`${declaration(scalar,'index','min(grid.x * grid.y - 1.0, floor(clamp(position, 0.0, 1.0) * grid.x * grid.y))')}\nreturn ${vector}(index - floor(index / grid.x) * grid.x + 0.5, floor(index / grid.x) + 0.5) / grid;`));
     expression=`recipeLinear(${a}, grid)`;break;
+   }
+   case 'hilbert3d': {
+    const variable = (type,name,value) => wgsl ? `var ${name}: ${type} = ${value};` : `${type} ${name} = ${value};`;
+    const shift = value => wgsl ? `u32(${value})` : value;
+    const side = `(1 << ${shift('order')})`;
+    helpers.set('hilbert3d',fn(vector3,'recipeHilbert3D',[[integer,'index'],[integer,'order']],`
+${variable(integers3,'axes',`${integers3}(0)`)}
+for (${variable(integer,'bit','0')} bit < order; bit += 1) {
+ for (${variable(integer,'axis','0')} axis < 3; axis += 1) {
+  axes[axis] |= ((index >> ${shift('(bit * 3 + 2 - axis)')}) & 1) << ${shift('bit')};
+ }
+}
+${declaration(integer,'tail',`axes.z >> ${shift('1')}`)}
+axes.z ^= axes.y; axes.y ^= axes.x; axes.x ^= tail;
+for (${variable(integer,'scale','2')} scale < ${side}; scale *= 2) {
+ ${declaration(integer,'mask','scale - 1')}
+ for (${variable(integer,'axis','2')} axis >= 0; axis -= 1) {
+  if ((axes[axis] & scale) != 0) { axes.x ^= mask; }
+  else {
+   ${declaration(integer,'exchange','(axes.x ^ axes[axis]) & mask')}
+   axes.x ^= exchange; axes[axis] ^= exchange;
+  }
+ }
+}
+return (${vector3}(axes) + ${vector3}(0.5)) / ${scalar}(${side});`));
+    const order=`hilbertOrder${node.id}`;
+    statements.push(declaration(integer,order,node.order?String(node.order):`${integer}(min(10.0, ceil(log2(max(1.0, ${scalar}(pointCount))) / 3.0)))`));
+    const cells=`(1 << ${shift(`(3 * ${order})`)})`;
+    const index=program.nodes[node.args[0]].type==='index'?`clamp(r${node.args[0]}, 0, ${cells} - 1)`
+     : `min(${cells} - 1, ${integer}(floor(clamp(${a}, 0.0, 1.0) * ${scalar}(${cells}))))`;
+    expression=`recipeHilbert3D(${index}, ${order})`;break;
    }
    case 'hilbert': {
     const variable = (type,name,value) => wgsl ? `var ${name}: ${type} = ${value};` : `${type} ${name} = ${value};`;
@@ -80,13 +113,13 @@ export function emitRecipeShader(program, language = 'glsl') {
    }
    default:throw new TypeError('Unsupported shader operation');
   }
-  statements.push(declaration(node.type==='vec2'?vector:node.type==='index'?integer:scalar,`r${node.id}`,expression));
+  statements.push(declaration(node.type==='vec3'?vector3:node.type==='vec2'?vector:node.type==='index'?integer:scalar,`r${node.id}`,expression));
  }
  const outputs=Object.keys(program.outputs), fields=outputs.length?outputs:['unused'];
  const struct=wgsl?`struct RecipeResult { ${fields.map(name=>`${name}: f32,`).join(' ')} }`:`struct RecipeResult { ${fields.map(name=>`float ${name};`).join(' ')} };`;
  if(wgsl)statements.push(`return RecipeResult(${outputs.length?outputs.map(name=>unit(asScalar(program.outputs[name]))).join(', '):'0.0'});`);
  else {statements.push('RecipeResult result;');for(const name of fields)statements.push(`result.${name} = ${outputs.length?unit(asScalar(program.outputs[name])):'0.0'};`);statements.push('return result;');}
- const args=wgsl?[[`array<f32, ${factorCount}>`,'sourceFactors'],[integer,'pointOffset'],[integer,'selectionLength'],[vector,'grid']]:[[`float`,`sourceFactors[${factorCount}]`],[integer,'pointOffset'],[integer,'selectionLength'],[vector,'grid']];
+ const args=wgsl?[[`array<f32, ${factorCount}>`,'sourceFactors'],[integer,'pointOffset'],[integer,'selectionLength'],[vector,'grid'],[integer,'pointIndex'],[integer,'pointCount']]:[[`float`,`sourceFactors[${factorCount}]`],[integer,'pointOffset'],[integer,'selectionLength'],[vector,'grid'],[integer,'pointIndex'],[integer,'pointCount']];
  const prototypes=wgsl?'':Array.from(external.values(),binding=>`float ${binding.name}(int index);`).join('\n');
  return {language,maxIndex:2147483647,bindings:[...external.values()],source:[struct,prototypes,...helpers.values(),fn('RecipeResult','evaluateRecipes',args,statements.join('\n'))].filter(Boolean).join('\n\n')};
 }

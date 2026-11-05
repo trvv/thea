@@ -87,7 +87,8 @@ It will not move points whose positions only depend on byte values or spectrum
 factors. Explicit recipe expressions `Hilbert(Position).X/Y` or
 `Linear(Position).X/Y` provide independent coordinate factors usable in any
 position or appearance channel. Their 2D vectors can also feed the axes of a 3D
-space; there is no 3D Hilbert traversal implementation today.
+space. Explicit `Hilbert3D(Point Index).X/Y/Z` expressions provide a true cube
+traversal; global Layout remains a 2D traversal choice.
 
 ## Point populations and mixed analyses
 
@@ -121,3 +122,9 @@ Native DFT accumulates bins into pixels before log scaling. Native opaque triple
 rendering retains independent coverage/depth owners. General points use point
 colors and back-to-front blending. Population preservation does not promise
 pixel-identical color scaling or edge behavior across these painters.
+
+Point Index and Point Count expose exact unsampled population ordinals and counts.
+For frequency-bin points, they are the bin index and one-sided bin count. In
+particular, a 3D Hilbert traversal can use the frequency-bin index directly rather
+than the proportional compatibility byte address. The existing byte-factor
+compatibility mapping is unchanged by the 3D coordinate operation.

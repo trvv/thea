@@ -4,13 +4,14 @@
  * @module recipes
  * @see docs/recipes.md
  */
+import { hilbert3D, hilbert3DMaxOrder } from './hilbert.js';
 import { spaces } from './spaces.js';
 import { appearanceChannels, factorIndices, factorCount } from './factor-catalog.js';
 
 /**
  * These are the portable pieces of a compiled program. Provider sets and runtime
  * factories describe execution but are not part of the saved expression schema.
- * @typedef {'f32'|'index'|'vec2'} RecipeType
+ * @typedef {'f32'|'index'|'vec2'|'vec3'} RecipeType
  * @typedef {object} RecipeNode
  * @property {number} id Topological position in the program's node array.
  * @property {string} op Validated operation name; never executable source text.
@@ -34,6 +35,9 @@ export const reference = name => ({ op: 'ref', name });
  */
 export const hilbertCoordinate = (component, input = 'position', order = 0) => ({ op: 'component', component,
  input: { op: 'hilbert', input, order } });
+/** A true cube traversal; integer inputs select exact cells, scalar inputs span the curve. */
+export const hilbert3DCoordinate = (component, input = {op:'pointIndex'}, order = 0) => ({op:'component',component,
+ input:{op:'hilbert3d',input,order}});
 const clamp = value => Math.max(0, Math.min(1, value));
 const cache = new Map(), requests = new Map();
 
@@ -93,7 +97,7 @@ export function compileRecipes(roots, definitions = {}) {
     if (!Object.hasOwn(factorIndices, expression.name)) throw new TypeError('Unknown factor');
     params.name = expression.name; required.add(params.name); break;
    case 'constant': params.value = number(expression.value); break;
-   case 'offset': case 'length': type = 'index'; break;
+   case 'offset': case 'length': case 'pointIndex': case 'pointCount': type = 'index'; break;
    case 'add': case 'subtract': case 'multiply': case 'divide':
     args = [scalar(child('a')), scalar(child('b'))];
     if (op !== 'divide' && args.some(node => node.type === 'index') && args.every(node => node.type === 'index' || node.op === 'constant' && Number.isInteger(node.value))) type = 'index';
@@ -123,9 +127,13 @@ export function compileRecipes(roots, definitions = {}) {
      if (!Number.isInteger(params.order) || params.order < 0 || params.order > 15) throw new TypeError('Hilbert order must be between 0 (automatic) and 15');
     }
     break;
+   case 'hilbert3d':
+    args = [scalar(child('input'))]; type = 'vec3'; params.order = expression.order ?? 0;
+    if (!Number.isInteger(params.order) || params.order < 0 || params.order > hilbert3DMaxOrder) throw new TypeError('3D Hilbert order must be between 0 (automatic) and 10');
+    break;
    case 'component': {
     const input = child('input');
-    if (input.type !== 'vec2' || ![0,1].includes(expression.component)) throw new TypeError('Expected X or Y from a coordinate vector');
+    if (!['vec2','vec3'].includes(input.type) || !Number.isInteger(expression.component) || expression.component < 0 || expression.component >= Number(input.type.slice(3))) throw new TypeError('Invalid coordinate vector component');
     args = [input]; params.component = expression.component; break;
    }
    default: throw new TypeError(`Unknown recipe operation: ${op}`);
@@ -156,15 +164,20 @@ export function compileRecipes(roots, definitions = {}) {
    * but their per-point values must never alias.
    */
   createEvaluator() {
-   const values = new Float64Array(nodes.length * 2);
+   const slots = [];
+   let size = 0;
+   for (const node of nodes) { slots.push(size); size += node.type === 'vec3' ? 3 : node.type === 'vec2' ? 2 : 1; }
+   const values = new Float64Array(size);
    // Instructions close over resolved slots; no parsing or graph traversal occurs per point.
    const instructions = nodes.map(node => {
-    const target = node.id * 2, a = node.args[0] * 2, b = node.args[1] * 2;
+    const target = slots[node.id], a = slots[node.args[0]], b = slots[node.args[1]];
     switch (node.op) {
      case 'factor': return factors => { values[target] = factors[factorIndices[node.name]]; };
      case 'constant': return () => { values[target] = node.value; };
      case 'offset': return (_, context) => { values[target] = context.offset; };
      case 'length': return (_, context) => { values[target] = context.length; };
+     case 'pointIndex': return (_, context) => { values[target] = context.pointIndex; };
+     case 'pointCount': return (_, context) => { values[target] = context.pointCount; };
      case 'add': return () => { values[target] = values[a] + values[b]; };
      case 'subtract': return () => { values[target] = values[a] - values[b]; };
      case 'multiply': return () => { values[target] = values[a] * values[b]; };
@@ -185,6 +198,14 @@ export function compileRecipes(roots, definitions = {}) {
       const index = Math.min(columns * rows - 1, Math.floor(clamp(values[a]) * columns * rows));
       values[target] = (index % columns + 0.5) / columns; values[target + 1] = (Math.floor(index / columns) + 0.5) / rows;
      };
+     case 'hilbert3d': return (_, context) => {
+      if (Number.isNaN(values[a])) { values[target] = values[target + 1] = values[target + 2] = NaN; return; }
+      const order = node.order || Math.min(hilbert3DMaxOrder, Math.ceil(Math.log2(Math.max(1, context.pointCount ?? context.length)) / 3));
+      const cells = 2 ** (order * 3);
+      const index = nodes[node.args[0]].type === 'index' ? Math.max(0, Math.min(cells - 1, values[a]))
+       : Math.min(cells - 1, Math.floor(clamp(values[a]) * cells));
+      hilbert3D(index, order, values, target);
+     };
      case 'hilbert': return (_, context) => {
       const side = 2 ** (node.order || Math.min(15, Math.ceil(Math.log2(Math.sqrt(Math.max(1, context.length))))));
       let remaining = Math.min(side * side - 1, Math.floor(clamp(values[a]) * side * side)), x = 0, y = 0;
@@ -200,16 +221,17 @@ export function compileRecipes(roots, definitions = {}) {
    return (factors, context) => {
     for (let i = 0; i < instructions.length; i++) {
      instructions[i](factors, context);
-     const slot = i * 2;
+     const slot = slots[i];
      // Byte indices retain JS safe-integer precision; visual arithmetic keeps
      // the float32 rounding contract used by shader backends.
      if (nodes[i].type !== 'index') {
       values[slot] = Math.fround(values[slot]);
-      if (nodes[i].type === 'vec2') values[slot + 1] = Math.fround(values[slot + 1]);
+      if (nodes[i].type === 'vec2' || nodes[i].type === 'vec3') values[slot + 1] = Math.fround(values[slot + 1]);
+      if (nodes[i].type === 'vec3') values[slot + 2] = Math.fround(values[slot + 2]);
      } else if (!Number.isSafeInteger(values[slot])) throw new RangeError('Recipe index exceeds the safe integer range');
     }
     for (const [name, id] of outputEntries) {
-     const value = values[id * 2]; factors[bindings[name]] = Number.isFinite(value) ? clamp(value) : 0;
+     const value = values[slots[id]]; factors[bindings[name]] = Number.isFinite(value) ? clamp(value) : 0;
     }
    };
   }
@@ -253,7 +275,9 @@ export function recipeLabel(expression) {
   case 'factor': return expression.name;
   case 'constant': return String(expression.value);
   case 'offset': return 'Offset'; case 'length': return 'Length';
-  case 'component': return `${input()}.${expression.component === 0 ? 'X' : 'Y'}`;
+  case 'pointIndex': return 'Point Index'; case 'pointCount': return 'Point Count';
+  case 'component': return `${input()}.${['X','Y','Z'][expression.component]}`;
+  case 'hilbert3d': return `Hilbert3D(${input()})`;
   case 'hilbert': return `Hilbert(${input()})`; case 'linear': return `Linear(${input()})`;
   case 'byte': return `Byte(${recipeLabel(expression.offset)})`;
   case 'entropy': return `Entropy(${expression.window}, ${recipeLabel(expression.offset)})`;

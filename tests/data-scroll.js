@@ -167,7 +167,7 @@ if(scroll.view._pointConfiguration||scroll.view.appearance||scroll.view.region!=
 const pipeline={op:'normalize',input:{op:'byte',offset:{op:'add',a:{op:'offset'},b:{op:'constant',value:1}}},min:0,max:255};
 scroll.view.setFactor('Neighbor',pipeline);
 scroll.events.contextmenu({preventDefault(){},composedPath:()=>[scroll.view,scroll]});
-menu.find(item=>item.label==='Points').items.find(item=>item.label==='Hue').items.find(item=>item.label==='Source').items.find(item=>item.label==='Neighbor').action();await verify();
+menu.find(item=>item.label==='Points').items.find(item=>item.label==='Hue').items.find(item=>item.label==='Source').items.find(item=>item.label==='Saved Factors').items.find(item=>item.label==='Neighbor').action();await verify();
 if(scroll.view.appearance.hue.op!=='ref'||scroll.view.renderer.latest.configuration.recipes.Neighbor.op!=='normalize')throw Error('Named recipe did not reach renderer');
 const cachedRecipe=scroll.view.renderer.cache.preparedPoints;
 scroll.view.setFactor('Neighbor',{op:'invert',input:pipeline});await verify();

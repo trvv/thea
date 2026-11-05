@@ -1,3 +1,4 @@
+import { hilbert3DCoordinate } from '../recipes.js';
 import { spaces, presetConfiguration } from '../point-configuration.js';
 import assert from 'node:assert/strict';
 import { RenderEngine } from '../render-engine.js';
@@ -77,6 +78,12 @@ try {
 		assert.equal(await engine.render(spec),true);await executeRender(expected,spec);
 		assert.deepEqual(canvas.pixels,expected.pixels,`Recipe ${space} worker mismatch`);
 	}
+ for(const population of ['bytes','bins','triples']) {
+  const configuration={...presetConfiguration('linear'),space:'cube',footprint:'point',population,position:[0,1,2].map(axis=>hilbert3DCoordinate(axis))};
+  const spec={...job,region:'linear',configuration,length:512,columns:64,rows:48,sampleLayout:{columns:32,rows:16},appearance:{...defaultAppearance('linear'),hue:'phase'}};
+  assert.equal(await engine.render(spec),true);await executeRender(expected,spec);
+  assert.deepEqual(canvas.pixels,expected.pixels,`3D Hilbert ${population} worker mismatch`);
+ }
 	const prime = { ...job, region: 'dft', length: 65537, columns: 513, rows: 129 };
 	assert.equal(await engine.render(prime), true);
 	await executeRender(expected, prime);

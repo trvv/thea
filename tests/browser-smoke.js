@@ -49,6 +49,8 @@ try{
   const {executeRender}=await import('/rendering.js');
   const {presetConfiguration}=await import('/point-configuration.js');
   const {defaultAppearance}=await import('/appearance.js');
+  const {hilbert3DCoordinate}=await import('/recipes.js');
+  const {recipeMenu}=await import('/recipe-menu.js');
   const gpuCache={};
   const cpu=document.createElement('canvas'),gpu=document.createElement('canvas');
   const spec={kind:'view',source,offset:0,length:128,region:'linear',columns:96,rows:72,width:96,height:72,
@@ -84,7 +86,21 @@ try{
   assert(JSON.stringify(view.exportProfile())===JSON.stringify(profile),'Profile round trip changed settings');
   const old=view.exportProfile();try{view.importProfile({...old,version:99});}catch{}
   assert(JSON.stringify(view.exportProfile())===JSON.stringify(old),'Invalid profile changed state');
-  view.pointConfiguration={...view.pointConfiguration,population:'bytes',sampleLimit:64,space:'cube',backend:'webgl'};
+  view.pointConfiguration={...view.pointConfiguration,population:'bytes',sampleLimit:64,space:'cube',backend:'webgl',
+   position:[0,1,2].map(axis=>hilbert3DCoordinate(axis))};
+  view.focus();
+  scroll.menu.items=recipeMenu('Factor',{op:'pointIndex'},{},expression=>{
+   view.pointConfiguration={...view.pointConfiguration,position:[...view.pointConfiguration.position.slice(0,2),expression]};
+  }).items;
+  scroll.menu.open(10,10);
+  scroll.menu.controls().find(button=>button.textContent.includes('Transform')).click();
+  scroll.menu.childMenu.controls().find(button=>button.textContent.includes('Hilbert 3D')).click();
+  const curveMenu=scroll.menu.childMenu.childMenu;
+  assert(curveMenu?.matches(':popover-open'),'3D Hilbert component menu did not open');
+  curveMenu.controls().find(button=>button.textContent==='Z').click();
+  assert(view.pointConfiguration.position[2].input.op==='hilbert3d'&&view.pointConfiguration.position[2].component===2,'3D Hilbert menu chose the wrong component');
+  const curveProfile=JSON.stringify(view.exportProfile());view.importProfile(curveProfile);
+  assert(JSON.stringify(view.exportProfile())===curveProfile,'3D Hilbert profile did not round trip');
   const range=[view.offset,view.length];
   view.noteMovement();view.resolution.scale=0.5;await view.render();
   assert(view.offset===range[0]&&view.length===range[1],'Quality changed selection');

@@ -45,6 +45,15 @@ are subsampled in population order. Byte values/entropy can average intervals;
 text and Hilbert samples remain representative bytes. Footprint is explicit so
 expression spelling cannot change mark size.
 
+## Explicit 3D Hilbert traversal
+
+`hilbert3DCoordinate(axis)` supplies X/Y/Z projections from an exact Point Index.
+The default automatic order follows the full population count; the sample limit
+only chooses which indices are evaluated. A `hilbert3d` expression returns a shared
+vec3 and can feed any compatible scalar channel. It is independent of global
+Layout and the chosen display space. See [recipes](recipes.md#three-dimensional-hilbert-coordinates)
+for normalized versus integer inputs, order limits, and a complete configuration.
+
 ## Profiles
 
 ```js

@@ -8,7 +8,8 @@ focused on those concrete responsibilities.
 
 - Point populations independent of mixed analysis providers.
 - Explicit sampling limits, footprints, and CPU/WebGL backend choice.
-- Serializable scalar/index/vector expressions with shared typed DAGs.
+- Serializable scalar/index/vector expressions with shared typed DAGs, including
+  explicit 2D/3D Hilbert coordinates and exact population ordinals.
 - Lazy providers, incremental byte/pair/triple counts, and shared spectrum caches.
 - Bounded worker queues, compatible frame presentation, and adaptive raster quality.
 - Versioned JSON profile import/export with atomic validation.

@@ -108,7 +108,7 @@ export async function pointFactors(job, appearance, cache, current, helpers, com
  }
  const text = job.shaders.includes('character') || job.shaders.includes('hex');
  const values = new Float64Array(Math.max(factorCount,program.factorCount));
- const context={offset:0,length:job.length,grid:[columns,rows],
+ const context={offset:0,length:job.length,pointIndex:0,pointCount:population==='bytes'?job.length:available,grid:[columns,rows],
   byte(index){index=Math.floor(index);return index>=0&&index<job.length?bytes[index]:0;},
   entropy(index,size){index=Math.floor(index);return index>=0&&index<job.length?cache.recipeEntropy.values.get(size)[index]:0;},
   spectrum(kind,position){
@@ -149,7 +149,7 @@ export async function pointFactors(job, appearance, cache, current, helpers, com
    if (amplitude) values[slots.amplitude] = amplitudes[bin];
    const label = !text ? undefined : job.shaders.includes('hex') ? bytes[sample].toString(16).padStart(2, '0').toUpperCase()
     : helpers.byteCharacter(bytes[sample], job.encoding, job.blankSpaces, job.blankNulls);
-   context.offset=sample;visit(values, label, context);
+   context.offset=sample;context.pointIndex=population==='bytes'?sample:index;visit(values, label, context);
   }
  };
 }

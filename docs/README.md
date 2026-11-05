@@ -39,7 +39,7 @@ there is no HTTP Range reader or incremental streaming source today.
 | Presets | Linear, Hilbert, Digraph, DFT, and Trigraph. Unchanged presets retain specialized CPU paths. |
 | Spaces | Square, circle, cube, cylinder, sphere; scalar factors map to their positional channels. |
 | Point appearance | Hue, saturation, lightness, opacity, size, and square/circle marks. Character or hex overlays are optional. |
-| Factor recipes | Primitive sources, arithmetic, byte lookup, local entropy, spectrum sampling, coordinate vectors, named scalar factors, and shared subexpressions. |
+| Factor recipes | Explicit 2D/3D Hilbert coordinates, exact population indices, primitive sources, arithmetic, byte lookup, local entropy, spectrum sampling, coordinate vectors, named scalar factors, and shared subexpressions. |
 | Scheduling | Predicted expensive jobs use a worker when supported; ordered presentation and adaptive 3D quality preserve interaction. |
 | Point population | Byte samples, distinct pairs/triples, or spectrum bins; independent analysis factors remain mixable. |
 | Sampling | General points default to at most 262,144 samples; selection ranges and exact statistical providers stay independent. |
