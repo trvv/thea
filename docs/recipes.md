@@ -184,8 +184,8 @@ running an FFT.
 Built-in spectral factors use the sample's relative byte offset to choose a bin;
 explicit spectrum recipes can define a different relationship. This is not a
 localized FFT or a claim that a coefficient describes one particular byte.
-Native DFT rendering also aggregates bins into pixels before scaling, so it need
-not match a raw per-point spectrum mapping exactly.
+All views use the shared point renderer; changing the mappings does not switch
+to a separate DFT image painter.
 
 ## Compilation and execution
 
@@ -211,7 +211,7 @@ finite outputs into synthetic factor slots, then `compilePosition` and
 The provider stage prepares only reachable statistics. Phase and amplitude share
 one FFT; adding amplitude later reuses complex coefficients already cached for
 phase. Each entropy window is cached independently. Camera and output-quality
-changes reuse prepared points. See [cache ownership](rendering.md#what-gets-cached).
+changes reuse prepared points. See [cache ownership](rendering.md#independent-cache-boundaries).
 
 Validation limits currently include 32 levels of recursion, 256 distinct compiled
 operations, 2048 traversal visits, 64 named definitions, 64-character names, finite

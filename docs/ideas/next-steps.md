@@ -1,13 +1,13 @@
 # Next steps
 
 These are proposals following the pipeline improvements in `77148df`, not a list
-of features already implemented. The [pipeline contracts](pipeline.md) describe
+of features already implemented. The [pipeline contracts](../pipeline.md) describe
 current behavior; the [roadmap](roadmap.md) gives the broader direction.
 
 Implemented since this proposal: the global Layout layer has been removed.
 Presets declare coordinate mappings; each dimension has ranges/steps, Scale or
 Truncate, and independent Fit (on by default). Profile version 3 migrates the
-previous arrangement settings. See [dimensions](dimensions.md) for the current
+previous arrangement settings. See [dimensions](../dimensions.md) for the current
 model. The proposals below retain their original priority rationale.
 
 The preset painters have since been removed as well. All view configurations now
@@ -15,7 +15,7 @@ share provider, recipe, geometry, appearance, projection/order and raster stages
 Geometry and projection/order reuse is independent of appearance edits; simple
 source graphs, exact conditional color tables, and opaque square row fills are
 shared optimizations. Developer frame metrics expose preparation, projection,
-sorting and raster timings. See [rendering](rendering.md) for current cache
+sorting and raster timings. See [rendering](../rendering.md) for current cache
 boundaries, benchmark usage and remaining dense-grid overhead. Preparation still
 combines provider reads/calculation and recipe evaluation, so finer instrumentation
 and sparse providers remain useful next work.
@@ -24,6 +24,10 @@ The guiding constraint is composability: point population determines which marks
 exist, while each analysis keeps its own scope and sampling relationship. Byte,
 tuple, spectral, and contextual analyses should remain freely mixable. Prefer
 small changes with measurable benefits over a general execution framework.
+
+For additional analysis proposals and current-recipe experiments, see the
+[ideas index](README.md). Those expand what can be measured; the work below mainly
+improves execution, editing and relationships between existing measurements.
 
 ## Suggested order
 
@@ -241,7 +245,7 @@ relationship without changing point population or activating unrelated providers
 
 ## 6. Build profile management and improve editing
 
-Version 1 JSON already supports validated import/export. A modest next step is
+Version 3 JSON supports validated import/export. A modest next step is
 named profile storage, duplication, rename/delete, and file import/export.
 localStorage is adequate for small configurations; IndexedDB is justified only
 if actual size or transaction requirements outgrow it. Keep reusable settings
@@ -250,7 +254,7 @@ current profile usable, and import/migration must validate before replacing it.
 
 Prefer explicit save behavior initially. If autosave is added, keep a recoverable
 previous version and distinguish the current session from a reusable named
-profile. Add schema migrations when an actual version 2 change exists, rather
+profile. Add schema migrations when an actual format change exists, rather
 than building a migration framework speculatively.
 
 The context menu now exposes population, sample limit, footprint, and backend.

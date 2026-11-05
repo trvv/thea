@@ -16,6 +16,7 @@ focused on those concrete responsibilities.
 - Versioned JSON profile import/export with atomic validation.
 - Optional WebGL2 rasterization, four-probe coverage, and CPU context-loss fallback.
 - GLSL/WGSL recipe-function emission, with executed GLSL integer-address fixtures.
+- On-demand point inspection with byte/tuple/bin origins and mixed-recipe provenance.
 - Real Chromium integration checks in addition to numerical/canvas-double tests.
 
 ## Next useful work

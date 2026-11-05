@@ -63,16 +63,17 @@ profile-library UI; reloading without saving still loses settings.
 - [Selection and sampling](data-selection.md): coordinate systems for offsets,
   nested scopes, selection anchors, and what a rendered sample represents.
 - [Point inspection](inspection.md): click behavior, source/recipe provenance, picking and frame ownership.
-- [Multibyte encoding ideas](<MULTIBYTE ENCODING IDEAS.md>): proposed contextual Unicode interpretations; not implemented.
+- [Ideas index](ideas/README.md): analysis proposals, recipe experiments, and future pipeline work.
+- [Multibyte encoding ideas](<ideas/MULTIBYTE ENCODING IDEAS.md>): proposed contextual Unicode interpretations; not implemented.
 - [Rendering and performance](rendering.md): worker protocol, stale frames,
   caches, particle rasterization, quality feedback, and memory costs.
 - [Recipes and shader contract](recipes.md): the expression format, types,
   operation reference, provider requirements, precision, and backend boundaries.
 - [Development and testing](development.md): commands, test limitations,
   extension checklists, and common failure modes.
-- [Detailed next steps](next-steps.md): proposed priorities, implementation options,
+- [Detailed next steps](ideas/next-steps.md): proposed priorities, implementation options,
   tradeoffs, and validation criteria for further improvements.
-- [Direction and open decisions](roadmap.md): what the general pipeline is meant
+- [Direction and open decisions](ideas/roadmap.md): what the general pipeline is meant
   to become and which design questions remain unresolved.
 
 See [pipeline contracts](pipeline.md) for populations, sampling, profiles, precision,
