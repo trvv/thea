@@ -63,6 +63,7 @@ profile-library UI; reloading without saving still loses settings.
 - [Selection and sampling](data-selection.md): coordinate systems for offsets,
   nested scopes, selection anchors, and what a rendered sample represents.
 - [Point inspection](inspection.md): click behavior, source/recipe provenance, picking and frame ownership.
+- [Multibyte encoding ideas](<MULTIBYTE ENCODING IDEAS.md>): proposed contextual Unicode interpretations; not implemented.
 - [Rendering and performance](rendering.md): worker protocol, stale frames,
   caches, particle rasterization, quality feedback, and memory costs.
 - [Recipes and shader contract](recipes.md): the expression format, types,
