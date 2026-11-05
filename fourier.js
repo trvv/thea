@@ -1,4 +1,13 @@
+/**
+ * Selection-length DFTs without changing the signal by padding it. Working convolution buffers may
+ * be larger; the returned spectrum still has exactly N bins.
+ * @module fourier
+ */
 // In-place radix-2 FFT. The inverse includes its 1/N normalization.
+/**
+ * Mutate reusable complex buffers instead of allocating values per butterfly; inverse normalization
+ * belongs here so convolution callers do not double-scale.
+ */
 function fft(real, imaginary, inverse = false) {
 	const length = real.length;
 	for (let i = 1, j = 0; i < length; i++) {
@@ -32,11 +41,19 @@ function fft(real, imaginary, inverse = false) {
 	if (inverse) for (let i = 0; i < length; i++) { real[i] /= length; imaginary[i] /= length; }
 }
 
+/**
+ * Distinguish radix-2 input from Bluestein working size; padding the input itself would move the
+ * frequencies being inspected.
+ */
 function transformSize(length) {
 	const radix2 = length > 0 && Number.isInteger(Math.log2(length));
 	return { size: radix2 ? length : 2 ** Math.ceil(Math.log2(Math.max(1, length * 2 - 1))), radix2 };
 }
 
+/**
+ * Account for Bluestein's extra transforms in offloading decisions; nearly equal selection lengths
+ * can have very different costs.
+ */
 export function fourierCost(length) {
 	const { size, radix2 } = transformSize(length);
 	return size * Math.log2(size) * (radix2 ? 8 : 24) + length * (radix2 ? 2 : 24);
@@ -44,6 +61,12 @@ export function fourierCost(length) {
 
 // Forward DFT with a negative exponent. Bluestein handles arbitrary selection
 // lengths without padding the signal or moving its frequency bins.
+/**
+ * Preserve exact selection length and negative-exponent phase convention, including prime lengths.
+ * Returned views can retain larger convolution buffers.
+ * @returns {{real: Float64Array, imaginary: Float64Array}} N complex coefficients, including both
+ *   frequency halves.
+ */
 export function fourierSpectrum(samples) {
 	const length = samples.length;
 	if (!length) return { real: new Float64Array(), imaginary: new Float64Array() };
@@ -82,6 +105,10 @@ export function fourierSpectrum(samples) {
 	return { real: real.subarray(0, length), imaginary: imaginary.subarray(0, length) };
 }
 
+/**
+ * Render only the one-sided spectrum for real byte signals. Combine amplitudes landing in the same
+ * pixel before log scaling, and suppress meaningless phase noise near zero.
+ */
 export function fourierImage(samples, width, height) {
 	const values = new Float64Array(width * height);
 	const length = samples.length;

@@ -1,6 +1,19 @@
+/**
+ * Feedback for interaction quality, independent of source selection. Changing raster detail must
+ * never change which bytes are selected.
+ * @module adaptive-resolution
+ */
 // Resolution changes are based on sustained measured misses, not pointer motion
 // alone. Transient setup costs and frames rebuilding a resized cache are ignored.
+/**
+ * Separate sustained raster pressure from one-off setup costs, so movement alone never forces a
+ * blurry view.
+ */
 export class AdaptiveResolution {
+	/**
+	 * Use elapsed milliseconds and a dimension scale; pixel work changes approximately with the square
+	 * of scale.
+	 */
 	constructor({ budget = 1000 / 60, minimum = 0.25 } = {}) {
 		this.budget = budget;
 		this.minimum = minimum;
@@ -9,17 +22,28 @@ export class AdaptiveResolution {
 		this.resetMeasurements();
 	}
 
+	/**
+	 * Discard evidence tied to the previous interaction, including any failed downscaling trial.
+	 */
 	resetMeasurements() {
 		this.slow = this.fast = this.warmup = 0;
 		this.trial = null;
 		this.locked = false;
 	}
 
+	/**
+	 * Start a fresh trial only at interaction boundaries, preserving feedback across successive
+	 * pointer events.
+	 */
 	touch() {
 		if (!this.moving) this.resetMeasurements();
 		this.moving = true;
 	}
 
+	/**
+	 * Idle always restores full detail; callers need the returned flag to know whether another frame
+	 * is necessary.
+	 */
 	settle() {
 		const changed = this.scale !== 1;
 		this.scale = 1;
@@ -28,6 +52,11 @@ export class AdaptiveResolution {
 		return changed;
 	}
 
+	/**
+	 * Ignore stale-quality reports and resized-cache warmup. Roll back a reduction that fails to help
+	 * rather than sacrificing more detail to a CPU-bound preparation step.
+	 * @returns {boolean} Whether the caller should schedule a frame at the new scale.
+	 */
 	record(duration, scale) {
 		if (!this.moving || scale !== this.scale || !Number.isFinite(duration) || duration <= 0 || this.locked) return false;
 		if (this.warmup) { this.warmup--; return false; }

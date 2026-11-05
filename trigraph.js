@@ -1,6 +1,17 @@
+/**
+ * Optimized tuple aggregation and CPU rasterization. Histogram, projection, and visibility are
+ * separate caches because scrolling and camera motion invalidate different work.
+ * @module trigraph
+ * @see docs/rendering.md
+ */
+import { compileAppearance, tupleFactors } from './appearance.js';
 import { spatialTransform } from './coordinates.js';
 
 // Cache the histogram independently of the camera so dragging only reprojects it.
+/**
+ * Operate on half-open ranges of valid triple starts, not byte coverage; the final two bytes belong
+ * to a tuple without starting one.
+ */
 function rangeDifference(start, end, otherStart, otherEnd) {
 	const ranges = [];
 	if (start < Math.min(end, otherStart)) ranges.push([start, Math.min(end, otherStart)]);
@@ -8,6 +19,12 @@ function rangeDifference(start, end, otherStart, otherEnd) {
 	return ranges;
 }
 
+/**
+ * Reuse overlapping windows by subtracting outgoing triples and adding incoming ones. Stage all
+ * awaited reads before mutating counts so cancellation cannot poison later frames.
+ * @returns {Promise<object|null>} Counts plus revision/changed keys; raster caches may apply only
+ *   consecutive revisions.
+ */
 export async function trigraphCounts(job, cache, current = () => true) {
 	const cached = cache.trigraph;
 	const sameSource = cached && (job.sourceId === undefined ? cached.source === job.source : cached.sourceId === job.sourceId);
@@ -67,6 +84,10 @@ export async function trigraphCounts(job, cache, current = () => true) {
 	return { counts, revision: 1, changed: null, duration, read: true, bytesRead: job.length };
 }
 
+/**
+ * Use one camera convention for wireframes and particles so bounding shapes do not drift away from
+ * projected data.
+ */
 function worldProjection(width, height, rotation = { yaw: -0.6, pitch: 0.45 }) {
 	const cy = Math.cos(rotation.yaw), sy = Math.sin(rotation.yaw);
 	const cp = Math.cos(rotation.pitch), sp = Math.sin(rotation.pitch);
@@ -79,6 +100,10 @@ function worldProjection(width, height, rotation = { yaw: -0.6, pitch: 0.45 }) {
 	};
 }
 
+/**
+ * Expose the packed-byte transform plus camera as a testable projection while reusing scratch
+ * position storage.
+ */
 export function cubeProjection(width, height, rotation, options = {}) {
 	const project = worldProjection(width, height, rotation);
 	const transform = spatialTransform(options.coordinateSystem, options.axes);
@@ -91,10 +116,18 @@ export function cubeProjection(width, height, rotation, options = {}) {
 
 const coordinates = Float64Array.from({ length: 256 }, (_, value) => value / 127.5 - 1);
 
+/**
+ * Scale size continuously with the same perspective denominator as position; integer depth buckets
+ * caused visible particle popping.
+ */
 export const projectedPointSize = depth => 1.5 * 3.5 / (3.5 - depth);
 
 const TILE_SIZE = 2;
 
+/**
+ * Grow dense typed arrays geometrically so incremental histogram changes do not allocate a new
+ * particle object per tuple.
+ */
 function growPoints(points, size) {
 	if (size <= points.capacity) return;
 	const capacity = Math.max(16, 2 ** Math.ceil(Math.log2(size)));
@@ -112,6 +145,10 @@ function growPoints(points, size) {
 
 // Stable dense slots and spatial bins make small window changes proportional
 // to the visible changes, rather than to every point in the selected buffer.
+/**
+ * Track dense slots, screen bins, and dirty coverage independently of density shading. Slot swaps
+ * must repair owner IDs, and skipped revisions require a full rebuild.
+ */
 function updatePoints(counts, scratch, histogram, width, height, rotation, captureOpacity, options) {
 	let points = scratch.points;
 	const revision = histogram?.revision;
@@ -129,6 +166,7 @@ function updatePoints(counts, scratch, histogram, width, height, rotation, captu
 	const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
 	const focal = Math.max(0, Math.min(width - 1, height - 1)) * 0.8;
 	let projectedCount = 0;
+	/** Project once per geometry change; density updates alone should not invalidate camera coordinates. */
 	const project = index => {
 		const triple = points.keys[index];
 		let x, y, z;
@@ -144,6 +182,7 @@ function updatePoints(counts, scratch, histogram, width, height, rotation, captu
 		points.projected[offset + 3] = projectedPointSize(depth) * pointScale / 2;
 		projectedCount++;
 	};
+	/** Bin by projected center, then expand searches by footprint reach when repairing tiles. */
 	const link = index => {
 		const x = Math.max(0, Math.min(tileColumns - 1, Math.floor(points.projected[index * 4] / TILE_SIZE)));
 		const y = Math.max(0, Math.min(tileRows - 1, Math.floor(points.projected[index * 4 + 1] / TILE_SIZE)));
@@ -154,6 +193,7 @@ function updatePoints(counts, scratch, histogram, width, height, rotation, captu
 		if (next >= 0) points.previous[next] = index;
 		points.heads[bin] = index;
 	};
+	/** Repair both neighboring links before a dense-slot swap reuses this index. */
 	const unlink = index => {
 		const bin = points.bin[index];
 		if (bin < 0) return;
@@ -162,6 +202,7 @@ function updatePoints(counts, scratch, histogram, width, height, rotation, captu
 		else points.next[previous] = next;
 		if (next >= 0) points.previous[next] = previous;
 	};
+	/** For removal/addition, mark only potentially visible coverage dirty. For slot moves, rewrite owner IDs in place rather than rerasterizing unchanged geometry. */
 	const visit = (index, operation, replacement) => {
 		if (full || captureOpacity || !scratch.opaqueValid) return;
 		const p = index * 4, px = points.projected[p], py = points.projected[p + 1];
@@ -185,11 +226,13 @@ function updatePoints(counts, scratch, histogram, width, height, rotation, captu
 			}
 		}
 	};
+	/** Record old/new weights before slots are moved, preserving enough information for additive optical-depth deltas. */
 	const opacityChange = (index, before, after) => {
 		if (!captureOpacity || full || before === after) return;
 		const p = index * 4;
 		opacityChanges.push([points.projected[p], points.projected[p + 1], points.projected[p + 3], before, after]);
 	};
+	/** Delete by moving the final slot into the gap; every slot-indexed side structure must follow that move. */
 	const update = (count, key) => {
 		let index = points.indices.get(key);
 		if (!count) {
@@ -243,6 +286,10 @@ function updatePoints(counts, scratch, histogram, width, height, rotation, captu
 	return points;
 }
 
+/**
+ * Keep four depth owners per pixel so rear particles remain visible through partially covered
+ * edges. Stable key tie-breaking avoids dependence on Map insertion order.
+ */
 function rasterPoint(points, index, scratch, x0, y0, x1, y1) {
 	const { width, owners, depth } = scratch;
 	const p = index * 4, px = points.projected[p], py = points.projected[p + 1];
@@ -274,6 +321,10 @@ function rasterPoint(points, index, scratch, x0, y0, x1, y1) {
 	scratch.rasterizedCount++;
 }
 
+/**
+ * Cache the bounding shape apart from particle visibility; it changes with camera/space, not
+ * occurrence counts.
+ */
 function drawWireframe(background, width, height, rotation, options) {
 	background.fill(0);
 	const project = worldProjection(width, height, rotation);
@@ -304,6 +355,10 @@ function drawWireframe(background, width, height, rotation, options) {
 	}
 }
 
+/**
+ * Repair only affected visibility tiles when possible, then resolve current density shades. A
+ * changed global peak can alter every shade even when geometry is unchanged.
+ */
 export function trigraphImage(counts, width, height, rotation, scratch = {}, histogram, options = {}) {
 	const opacity = options.frequencyOpacity || false;
 	if (scratch.width !== width || scratch.height !== height) {
@@ -365,6 +420,10 @@ export function trigraphImage(counts, width, height, rotation, scratch = {}, his
 // For white particles, source-over opacity is order independent:
 // transmittance = product(1 - alpha). Optical depths add, so overlapping
 // selections can update just the changed particles without depth sorting.
+/**
+ * Accumulate optical depth instead of alpha so removal and insertion remain additive for the
+ * white-particle path.
+ */
 function accumulateOpacity(scratch, px, py, half, contribution, incremental) {
 	const { width, height, opticalDepth, transmittance } = scratch;
 	const left = px - half, right = px + half, top = py - half, bottom = py + half;
@@ -381,6 +440,10 @@ function accumulateOpacity(scratch, px, py, half, contribution, incremental) {
 	}
 }
 
+/**
+ * Exploit white source-over order independence; this shortcut is invalid for differently colored
+ * particles and must stay separate from their depth-sorted compositor.
+ */
 function opacityImage(points, scratch) {
 	const samples = scratch.width * scratch.height * 4;
 	if (!scratch.opticalDepth || scratch.opticalDepth.length !== samples) {
@@ -408,4 +471,54 @@ function opacityImage(points, scratch) {
 	scratch.opacityValid = true;
 	scratch.opaqueValid = false;
 	return values;
+}
+
+// Custom appearance uses the same cached projections as the default rasterizer.
+// Back-to-front source-over blending supports independently colored transparency.
+/**
+ * Reuse native tuple projections but sort colored marks back-to-front. Rebuild ordering after
+ * dense-slot changes, not only after rotation.
+ */
+export function paintTrigraphAppearance(canvas, histogram, job, scratch) {
+ const {columns: width, rows: height} = job;
+ if (scratch.width !== width || scratch.height !== height) {
+  Object.assign(scratch, {width, height, background: new Uint8Array(width * height)});
+ }
+ const points = updatePoints(histogram.counts, scratch, histogram, width, height, job.rotation, true, job);
+ if (points.full || !scratch.order) {
+  drawWireframe(scratch.background, width, height, job.rotation, job);
+ }
+ const style = compileAppearance('trigraph', job.appearance);
+ const factors = new Float64Array(4), color = new Uint8ClampedArray(4);
+ // A scrolling histogram can add/remove slots, so refresh the ordering on revision changes.
+ if (points.full || scratch.orderRevision !== points.revision || !scratch.order) {
+  scratch.order = Array.from({length: points.size}, (_, i) => i).sort((a,b) => points.projected[a*4+2] - points.projected[b*4+2]);
+  scratch.orderRevision = points.revision;
+ }
+ if (canvas.width !== width) canvas.width = width;
+ if (canvas.height !== height) canvas.height = height;
+ const context = canvas.getContext('2d'), image = context.createImageData(width, height);
+ const pixels = image.data;
+ for (let i=0; i<scratch.background.length; i++) {
+  const p=i*4; pixels[p]=pixels[p+1]=pixels[p+2]=scratch.background[i]; pixels[p+3]=255;
+ }
+ for (const index of scratch.order) {
+  tupleFactors(points.keys[index], points.weights[index], factors);
+  style.rgba(factors, color);
+  const p=index*4, x=points.projected[p], y=points.projected[p+1];
+  const half=points.projected[p+3]*style.size(factors), alpha=color[3]/255;
+  if (!alpha) continue;
+  const left=Math.max(0,Math.floor(x-half)), right=Math.min(width-1,Math.ceil(x+half));
+  const top=Math.max(0,Math.floor(y-half)), bottom=Math.min(height-1,Math.ceil(y+half));
+  for(let py=top;py<=bottom;py++)for(let px=left;px<=right;px++) {
+   let coverage=0;
+   for(const dy of [-0.25,0.25])for(const dx of [-0.25,0.25]) {
+    const nx=(px+dx-x)/half,ny=(py+dy-y)/half;
+    if(style.shape==='circle'?nx*nx+ny*ny<=1:Math.abs(nx)<=1&&Math.abs(ny)<=1)coverage++;
+   }
+   const a=alpha*coverage/4, offset=(py*width+px)*4;
+   for(let c=0;c<3;c++)pixels[offset+c]=Math.round(color[c]*a+pixels[offset+c]*(1-a));
+  }
+ }
+ context.putImageData(image,0,0);
 }

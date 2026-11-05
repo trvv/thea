@@ -1,3 +1,12 @@
+/**
+ * Compatibility transforms for optimized presets. These remap images or packed byte triples; recipe
+ * spaces instead transform normalized point coordinates.
+ * @module coordinates
+ */
+/**
+ * Keep the older coordinate-system API interpretable while the general renderer uses explicit space
+ * definitions.
+ */
 export function coordinateDimensions(region, system = 'cartesian') {
 	if (region === 'trigraph') {
 		if (system === 'cylindrical') return ['Radius', 'Angle', 'Height'];
@@ -7,6 +16,9 @@ export function coordinateDimensions(region, system = 'cartesian') {
 	return system === 'radial' ? ['Radius', 'Angle'] : ['X', 'Y'];
 }
 
+/**
+ * Retain preset axis labels for compatibility; they do not define the universal recipe factor pool.
+ */
 export function sourceDimensions(region) {
 	if (region === 'trigraph') return ['Byte 1', 'Byte 2', 'Byte 3'];
 	if (region === 'digraph') return ['Byte 1', 'Byte 2'];
@@ -20,6 +32,10 @@ const inclinationSine = Float64Array.from({ length: 256 }, (_, byte) => Math.sin
 const inclinationCosine = Float64Array.from({ length: 256 }, (_, byte) => Math.cos(byte / 255 * Math.PI));
 
 // Coordinates are normalized to the same unit volume before camera projection.
+/**
+ * Compile byte-axis permutations before the hot loop and use angle lookup tables; these inputs are
+ * packed 8-bit triples, not arbitrary recipe scalars.
+ */
 export function spatialTransform(system = 'cartesian', axes = [0, 1, 2]) {
 	const shifts = axes.map(axis => (2 - axis) * 8);
 	return (triple, output) => {
@@ -39,6 +55,10 @@ export function spatialTransform(system = 'cartesian', axes = [0, 1, 2]) {
 	};
 }
 
+/**
+ * Inverse-map target pixels to avoid holes from forward splatting. DFT phase centering and vertical
+ * frequency orientation require explicit semantics.
+ */
 export function remapImage(source, sourceWidth, sourceHeight, width, height, system = 'cartesian', axes = [0, 1], semantics = {}) {
 	const result = new Uint8ClampedArray(width * height * 4);
 	const radius = Math.min(width, height) / 2;
@@ -63,6 +83,10 @@ export function remapImage(source, sourceWidth, sourceHeight, width, height, sys
 	return result;
 }
 
+/**
+ * Apply legacy 2D transforms once, after preset rendering. General recipe jobs already have
+ * positioned points and must not pass through this remapper.
+ */
 export function applyImageCoordinates(canvas, job) {
 	if (job.region === 'trigraph' || job.kind !== 'view') return;
 	const system = job.coordinateSystem || 'cartesian', axes = job.axes || [0, 1];

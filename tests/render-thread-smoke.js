@@ -1,6 +1,8 @@
+import { spaces, presetConfiguration } from '../point-configuration.js';
 import assert from 'node:assert/strict';
 import { RenderEngine } from '../render-engine.js';
 import { executeRender } from '../rendering.js';
+import { defaultAppearance } from '../appearance.js';
 import { RenderCanvas } from './render-canvas.js';
 
 const job = {
@@ -46,6 +48,34 @@ try {
 		const spec={...job,...settings,columns:256,rows:256};
 		assert.equal(await engine.render(spec),true);await executeRender(expected,spec);
 		assert.deepEqual(canvas.pixels,expected.pixels);
+	}
+	for (const region of ['linear','hilbert','digraph','dft','trigraph']) {
+		const appearance={...defaultAppearance(region), hue:region==='trigraph'||region==='digraph'?'byte1':region==='dft'?'phase':'position'};
+		const spec={...job,region,appearance,length:4096,columns:64,rows:64};
+		assert.equal(await engine.render(spec),true); await executeRender(expected,spec);
+		assert.deepEqual(canvas.pixels,expected.pixels,`${region} appearance worker mismatch`);
+	}
+	for (const region of ['linear','hilbert','digraph','trigraph','dft']) for (const space of Object.keys(spaces)) {
+		const configuration={...presetConfiguration(region),space};
+		const spec={...job,region,configuration,length:512,columns:64,rows:48,sampleLayout:{columns:32,rows:16},appearance:defaultAppearance(region)};
+		assert.equal(await engine.render(spec),true);await executeRender(expected,spec);
+		assert.deepEqual(canvas.pixels,expected.pixels,`${region}/${space} worker mismatch`);
+	}
+	for (const space of Object.keys(spaces)) {
+		const configuration={...presetConfiguration('linear'),space,position:['value','byte2','entropy']};
+		const appearance={...defaultAppearance('linear'),hue:'phase',lightness:'amplitude',opacity:'pairCount',size:'byte3'};
+		const spec={...job,configuration,appearance,length:512,columns:64,rows:48,sampleLayout:{columns:32,rows:16}};
+		assert.equal(await engine.render(spec),true); await executeRender(expected,spec);
+		assert.deepEqual(canvas.pixels,expected.pixels,`Mixed factors ${space} worker mismatch`);
+	}
+	const neighbor={op:'normalize',min:0,max:255,input:{op:'byte',offset:{op:'add',a:{op:'offset'},b:{op:'constant',value:1}}}};
+	for(const space of Object.keys(spaces)) {
+		const coordinate=component=>({op:'component',component,input:{op:'hilbert',input:'position',order:5}});
+		const configuration={...presetConfiguration('linear'),space,position:[coordinate(0),coordinate(1),'position'],recipes:{neighbor}};
+		const appearance={...defaultAppearance('linear'),hue:{op:'entropy',offset:{op:'offset'},window:64},lightness:{op:'ref',name:'neighbor'},opacity:{op:'invert',input:{op:'ref',name:'neighbor'}}};
+		const spec={...job,configuration,appearance,length:1024,columns:64,rows:48,sampleLayout:{columns:32,rows:32}};
+		assert.equal(await engine.render(spec),true);await executeRender(expected,spec);
+		assert.deepEqual(canvas.pixels,expected.pixels,`Recipe ${space} worker mismatch`);
 	}
 	const prime = { ...job, region: 'dft', length: 65537, columns: 513, rows: 129 };
 	assert.equal(await engine.render(prime), true);

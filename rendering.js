@@ -1,6 +1,15 @@
+/**
+ * Shared local/worker entry point plus optimized preset painters. A configured recipe view returns
+ * before legacy image-coordinate remapping.
+ * @module rendering
+ * @see docs/rendering.md
+ */
+import { requiredFactors } from './factors.js';
+import { renderPoints } from './point-renderer.js';
+import { compileAppearance, defaultAppearance, paintAppearanceGrid, occurrenceFactor } from './appearance.js';
 import { applyImageCoordinates } from './coordinates.js';
 import { overviewValues } from './overview.js';
-import { trigraphCounts, trigraphImage } from './trigraph.js';
+import { trigraphCounts, trigraphImage, paintTrigraphAppearance } from './trigraph.js';
 import { fourierCost, fourierImage } from './fourier.js';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -8,6 +17,10 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 // CP437 high-byte glyphs; control pictures remain consistent across encodings.
 const cp437 = 'ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■\xa0';
 
+/**
+ * Distinguish invisible control bytes without interpreting a multibyte text stream. Blank NUL/SP
+ * toggles are independent, and higher-byte glyphs depend on the chosen single-byte encoding.
+ */
 export function byteCharacter(byte, encoding, blankSpaces = false, blankNulls = true) {
 	if (encoding === 'ascii-overbar' && byte >= 128) {
 		return byteCharacter(byte & 0x7f, 'ascii', blankSpaces, blankNulls) + '\u0305';
@@ -22,6 +35,10 @@ export function byteCharacter(byte, encoding, blankSpaces = false, blankNulls = 
 }
 
 // Map Hilbert traversal indices to row-major cells in a power-of-two square.
+/**
+ * Produce a traversal-to-cell permutation, not a byte reorder. Callers must pass a power-of-two
+ * side so every cell is visited exactly once.
+ */
 export function hilbertCells(side) {
 	const cells = new Uint32Array(side * side);
 	for (let index = 0; index < cells.length; index++) {
@@ -43,6 +60,10 @@ export function hilbertCells(side) {
 }
 
 // Shannon entropy in a moving 32-byte neighborhood, scaled from 0 to 255.
+/**
+ * Use a rolling Shannon statistic so overlapping neighborhoods do not rescan 32 bytes per point.
+ * The 5-bit divisor is the maximum entropy achievable in a 32-byte sample.
+ */
 export function entropyShading(bytes) {
 	const values = new Uint8Array(bytes.length);
 	const counts = new Uint8Array(256);
@@ -63,6 +84,10 @@ export function entropyShading(bytes) {
 }
 
 // Combined shaders use HSL: entropy supplies hue, byte value supplies lightness.
+/**
+ * Reserve lightness headroom so 00 and FF retain entropy hue. Native LUT generation and general
+ * appearance defaults must preserve this color convention.
+ */
 export function cellColor(value, entropy, shaders) {
 	const brightness = shaders.includes('brightness');
 	const varied = shaders.includes('entropy');
@@ -81,6 +106,10 @@ export function cellColor(value, entropy, shaders) {
 
 const grayscaleFrames = new WeakMap();
 
+/**
+ * Reuse image storage and delay resizing until replacement pixels are ready; clearing an old canvas
+ * before an awaited render was a source of flicker.
+ */
 export function paintBytes(canvas, values, width = canvas.width, height = canvas.height, cells) {
 	// Resize and draw together, only once the next image is ready.
 	if (canvas.width !== width) canvas.width = width;
@@ -126,8 +155,16 @@ const grayColors = new Uint8ClampedArray(256 * 4);
 for (let i = 0; i < 256; i++) grayColors.set([i, i, i, 255], i * 4);
 const grayPixels = new Uint32Array(grayColors.buffer);
 const clampedGray = new Uint8ClampedArray(1);
+/**
+ * Match Uint8ClampedArray rounding exactly when selecting a prepacked gray pixel, including
+ * half-integer averages.
+ */
 function grayIndex(value) { clampedGray[0] = value; return clampedGray[0]; }
 let mixedPixels;
+/**
+ * Cache all 65,536 byte/entropy colors instead of evaluating HSL or allocating arrays per visible
+ * cell.
+ */
 function mixedPalette() {
 	if (!mixedPixels) {
 		const bytes = new Uint8ClampedArray(256 * 256 * 4);
@@ -140,7 +177,34 @@ function mixedPalette() {
 	return mixedPixels;
 }
 
+/**
+ * Keep sequential downsampling averages separate from Hilbert traversal sampling. Text uses actual
+ * representative bytes rather than glyphs for fractional averages.
+ */
 export function paintView(canvas, bytes, entropy, columns, rows, cells, shaders, options) {
+	if (options.appearance) {
+		const count = columns * rows, factors = new Float64Array(6);
+		return paintAppearanceGrid(canvas, columns, rows, options, emit => {
+			const text = shaders.includes('hex') || shaders.includes('character');
+			for (let i = 0; i < count; i++) {
+				const sample = cells || bytes.length > count ? Math.floor(i * bytes.length / count) : i;
+				if (sample >= bytes.length) continue;
+				let value = bytes[sample], metric = entropy?.[sample] || 0;
+				if (!text && !cells && bytes.length > count) {
+					const end = Math.floor((i + 1) * bytes.length / count);
+					value = metric = 0;
+					for (let j = sample; j < end; j++) { value += bytes[j]; metric += entropy?.[j] || 0; }
+					value /= end - sample; metric /= end - sample;
+				}
+				factors[0] = value / 255; factors[1] = metric / 255; factors[2] = sample / Math.max(1, bytes.length - 1);
+				factors[4] = ((cells ? cells[i] : i) % columns + 0.5) / columns;
+				factors[5] = (Math.floor((cells ? cells[i] : i) / columns) + 0.5) / rows;
+				const label = !text ? undefined : shaders.includes('hex') ? bytes[sample].toString(16).padStart(2, '0').toUpperCase()
+					: byteCharacter(bytes[sample], options.encoding, options.blankSpaces, options.blankNulls);
+				emit(cells ? cells[i] : i, factors, label);
+			}
+		});
+	}
 	const hex = shaders.includes('hex');
 	const text = hex || shaders.includes('character');
 	const scale = options.scale;
@@ -198,6 +262,10 @@ export function paintView(canvas, bytes, entropy, columns, rows, cells, shaders,
 }
 
 // A sliding pair (first byte = X, next byte = Y) occupies one fixed grid cell.
+/**
+ * Use log density relative to the frame peak so rare adjacent pairs remain visible alongside
+ * frequent ones.
+ */
 export function paintDigraph(canvas, counts) {
 	let peak = 0;
 	for (const count of counts) peak = Math.max(peak, count);
@@ -208,7 +276,16 @@ export function paintDigraph(canvas, counts) {
 }
 
 // Include preparation and painting in the estimate, rather than just output size.
+/**
+ * Predict structural work, including arbitrary-length FFT overhead, before deciding which thread
+ * owns the job. This is calibration input, not a promised runtime.
+ */
 export function renderCost(job) {
+	if (job.configuration) {
+		const used = requiredFactors(job.configuration, job.appearance || defaultAppearance(job.region, job.shaders, job.frequencyOpacity), job.shaders);
+		return job.length * (used.has('entropy') ? 18 : 12) + job.columns * job.rows * 16
+			+ (used.has('phase') || used.has('amplitude') ? fourierCost(job.length) : 0);
+	}
 	if (job.kind === 'bar') return (job.length ?? job.source.size) + job.width * job.height * 8;
 	if (job.region === 'trigraph') return job.length * (job.frequencyOpacity ? 65 : 33) + job.columns * job.rows * (job.frequencyOpacity ? 12 : 8);
 	if (job.region === 'dft') return fourierCost(job.length) + job.columns * job.rows * (job.coordinateSystem === 'radial' ? 64 : 8);
@@ -222,9 +299,18 @@ export function renderCost(job) {
 }
 
 // The same renderer runs on the UI thread and in the worker.
+/**
+ * Share the exact dispatcher between UI and worker execution. A configured point job exits early
+ * because its geometry already incorporates coordinate mapping.
+ * @param {object} cache Exclusive mutable cache owner; never share it across concurrently executing
+ *   jobs.
+ * @param {function(): boolean} current Supersession guard for async source reads.
+ * @returns {Promise<object|null>} Timing/work metrics on success; null for cancelled preparation.
+ */
 export async function executeRender(canvas, job, cache = {}, current = () => true) {
 	let duration = 0, work;
 	if (!current()) return null;
+	if (job.configuration && job.kind === 'view') return renderPoints(canvas, job, cache, current, { entropyShading, hilbertCells, byteCharacter });
 	if (job.kind === 'bar') {
 		const overview = await overviewValues(job, cache, current);
 		if (!overview || !current()) return null;
@@ -236,8 +322,9 @@ export async function executeRender(canvas, job, cache = {}, current = () => tru
 		const histogram = await trigraphCounts(job, cache, current);
 		if (!histogram || !current()) return null;
 		const started = performance.now();
-		const values = trigraphImage(histogram.counts, job.columns, job.rows, job.rotation, cache.trigraphRaster ||= {}, histogram, job);
-		paintBytes(canvas, values, job.columns, job.rows);
+		const values = job.appearance ? null : trigraphImage(histogram.counts, job.columns, job.rows, job.rotation, cache.trigraphRaster ||= {}, histogram, job);
+		if (job.appearance) paintTrigraphAppearance(canvas, histogram, job, cache.trigraphAppearance ||= {});
+		else paintBytes(canvas, values, job.columns, job.rows);
 		duration = histogram.duration + performance.now() - started;
 		work = (histogram.bytesRead * 3) + histogram.counts.size * 30 + job.columns * job.rows * 8;
 	} else if (job.region === 'dft') {
@@ -245,7 +332,14 @@ export async function executeRender(canvas, job, cache = {}, current = () => tru
 		if (!current()) return null;
 		const started = performance.now();
 		const values = fourierImage(bytes, job.columns, job.rows);
-		paintBytes(canvas, values, job.columns, job.rows);
+		if (job.appearance) paintAppearanceGrid(canvas, job.columns, job.rows, job, emit => {
+			const factors = new Float64Array(4);
+			for (let i = 0; i < values.length; i++) if (values[i]) {
+				factors[0] = (i % job.columns) / Math.max(1, job.columns - 1);
+				factors[1] = 1 - Math.floor(i / job.columns) / Math.max(1, job.rows - 1);
+				factors[2] = values[i] / 255; emit(i, factors);
+			}
+		}); else paintBytes(canvas, values, job.columns, job.rows);
 		duration = performance.now() - started;
 	} else if (job.region === 'digraph') {
 		const counts = new Float64Array(256 * 256);
@@ -265,10 +359,16 @@ export async function executeRender(canvas, job, cache = {}, current = () => tru
 		}
 		if (!current()) return null;
 		const started = performance.now();
-		paintDigraph(canvas, counts);
+		if (job.appearance) paintAppearanceGrid(canvas, 256, 256, job, emit => {
+			const factors = new Float64Array(4);
+			for (let i = 0; i < counts.length; i++) if (counts[i]) {
+				factors[0] = (i % 256) / 255; factors[1] = Math.floor(i / 256) / 255;
+				factors[3] = occurrenceFactor(counts[i]); emit(i, factors);
+			}
+		}); else paintDigraph(canvas, counts);
 		duration += performance.now() - started;
 	} else {
-		const shaded = job.shaders.includes('entropy');
+		const shaded = job.appearance ? compileAppearance(job.region, job.appearance).needsEntropy : job.shaders.includes('entropy');
 		const start = shaded ? Math.max(0, job.offset - 16) : job.offset;
 		const end = job.offset + job.length + (shaded ? 15 : 0);
 		const data = new Uint8Array(await job.source.slice(start, end).arrayBuffer());

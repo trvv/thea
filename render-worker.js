@@ -1,3 +1,8 @@
+/**
+ * Each worker owns one offscreen canvas and its mutable caches. Send serializable jobs, not DOM
+ * state or compiled recipe closures.
+ * @module render-worker
+ */
 import { executeRender } from './rendering.js';
 
 const canvas = new OffscreenCanvas(1, 1);

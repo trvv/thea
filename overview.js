@@ -1,8 +1,22 @@
+/**
+ * Exact overview averages with bounded page caches. Repeated navigation should reuse source reads
+ * rather than approximate the bar differently each frame.
+ * @module overview
+ */
 const PAGE_SIZE = 65536;
 const MAX_PAGES = 64;
 
 // Prefix sums make exact byte-range averages reusable as nested bars move.
 // Each page is bounded to 256 KiB; the LRU retains at most 16 MiB per bar.
+/**
+ * Use root-source page sums so a nested bar can change scope without rereading unchanged pages.
+ * Empty subpixel ranges repeat the previous value deliberately.
+ * @param {object} job Bar snapshot; offset is root-source-relative and length is its displayed
+ *   scope.
+ * @param {object} cache Exclusive cache owner, keyed by stable source identity.
+ * @param {function(): boolean} current Cancellation check required after every awaited read.
+ * @returns {Promise<object|null>} Exact averages and work metrics, or null after supersession.
+ */
 export async function overviewValues(job, cache, current = () => true) {
 	const sameSource = cache.overview && (job.sourceId === undefined
 		? cache.overview.source === job.source : cache.overview.sourceId === job.sourceId);

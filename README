@@ -1,3 +1,10 @@
+Thea is a browser-based binary visualization explorer.
+
+Start with [docs/README.md](docs/README.md) for running the app, current architecture,
+factor recipes, rendering internals, tests, and planned direction.
+
+Original design sketch (broader than the currently implemented Blob-based viewer):
+
 thea is a data visualization platform
 
 it is built from a few simple core concepts:

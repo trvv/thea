@@ -13,6 +13,9 @@ export class RenderCanvas {
 			clearRect() { canvas.reset(); },
 			drawImage(bitmap) { canvas.pixels = bitmap.pixels.slice(); canvas.commands = structuredClone(bitmap.commands); },
 			fillRect(...rect) { canvas.commands.push(['rect', this.fillStyle, ...rect]); },
+			beginPath() {},
+			ellipse(...args) { canvas.commands.push(['ellipse', this.fillStyle, ...args]); },
+			fill() {},
 			fillText(...text) { canvas.commands.push(['text', this.fillStyle, this.font, this.textAlign, this.textBaseline, ...text]); }
 		};
 	}

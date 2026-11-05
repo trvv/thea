@@ -1,11 +1,29 @@
+/**
+ * Browser integration and selection ownership. Keep byte ranges here; renderers consume snapshots
+ * rather than mutating navigation state.
+ * @module main
+ * @see docs/architecture.md
+ * @see docs/data-selection.md
+ */
+import { recipeMenu } from './recipe-menu.js';
+import { validateDefinitions, reference } from './recipes.js';
+import { needsPointFactors } from './factors.js';
+import { spaces, presetConfiguration, validateConfiguration } from './point-configuration.js';
+import { defaultAppearance, validateAppearance } from './appearance.js';
 import { AdaptiveResolution } from './adaptive-resolution.js';
-import { coordinateDimensions, sourceDimensions } from './coordinates.js';
 import { RenderEngine } from "./render-engine.js";
 export { byteCharacter, hilbertCells, entropyShading, cellColor } from "./rendering.js";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
+/**
+ * Use the browser top layer for dismissal and stacking; a reusable popup should not depend on
+ * binary-view state.
+ */
 export class Popup extends HTMLElement {
+	/**
+	 * Keep styling inside the shadow root so generic menus do not require page-wide CSS.
+	 */
 	constructor() {
 		super();
 		this.attachShadow({ mode: 'open' }).innerHTML = `
@@ -18,8 +36,15 @@ export class Popup extends HTMLElement {
 			<slot></slot>`;
 	}
 
+	/**
+	 * Set popover attributes after construction to respect custom-element construction constraints.
+	 */
 	connectedCallback() { this.setAttribute('popover', 'auto'); }
 
+	/**
+	 * Measure only after opening, then clamp in viewport coordinates; top-layer positioning is
+	 * independent of document flow.
+	 */
 	open(x, y) {
 		this.style.left = `${x}px`;
 		this.style.top = `${y}px`;
@@ -29,99 +54,263 @@ export class Popup extends HTMLElement {
 		this.style.top = `${clamp(y, 0, Math.max(0, innerHeight - bounds.height))}px`;
 	}
 
+	/**
+	 * Let native popover dismissal semantics handle the top layer instead of hiding a custom overlay.
+	 */
 	close() { this.hidePopover(); }
 }
 
+let submenuSerial = 0;
+
+/**
+ * Nest native popovers in the DOM so opening a submenu preserves its ancestors in the auto-popover
+ * stack.
+ * Menu descriptors are transient UI data; recipe expressions remain separate serializable state.
+ */
 export class ContextMenu extends Popup {
+	/**
+	 * Keep submenu ownership explicit so hover timers and native toggle events cannot leave orphaned
+	 * popovers.
+	 */
 	constructor() {
 		super();
-		this.addEventListener('keydown', event => {
-			if (['SELECT', 'INPUT'].includes(event.target.tagName)) return;
-			const items = [...this.querySelectorAll('button:not(:disabled), select:not(:disabled), input:not(:disabled)')];
-			const index = items.indexOf(this.getRootNode().activeElement);
-			let next;
-			if (event.key === 'ArrowDown') next = (index + 1) % items.length;
-			if (event.key === 'ArrowUp') next = (index - 1 + items.length) % items.length;
-			if (event.key === 'Home') next = 0;
-			if (event.key === 'End') next = items.length - 1;
-			if (next === undefined || !items.length) return;
-			event.preventDefault();
-			items[next].focus();
+		this.entries = new WeakMap();
+		this.addEventListener('keydown', event => this.navigate(event));
+		this.addEventListener('pointerenter', event => {
+			if (event.target === this) this.parentMenu?.clearHover();
+		});
+		this.addEventListener('scroll', () => this.closeChild());
+		this.addEventListener('toggle', event => {
+			if (event.target === this && event.newState === 'closed') {
+				this.clearHover();
+				this.closeChild();
+				if (this.parentMenu?.childMenu === this) this.parentMenu.closeChild();
+			}
 		});
 	}
 
+	/**
+	 * Expose menu semantics while inheriting Popup's native top-layer behavior.
+	 */
 	connectedCallback() {
 		super.connectedCallback();
 		this.setAttribute('role', 'menu');
 	}
 
-	set items(items) {
-		const create = ({ label, checked, action, kind = 'radio', disabled = false, options, input, value, min, items: children }) => {
-			if (children) {
-				const group = document.createElement('div');
-				group.style.cssText = 'padding:0';
-				group.setAttribute('role', 'group');
-				group.setAttribute('aria-label', label);
-				group.append(...children.map(create));
-				return group;
-			}
-			if (options || input) {
-				const row = document.createElement('label');
-				row.style.cssText = 'display:flex;align-items:center;gap:12px;padding:4px 8px 4px 28px;min-height:24px';
-				row.textContent = label;
-				const select = document.createElement(input ? 'input' : 'select');
-				if (input) { select.type = input; select.min = min; select.step = 1; select.style.width = '64px'; }
-				select.disabled = disabled;
-				select.style.cssText = `font:inherit;margin-left:auto;max-width:140px;${input ? 'width:64px' : ''}`;
-				select.setAttribute('aria-label', label);
-				for (const option of options || []) {
-					const item = document.createElement('option');
-					item.value = option.value;
-					item.textContent = option.label;
-					select.append(item);
-				}
-				select.value = value;
-				select.addEventListener('change', () => {
-					if (input && !select.checkValidity()) { select.value = value; return; }
-					action(input ? Number(select.value) : select.value);
-				});
-				if (disabled) row.style.color = 'GrayText';
-				row.append(select);
-				return row;
-			}
-			const button = document.createElement('button');
-			button.type = 'button';
-			button.disabled = disabled;
-			const mark = document.createElement('span');
-			mark.textContent = checked ? (kind === 'radio' ? '•' : '✓') : '';
-			mark.setAttribute('aria-hidden', 'true');
-			const caption = document.createElement('span');
-			caption.textContent = label;
-			button.append(mark, caption);
-			button.style.cssText = 'display:grid;grid-template-columns:12px 1fr;align-items:center;gap:8px;width:100%;min-height:28px;text-align:left;font:inherit;color:inherit;background:transparent;border:0;border-radius:2px;padding:4px 8px;cursor:default';
-			if (disabled) button.style.color = 'GrayText';
-			button.addEventListener('pointerenter', () => button.focus());
-			button.addEventListener('focus', () => { button.style.background = 'Highlight'; button.style.color = 'HighlightText'; });
-			button.addEventListener('blur', () => { button.style.background = 'transparent'; button.style.color = 'inherit'; });
-			button.setAttribute('role', checked === undefined ? 'menuitem' : `menuitem${kind}`);
-			if (checked !== undefined) button.setAttribute('aria-checked', String(checked));
-			button.addEventListener('click', () => { if (!button.disabled) { this.close(); action(); } });
-			return button;
-		};
-		this.replaceChildren(...items.map((item, index) => {
-			const element = create(item);
-			if (index && item.items) element.style.cssText += ';border-top:1px solid ButtonBorder;margin-top:4px;padding-top:4px';
-			return element;
-		}));
+	/**
+	 * Cancel delayed opens and close descendants when a parent is rebuilt or removed.
+	 */
+	disconnectedCallback() { this.clearHover(); this.closeChild(); }
+
+	/**
+	 * Stop delayed actions from opening a stale submenu after focus or ownership changes.
+	 */
+	clearHover() { clearTimeout(this.hoverTimer); this.hoverTimer = undefined; }
+
+	/**
+	 * Restrict navigation to this menu's controls; querying descendants alone also finds nested
+	 * popover items.
+	 */
+	controls() {
+		return [...this.querySelectorAll('button:not(:disabled), input:not(:disabled)')]
+			.filter(control => control.closest('context-menu') === this);
 	}
 
-	open(x, y) {
+	/**
+	 * Rebuild from the authoritative current settings instead of retaining action closures with stale
+	 * captured recipe values.
+	 */
+	set items(items) {
+		this.clearHover();
+		this.closeChild();
+		this.replaceChildren(...items.map(item => this.createItem(item)));
+	}
+
+	/**
+	 * Translate descriptors to native buttons/inputs. Scalar options use primitive equality;
+	 * expression menus supply their own descriptors and summary.
+	 * Numeric edits keep native validity checks and preserve the previous value if state validation
+	 * rejects them.
+	 */
+	createItem({ label, checked, action, kind = 'radio', disabled = false, options, input, value, min, max, step = 1, detail: summary, items: children }) {
+		if (input) {
+			const row = document.createElement('label');
+			row.style.cssText = 'display:flex;align-items:center;gap:12px;padding:4px 8px 4px 28px;min-height:24px';
+			row.textContent = label;
+			const field = document.createElement('input');
+			field.type = input; field.min = min ?? ''; field.max = max ?? ''; field.step = step; field.disabled = disabled;
+			field.style.cssText = 'font:inherit;margin-left:auto;width:64px';
+			field.setAttribute('aria-label', label);
+			field.value = value;
+			field.addEventListener('change', () => {
+				if (!field.checkValidity()) { field.value = value; return; }
+				try { action(Number(field.value)); } catch (error) { field.value = value; this.dispatchEvent(new CustomEvent('data-error', { detail: error, bubbles: true, composed: true })); }
+			});
+			field.addEventListener('focus', () => this.closeChild());
+			row.addEventListener('pointerenter', () => {
+				this.clearHover();
+				this.hoverTimer = setTimeout(() => this.closeChild(), 120);
+			});
+			row.addEventListener('pointerleave', () => this.clearHover());
+			row.append(field);
+			return row;
+		}
+		if (options) children = options.map(option => ({ label: option.label,
+			checked: String(option.value) === String(value), action: () => action(option.value) }));
+		const button = document.createElement('button');
+		button.type = 'button'; button.disabled = disabled;
+		button.style.cssText = 'display:grid;grid-template-columns:12px 1fr auto 12px;align-items:center;gap:8px;width:100%;min-height:28px;text-align:left;font:inherit;color:inherit;background:transparent;border:0;border-radius:2px;padding:4px 8px;cursor:default';
+		const mark = document.createElement('span'), caption = document.createElement('span');
+		mark.textContent = checked ? (kind === 'radio' ? '•' : '✓') : '';
+		mark.setAttribute('aria-hidden', 'true');
+		caption.textContent = label;
+		button.append(mark, caption);
+		if (children) {
+			const detail = document.createElement('span'), arrow = document.createElement('span');
+			const selected = children.every(item => item.kind !== 'checkbox' && typeof item.checked === 'boolean')
+				? children.find(item => item.checked)?.label : '';
+			detail.textContent = summary || selected || '';
+			detail.style.maxWidth = '220px'; detail.style.overflow = 'hidden'; detail.style.textOverflow = 'ellipsis'; detail.style.whiteSpace = 'nowrap';
+			detail.style.opacity = '0.65';
+			arrow.textContent = '›'; arrow.setAttribute('aria-hidden', 'true');
+			button.append(detail, arrow);
+			button.setAttribute('aria-haspopup', 'menu'); button.setAttribute('aria-expanded', 'false');
+			this.entries.set(button, children);
+		}
+		const highlight = active => {
+			button.style.background = active ? 'Highlight' : 'transparent';
+			button.style.color = disabled ? 'GrayText' : active ? 'HighlightText' : 'inherit';
+		};
+		highlight(false);
+		button.addEventListener('pointerenter', () => {
+			if (disabled) return;
+			this.clearHover(); this.parentMenu?.clearHover(); button.focus();
+			this.hoverTimer = setTimeout(() => {
+				this.hoverTimer = undefined;
+				if (children) this.openChild(button); else this.closeChild();
+			}, 120);
+		});
+		button.addEventListener('pointerleave', () => this.clearHover());
+		button.addEventListener('focus', () => highlight(true));
+		button.addEventListener('blur', () => highlight(button.getAttribute('aria-expanded') === 'true'));
+		button.setAttribute('role', children || checked === undefined ? 'menuitem' : `menuitem${kind}`);
+		if (!children && checked !== undefined) button.setAttribute('aria-checked', String(checked));
+		button.addEventListener('click', () => {
+			if (disabled) return;
+			if (children) { this.openChild(button, true); return; }
+			this.closeRoot(); action();
+		});
+		return button;
+	}
+
+	/**
+	 * Append descendants before showing them to preserve native stack membership; continue leftward
+	 * opening near the viewport edge.
+	 */
+	openChild(button, focus = false) {
+		this.clearHover();
+		if (this.childButton === button && !this.childMenu.matches(':popover-open')) this.closeChild();
+		if (this.childButton !== button) {
+			this.closeChild();
+			const submenu = new ContextMenu();
+			submenu.parentMenu = this; submenu.parentButton = button;
+			submenu.id = `context-submenu-${++submenuSerial}`;
+			submenu.items = this.entries.get(button);
+			this.append(submenu); // DOM nesting preserves the native auto-popover stack.
+			this.childMenu = submenu; this.childButton = button;
+			button.setAttribute('aria-controls', submenu.id);
+			const anchor = button.getBoundingClientRect();
+			submenu.open(anchor.right - 1, anchor.top - 4, focus);
+			const bounds = submenu.getBoundingClientRect();
+			const leftFits = anchor.left >= bounds.width, rightFits = anchor.right + bounds.width <= innerWidth;
+			const left = leftFits && (this.openDirection === 'left' || !rightFits);
+			submenu.openDirection = left ? 'left' : 'right';
+			if (left) submenu.style.left = `${anchor.left - bounds.width + 1}px`;
+			button.style.background = 'Highlight'; button.style.color = 'HighlightText';
+			button.setAttribute('aria-expanded', 'true');
+		} else if (focus) this.childMenu.focusItem();
+	}
+
+	/**
+	 * Clear ownership before closing because the native toggle event can re-enter this path.
+	 */
+	closeChild() {
+		const child = this.childMenu, button = this.childButton;
+		this.childMenu = this.childButton = null;
+		if (child) { child.close(); child.remove(); }
+		if (button) {
+			button.setAttribute('aria-expanded', 'false');
+			button.removeAttribute('aria-controls');
+			const focused = this.getRootNode().activeElement === button;
+			button.style.background = focused ? 'Highlight' : 'transparent';
+			button.style.color = focused ? 'HighlightText' : 'inherit';
+		}
+	}
+
+	/**
+	 * Closing a parent must also cancel deferred hover actions and its open descendants.
+	 */
+	close() { this.clearHover(); this.closeChild(); super.close(); }
+	/**
+	 * Actions close the whole chain before mutating state, then restore focus to the original invoking
+	 * control.
+	 */
+	closeRoot() { let root = this; while (root.parentMenu) root = root.parentMenu; root.close(); root.returnFocus?.focus(); }
+
+	/**
+	 * Prefer the selected choice, then a button, so opening a menu does not unexpectedly start editing
+	 * a numeric field.
+	 */
+	focusItem() {
+		const controls = this.controls();
+		(controls.find(control => control.getAttribute('aria-checked') === 'true') || controls.find(control => control.tagName === 'BUTTON') || controls[0])?.focus();
+	}
+
+	/**
+	 * Remember focus only at the root; child navigation must not replace the original return target.
+	 */
+	open(x, y, focus = true) {
+		if (!this.parentMenu) { this.returnFocus = this.getRootNode().activeElement; this.openDirection = 'right'; }
 		super.open(x, y);
-		(this.querySelector('button[aria-checked="true"]:not(:disabled)') || this.querySelector('button:not(:disabled)'))?.focus();
+		if (focus) this.focusItem();
+	}
+
+	/**
+	 * Keep keyboard events scoped to their owning submenu and leave numeric-input arrow keys to the
+	 * browser.
+	 */
+	navigate(event) {
+		if (event.target.closest('context-menu') !== this) return;
+		const controls = this.controls(), active = this.getRootNode().activeElement;
+		if (event.key === 'Escape' || (event.key === 'ArrowLeft' && this.parentMenu)) {
+			event.preventDefault(); event.stopPropagation();
+			if (this.parentMenu) { const button = this.parentButton; this.parentMenu.closeChild(); button.focus(); }
+			else { this.close(); this.returnFocus?.focus(); }
+			return;
+		}
+		if (event.key === 'Tab') { this.closeRoot(); return; }
+		if (event.target.tagName === 'INPUT') return;
+		if (['ArrowRight', 'Enter', ' '].includes(event.key) && this.entries.has(active)) {
+			event.preventDefault(); event.stopPropagation(); this.openChild(active, true); return;
+		}
+		const index = controls.indexOf(active);
+		const next = { ArrowDown: (index + 1) % controls.length, ArrowUp: (index - 1 + controls.length) % controls.length,
+			Home: 0, End: controls.length - 1 }[event.key];
+		if (next === undefined || !controls.length) return;
+		event.preventDefault(); event.stopPropagation(); this.clearHover();
+		this.closeChild(); controls[next].focus();
 	}
 }
 
+/**
+ * Share canvas lifecycle without wrapping the byte source. Each connected element owns one
+ * scheduler and its caches.
+ */
 class ByteCanvas extends HTMLElement {
+	/**
+	 * Resize observation belongs to the element's displayed box; source-specific work stays in
+	 * subclasses.
+	 */
 	constructor() {
 		super();
 		this.attachShadow({ mode: 'open' }).innerHTML = `
@@ -135,39 +324,65 @@ class ByteCanvas extends HTMLElement {
 		this.observer = new ResizeObserver(() => this.render());
 	}
 
+	/**
+	 * Render again on connection because a detached custom element may have had no measurable
+	 * dimensions.
+	 */
 	connectedCallback() { this.observer.observe(this); this.render(); }
+	/**
+	 * Invalidate continuations as well as the observer so late async results cannot revive a removed
+	 * element.
+	 */
 	disconnectedCallback() {
 		this.observer.disconnect();
 		this.renderer.cancel();
 		this.version = (this.version || 0) + 1;
 	}
 
+	/**
+	 * Choose at least a one-pixel grid before layout stabilizes, avoiding zero-length raster
+	 * divisions.
+	 */
 	grid(pixelSize) {
 		const width = Math.max(1, Math.floor(this.clientWidth / pixelSize));
 		const height = Math.max(1, Math.floor(this.clientHeight / pixelSize));
 		return { width, height, count: width * height };
 	}
 
+	/**
+	 * Surface renderer failures across shadow boundaries without inserting status or help copy into
+	 * the visualization.
+	 */
 	failure(error) {
 		this.dispatchEvent(new CustomEvent('data-error', { detail: error, bubbles: true, composed: true }));
 	}
 }
 
+/**
+ * Own visualization settings and the final root-source window, while DataScroll remains the
+ * authority for navigation.
+ * Keep sample geometry separate from raster resolution: adaptive quality must not move or resize
+ * the selection.
+ */
 export class DataScrollView extends ByteCanvas {
+	/**
+	 * Coalesce camera drags and accept timing feedback only for the source, mapping, dimensions, and
+	 * quality still on screen.
+	 */
 	constructor() {
 		super();
 		this.rotation = { yaw: -0.6, pitch: 0.45 };
 		this.resolution = new AdaptiveResolution();
 		this.renderer.onFrame = ({ job, duration }) => {
-			if (job.region !== 'trigraph' || this.region !== 'trigraph' || !job.interacting
+			if (!this.spatial || !job.interacting
 				|| job.source !== this.source || job.width !== this.clientWidth || job.height !== this.clientHeight || job.scale !== (globalThis.devicePixelRatio || 1)
-				|| job.frequencyOpacity !== this.frequencyOpacity || job.coordinateSystem !== this.coordinateSystem || job.axes.join() !== this.axes.join()) return;
+				|| JSON.stringify(job.configuration) !== JSON.stringify(this._pointConfiguration) || JSON.stringify(job.appearance) !== JSON.stringify(this.appearance) || job.frequencyOpacity !== this.frequencyOpacity || job.coordinateSystem !== this.coordinateSystem || job.axes.join() !== this.axes.join()) return;
 			if (this.resolution.record(duration, job.resolutionScale)) this.scheduleRotationRender();
 		};
 		this.addEventListener('pointerdown', event => {
 			if (event.button !== 0) return;
 			this.focus();
-			if (this.region !== 'trigraph') return;
+			if (!this.spatial) return;
 			event.preventDefault();
 			this.setPointerCapture(event.pointerId);
 			this.rotationDrag = { x: event.clientX, y: event.clientY, ...this.rotation };
@@ -181,7 +396,7 @@ export class DataScrollView extends ByteCanvas {
 				pitch: clamp(drag.pitch + (event.clientY - drag.y) * 0.01, -Math.PI / 2, Math.PI / 2) };
 			this.scheduleRotationRender();
 		});
-		const stopRotation = () => { this.rotationDrag = null; this.style.cursor = this.region === 'trigraph' ? 'grab' : ''; };
+		const stopRotation = () => { this.rotationDrag = null; this.style.cursor = this.spatial ? 'grab' : ''; };
 		this.addEventListener('pointerup', event => {
 			if (this.hasPointerCapture(event.pointerId)) this.releasePointerCapture(event.pointerId);
 			stopRotation();
@@ -190,7 +405,7 @@ export class DataScrollView extends ByteCanvas {
 		this.addEventListener('lostpointercapture', stopRotation);
 		this.addEventListener('keydown', event => {
 			if (event.altKey || event.ctrlKey || event.metaKey || !this.source) return;
-			const columns = this.columns || 1;
+			const columns = this.navigationColumns;
 			const steps = {
 				ArrowLeft: -1, ArrowRight: 1,
 				ArrowUp: -columns, ArrowDown: columns,
@@ -203,39 +418,55 @@ export class DataScrollView extends ByteCanvas {
 		});
 	}
 
+	/**
+	 * Only 3D spaces participate in adaptive quality; an idle timer restores full detail after motion
+	 * stops.
+	 */
 	noteMovement() {
-		if (this.region !== 'trigraph') return;
+		if (!this.spatial) return;
 		this.resolution.touch();
 		clearTimeout(this.resolutionTimer);
 		this.resolutionTimer = setTimeout(() => {
 			this.resolutionTimer = undefined;
-			if (this.resolution.settle() && this.isConnected && this.region === 'trigraph') {
+			if (this.resolution.settle() && this.isConnected && this.spatial) {
 				this.cancelRotationRender();
 				this.render();
 			}
 		}, 180);
 	}
 
+	/**
+	 * New sources/configurations invalidate the feedback history as well as any pending settle timer.
+	 */
 	resetResolution() {
 		clearTimeout(this.resolutionTimer);
 		this.resolutionTimer = undefined;
 		this.resolution.settle();
 	}
 
+	/**
+	 * Collapse pointer bursts into one frame without inventing an additional render queue.
+	 */
 	scheduleRotationRender() {
 		if (typeof requestAnimationFrame !== 'function') { this.render(); return; }
 		if (this.rotationFrame !== undefined) return;
 		this.rotationFrame = requestAnimationFrame(() => {
 			this.rotationFrame = undefined;
-			if (this.isConnected && this.region === 'trigraph') this.render();
+			if (this.isConnected && this.spatial) this.render();
 		});
 	}
 
+	/**
+	 * Prevent a queued camera frame from rendering after mode changes or disconnection.
+	 */
 	cancelRotationRender() {
 		if (this.rotationFrame !== undefined) globalThis.cancelAnimationFrame?.(this.rotationFrame);
 		this.rotationFrame = undefined;
 	}
 
+	/**
+	 * Stop quality timers and pointer-drag work before the base canvas destroys its worker.
+	 */
 	disconnectedCallback() {
 		this.resetResolution();
 		this.cancelRotationRender();
@@ -243,39 +474,174 @@ export class DataScrollView extends ByteCanvas {
 		super.disconnectedCallback();
 	}
 
+	/**
+	 * Make the view a keyboard target without adding a separate navigation widget.
+	 */
 	connectedCallback() {
 		this.tabIndex = 0;
 		super.connectedCallback();
 	}
 
+	/**
+	 * Return compatibility flags with entropy and brightness enabled by default; character and hex are
+	 * mutually exclusive overlays.
+	 */
 	get shaders() { return this._shaders || ['entropy', 'brightness']; }
 
+	/**
+	 * Preserve character/hex exclusivity, clear stale color overrides when legacy shaders change, and
+	 * promote non-grid text to the general point path.
+	 */
 	set shaders(shaders) {
 		if (!Array.isArray(shaders) || shaders.some(shader => !['entropy', 'brightness', 'character', 'hex'].includes(shader))) {
 			throw new TypeError('Unknown cell shader');
+		}
+		if (['entropy', 'brightness'].some(shader => shaders.includes(shader) !== this.shaders.includes(shader))) {
+			if (this._appearances) delete this._appearances[this.region];
+		}
+		if (!this._pointConfiguration && !['linear', 'hilbert'].includes(this.region) && shaders.some(shader => ['character', 'hex'].includes(shader))) {
+			this._pointConfiguration = validateConfiguration(this.pointConfiguration);
+			this.resetResolution();
 		}
 		const label = shaders.findLast(shader => shader === 'character' || shader === 'hex');
 		this._shaders = [...new Set(shaders.filter(shader => !['character', 'hex'].includes(shader) || shader === label))];
 		this.render();
 	}
 
+	/**
+	 * Expose preset intent lazily so reading configuration alone does not abandon the optimized preset
+	 * renderer.
+	 */
+	get pointConfiguration() { return this._pointConfiguration || {...presetConfiguration(this.region),recipes:this._recipes||{}}; }
+	/**
+	 * Validate geometry, named definitions, and current appearance together before entering the
+	 * general renderer; reset interaction state only after validation succeeds.
+	 */
+	set pointConfiguration(value) {
+		const configuration = validateConfiguration({...value,recipes:value.recipes??this._recipes});
+		validateAppearance(this.region,this.effectiveAppearance,configuration.recipes);
+		this._recipes=configuration.recipes;
+		this._pointConfiguration = configuration;
+		this.resetResolution(); this.cancelRotationRender(); this.rotationDrag = null;
+		this.style.touchAction = this.spatial ? 'none' : '';
+		this.style.cursor = this.spatial ? 'grab' : '';
+		this.render();
+	}
+	/**
+	 * Validate the entire definition set to catch indirect cycles; unused definitions should not force
+	 * an optimized preset onto the general path.
+	 */
+	setFactor(name, expression) {
+		if(typeof name!=='string'||!name.trim()||name.length>64)throw new TypeError('Invalid factor name');
+		const definitions = validateDefinitions({...this.pointConfiguration.recipes,[name]:expression});
+		if(this._pointConfiguration)this.pointConfiguration={...this.pointConfiguration,recipes:definitions};
+		else this._recipes=definitions;
+	}
+
+	/**
+	 * Use requested length, not the already-snapped result: recomputing from the result can select a
+	 * different grid and cause rounding oscillation.
+	 */
+	get resolvedSampleLayout() { return this.sampleLayout(this.windowLayout ? this.requestedLength : this.length || 1, this.windowLayout?.limit ?? this.source?.size ?? 1); }
+	/**
+	 * Keyboard/wheel row steps follow the sample grid, never the adaptive canvas width.
+	 */
+	get navigationColumns() { return this.resolvedSampleLayout.columns; }
+	/**
+	 * Determine rotation and quality behavior from the chosen space, not from the historical trigraph
+	 * preset name.
+	 */
+	get spatial() { return spaces[this.pointConfiguration.space].length === 3; }
+	/**
+	 * Reset a complete visualization profile while retaining named recipes; it is different from the
+	 * compatibility region setter.
+	 */
+	applyPreset(region) {
+		presetConfiguration(region);
+		this._pointConfiguration = undefined;
+		this._appearances = {}; this._coordinateSystems = {}; this._axisMappings = {};
+		this._shaders = ['entropy', 'brightness']; this._frequencyOpacity = false;
+		this.rotation = { yaw: -0.6, pitch: 0.45 };
+		this.region = region;
+	}
+
+	/**
+	 * An absent override preserves preset behavior and its optimized path.
+	 */
+	get appearance() { return this._appearances?.[this.region]; }
+	/**
+	 * Validate against the current named factors, then promote expressions or unsupported sources to
+	 * the general path before rendering.
+	 */
+	set appearance(value) {
+		const appearance = value ? validateAppearance(this.region, value, this.pointConfiguration.recipes) : undefined;
+		if (appearance && !this._pointConfiguration && needsPointFactors(this.region, appearance)) {
+			this._pointConfiguration = validateConfiguration(this.pointConfiguration);
+			this.resetResolution();
+		}
+		(this._appearances ||= {})[this.region] = appearance;
+		this.render();
+	}
+	/**
+	 * Give menus concrete defaults without storing a redundant override or changing renderer
+	 * selection.
+	 */
+	get effectiveAppearance() { return this.appearance || defaultAppearance(this.region, this.shaders, this.frequencyOpacity); }
+
+	/**
+	 * Keep SP visibility independent from NUL visibility, since real binaries commonly contain both.
+	 */
 	get blankSpaces() { return this._blankSpaces || false; }
+	/**
+	 * Repaint text only; changing blank glyphs must not change source ranges.
+	 */
 	set blankSpaces(value) { this._blankSpaces = Boolean(value); this.render(); }
 
+	/**
+	 * Default NUL to a blank because large zero-filled regions otherwise become visually dominated by
+	 * repeated control pictures.
+	 */
 	get blankNulls() { return this._blankNulls ?? true; }
+	/**
+	 * Treat glyph visibility as rendering state so stale character frames are not mistaken for current
+	 * ones.
+	 */
 	set blankNulls(value) { this._blankNulls = Boolean(value); this.render(); }
 
+	/**
+	 * The default is single-byte ASCII, not UTF-8 decoding of the selected buffer.
+	 */
 	get encoding() { return this._encoding || 'ascii'; }
+	/**
+	 * Limit overlays to supported single-byte interpretations so byte-to-cell correspondence stays
+	 * unambiguous.
+	 */
 	set encoding(value) {
 		if (!['ascii-overbar', 'ascii', 'cp437', 'latin1'].includes(value)) throw new TypeError('Unknown character encoding');
 		this._encoding = value;
 		this.render();
 	}
 
+	/**
+	 * Retain the native white-particle compatibility flag; general recipes express opacity as a
+	 * mapping.
+	 */
 	get frequencyOpacity() { return this._frequencyOpacity || false; }
-	set frequencyOpacity(value) { this._frequencyOpacity = Boolean(value); this.render(); }
+	/**
+	 * Discard native trigraph appearance overrides so the compatibility switch actually changes its
+	 * preset default.
+	 */
+	set frequencyOpacity(value) { this._frequencyOpacity = Boolean(value); if (this._appearances) delete this._appearances.trigraph; this.render(); }
 
+	/**
+	 * Keep compatibility coordinate choices per preset; raw recipe views instead use
+	 * pointConfiguration.space.
+	 */
 	get coordinateSystem() { return this._coordinateSystems?.[this.region] || 'cartesian'; }
+	/**
+	 * Validate dimensions of the legacy transform API rather than silently treating radial and 3D
+	 * spaces interchangeably.
+	 */
 	set coordinateSystem(value) {
 		const allowed = this.region === 'trigraph' ? ['cartesian', 'cylindrical', 'spherical'] : ['cartesian', 'radial'];
 		if (!allowed.includes(value)) throw new TypeError('Unknown coordinate system');
@@ -283,7 +649,15 @@ export class DataScrollView extends ByteCanvas {
 		this.render();
 	}
 
+	/**
+	 * Compatibility axis permutations belong to each preset; they are distinct from general scalar
+	 * position recipes.
+	 */
 	get axes() { return this._axisMappings?.[this.region] || (this.region === 'trigraph' ? [0, 1, 2] : [0, 1]); }
+	/**
+	 * Require a permutation for legacy image/tuple remapping. General recipes intentionally permit
+	 * repeated factors and constants.
+	 */
 	set axes(value) {
 		const count = this.region === 'trigraph' ? 3 : 2;
 		if (!Array.isArray(value) || value.length !== count || new Set(value).size !== count
@@ -292,6 +666,10 @@ export class DataScrollView extends ByteCanvas {
 		this.render();
 	}
 
+	/**
+	 * Swap an existing legacy dimension instead of duplicating it, preserving the inverse-mapping
+	 * permutation invariant.
+	 */
 	setAxis(index, dimension) {
 		const axes = [...this.axes], other = axes.indexOf(dimension);
 		if (other < 0 || index < 0 || index >= axes.length) throw new TypeError('Unknown axis');
@@ -299,11 +677,19 @@ export class DataScrollView extends ByteCanvas {
 		this.axes = axes;
 	}
 
+	/**
+	 * Use linear as the initial optimized preset without allocating settings eagerly.
+	 */
 	get region() { return this._region || 'linear'; }
 
+	/**
+	 * Exit raw geometry and cancel stale camera work when using the compatibility preset API; use
+	 * applyPreset to reset all defaults.
+	 */
 	set region(region) {
 		if (!['linear', 'hilbert', 'digraph', 'dft', 'trigraph'].includes(region)) throw new TypeError('Unknown region layout');
 		this._region = region;
+		this._pointConfiguration = undefined;
 		this.resetResolution();
 		this.cancelRotationRender();
 		this.rotationDrag = null;
@@ -312,15 +698,30 @@ export class DataScrollView extends ByteCanvas {
 		this.render();
 	}
 
+	/**
+	 * Return native logical dimensions for optimized presets or display pixels for general points,
+	 * while sharing the same snapped byte length.
+	 */
 	layout(requestedLength, size = this.source?.size ?? requestedLength) {
+		const sample = this.sampleLayout(requestedLength, size);
+		if (!this._pointConfiguration) return sample;
+		const scale = globalThis.devicePixelRatio || 1;
+		return { columns: Math.max(1, Math.round(this.clientWidth * scale)), rows: Math.max(1, Math.round(this.clientHeight * scale)), length: sample.length };
+	}
+
+	/**
+	 * Snap linear selections to complete rows and keep Hilbert grids square/power-of-two. Whole-buffer
+	 * mode preserves every byte instead of truncating to a convenient grid.
+	 */
+	sampleLayout(requestedLength, size = this.source?.size ?? requestedLength) {
 		const length = Math.min(size, Math.max(1, Math.round(requestedLength)));
-		if (this.region === 'trigraph') {
+		if (!this._pointConfiguration && this.region === 'trigraph') {
 			const scale = globalThis.devicePixelRatio || 1;
 			return { columns: Math.max(1, Math.round(this.clientWidth * scale)), rows: Math.max(1, Math.round(this.clientHeight * scale)), length };
 		}
-		if (this.region === 'dft') return { columns: 513, rows: Math.max(1, Math.min(1024, Math.round(this.clientHeight * (globalThis.devicePixelRatio || 1)))), length };
-		if (this.region === 'digraph') return { columns: 256, rows: 256, length };
-		if (this.region === 'hilbert') {
+		if (!this._pointConfiguration && this.region === 'dft') return { columns: 513, rows: Math.max(1, Math.min(1024, Math.round(this.clientHeight * (globalThis.devicePixelRatio || 1)))), length };
+		if (!this._pointConfiguration && this.region === 'digraph') return { columns: 256, rows: 256, length };
+		if ((this._pointConfiguration?.layout || this.region) === 'hilbert') {
 			const side = 2 ** Math.ceil(Math.log2(Math.sqrt(Math.max(1, length))));
 			return { columns: side, rows: side, length };
 		}
@@ -331,6 +732,12 @@ export class DataScrollView extends ByteCanvas {
 		return { columns, rows, length: this.wholeBuffer ? length : size ? columns * rows : 0 };
 	}
 
+	/**
+	 * Receive an authoritative window from DataScroll and avoid work when neither source, selected
+	 * range, nor native layout changed.
+	 * Offsets here are root-Blob-relative; the separate requestedLength remains the unsnapped
+	 * navigation request.
+	 */
 	setWindow(source, offset, length, layout) {
 		const sourceChanged = this.source !== source;
 		const moved = this.offset !== offset || this.length !== length;
@@ -341,6 +748,10 @@ export class DataScrollView extends ByteCanvas {
 		if (sourceChanged || moved || resized) this.render();
 	}
 
+	/**
+	 * Negotiate layout changes with DataScroll before dispatching a job. Keep sampleLayout native
+	 * while scaling only raster dimensions and particle footprints during motion.
+	 */
 	async render() {
 		const version = this.version = (this.version || 0) + 1;
 		if (!this.source || !this.isConnected) return;
@@ -351,13 +762,14 @@ export class DataScrollView extends ByteCanvas {
 			return;
 		}
 		const { columns, rows } = layout;
-		const resolutionScale = this.region === 'trigraph' && this.resolution.moving ? this.resolution.scale : 1;
+		const resolutionScale = this.spatial && this.resolution.moving ? this.resolution.scale : 1;
 		try {
 			const rendered = await this.renderer.render({
 				kind: 'view', progressive: true, source: this.source, offset: this.offset, length: this.length,
 				columns: Math.max(1, Math.round(columns * resolutionScale)), rows: Math.max(1, Math.round(rows * resolutionScale)),
-				resolutionScale, pointScale: this.region === 'trigraph' ? (globalThis.devicePixelRatio || 1) * resolutionScale : 1, interacting: this.region === 'trigraph' && this.resolution.moving,
-				region: this.region, shaders, rotation: this.rotation, frequencyOpacity: this.frequencyOpacity, coordinateSystem: this.coordinateSystem, axes: this.axes,
+				resolutionScale, pointScale: (this.spatial || this._pointConfiguration) ? (globalThis.devicePixelRatio || 1) * resolutionScale : 1, interacting: this.spatial && this.resolution.moving,
+				configuration: this._pointConfiguration, sampleLayout: this.resolvedSampleLayout,
+				region: this.region, shaders, appearance: this.appearance, rotation: this.rotation, frequencyOpacity: this.frequencyOpacity, coordinateSystem: this.coordinateSystem, axes: this.axes,
 				width: this.clientWidth, height: this.clientHeight, scale: globalThis.devicePixelRatio || 1,
 				encoding: this.encoding, blankSpaces: this.blankSpaces, blankNulls: this.blankNulls
 			});
@@ -366,7 +778,16 @@ export class DataScrollView extends ByteCanvas {
 	}
 }
 
+/**
+ * Render an overview of one parent scope and emit selection intents in that scope's local byte
+ * coordinates.
+ * Cursor movement should stay synchronous even when overview pixels are computed in a worker.
+ */
 export class DataScrollBar extends ByteCanvas {
+	/**
+	 * Use pointer capture for drag continuity and distinguish click-latched autoscroll from
+	 * middle-button dragging.
+	 */
 	constructor() {
 		super();
 		this.cursor = document.createElement('div');
@@ -412,6 +833,10 @@ export class DataScrollBar extends ByteCanvas {
 		});
 	}
 
+	/**
+	 * Own touch gestures and expose scrollbar semantics without relying on the browser's document
+	 * scrolling.
+	 */
 	connectedCallback() {
 		this.style.touchAction = 'none';
 		this.tabIndex = 0;
@@ -421,8 +846,16 @@ export class DataScrollBar extends ByteCanvas {
 		super.connectedCallback();
 	}
 
+	/**
+	 * End autoscroll before destroying the canvas so global listeners cannot keep the removed bar
+	 * alive.
+	 */
 	disconnectedCallback() { this.stopAuto(); super.disconnectedCallback(); }
 
+	/**
+	 * Capture the original edge/window anchor once; later frames integrate velocity rather than
+	 * repeatedly rebasing a resize.
+	 */
 	startAuto(event) {
 		this.focus();
 		this.setPointerCapture(event.pointerId);
@@ -449,6 +882,10 @@ export class DataScrollBar extends ByteCanvas {
 		this.auto.frame = requestAnimationFrame(time => this.tickAuto(time));
 	}
 
+	/**
+	 * Integrate elapsed time with a dead zone and fractional-byte remainder. Cap resumed-tab elapsed
+	 * time to prevent large jumps.
+	 */
 	tickAuto(time) {
 		const auto = this.auto;
 		if (!auto) return;
@@ -471,6 +908,9 @@ export class DataScrollBar extends ByteCanvas {
 		if (this.auto === auto) auto.frame = requestAnimationFrame(next => this.tickAuto(next));
 	}
 
+	/**
+	 * Abort all window-level listeners together and cancel the frame before releasing pointer capture.
+	 */
 	stopAuto() {
 		const auto = this.auto;
 		if (!auto) return;
@@ -481,6 +921,11 @@ export class DataScrollBar extends ByteCanvas {
 		this.style.cursor = '';
 	}
 
+	/**
+	 * Separate the displayed parent Blob from its root-source identity. Moving the cursor must not
+	 * rerender the unchanged overview.
+	 * The optional scope supplies root Blob/offset for page-cache reuse; cursor offset stays local.
+	 */
 	setWindow(source, offset, length, scope) {
 		const changed = this.source !== source;
 		if (changed) this.stopAuto();
@@ -489,6 +934,10 @@ export class DataScrollBar extends ByteCanvas {
 		if (changed) this.render();
 	}
 
+	/**
+	 * Emit clamped local intent; DataScroll must reconcile descendants and selection snapping before
+	 * committing a window.
+	 */
 	seek(offset) {
 		if (!this.source) return;
 		this.dispatchEvent(new CustomEvent('seek', {
@@ -496,12 +945,18 @@ export class DataScrollBar extends ByteCanvas {
 		}));
 	}
 
+	/**
+	 * Center a click on the selector rather than making every click snap its top edge to the pointer.
+	 */
 	seekAt(event) {
 		if (!this.source) return;
 		const bounds = this.getBoundingClientRect();
 		this.seek((event.clientY - bounds.top) / bounds.height * this.source.size - this.length / 2);
 	}
 
+	/**
+	 * Keep edge hit areas usable for small selections while separating the two resize handles.
+	 */
 	edgeAt(y) {
 		const bounds = this.cursor.getBoundingClientRect();
 		const top = Math.abs(y - bounds.top);
@@ -510,6 +965,10 @@ export class DataScrollBar extends ByteCanvas {
 		return top <= bottom ? 'top' : 'bottom';
 	}
 
+	/**
+	 * Measure travel from the drag's initial window to avoid compounding layout snapping into pointer
+	 * drift.
+	 */
 	dragAt(event) {
 		if (!this.drag || !this.source?.size) return;
 		const height = this.getBoundingClientRect().height;
@@ -519,6 +978,10 @@ export class DataScrollBar extends ByteCanvas {
 		this.moveWindow(delta, edge, start, end);
 	}
 
+	/**
+	 * Hold the opposite resize edge fixed and carry edge identity to DataScroll, where snapping may
+	 * change the final selected length.
+	 */
 	moveWindow(delta, edge, start = this.offset, end = this.offset + this.length) {
 		if (!edge) { this.seek(start + delta); return; }
 		const offset = edge === 'top' ? clamp(start + delta, 0, end - 1) : start;
@@ -526,6 +989,10 @@ export class DataScrollBar extends ByteCanvas {
 		this.dispatchEvent(new CustomEvent('window-change', { detail: { offset, length: limit - offset, edge } }));
 	}
 
+	/**
+	 * Update both visual and accessibility ranges immediately from committed state, independent of
+	 * overview rendering latency.
+	 */
 	updateCursor() {
 		const size = this.source?.size || 1;
 		this.cursor.style.top = `${100 * (this.offset || 0) / size}%`;
@@ -535,6 +1002,10 @@ export class DataScrollBar extends ByteCanvas {
 		this.setAttribute('aria-valuenow', String(this.offset || 0));
 	}
 
+	/**
+	 * Ask the renderer for the root-source scope rather than keying every nested Blob slice as a new
+	 * source.
+	 */
 	async render() {
 		const version = this.version = (this.version || 0) + 1;
 		if (!this.source || !this.isConnected) return;
@@ -546,7 +1017,16 @@ export class DataScrollBar extends ByteCanvas {
 	}
 }
 
+/**
+ * Coordinate nested selection levels and the one authoritative root Blob. Levels are stored
+ * widest-to-narrowest but displayed in reverse order.
+ * @see docs/data-selection.md
+ */
 export class DataScroll extends HTMLElement {
+	/**
+	 * Keep one shared menu for bar/view settings and route wheel/seek intents through the same
+	 * reconciliation path.
+	 */
 	constructor(source, windowSize = 1024) {
 		super();
 		this.attachShadow({ mode: 'open' }).innerHTML = `
@@ -585,80 +1065,93 @@ export class DataScroll extends HTMLElement {
 			this.wheelRows -= step;
 			if (step) {
 				const level = this.levels.find(level => event.composedPath().includes(level.bar));
-				if (level) level.bar.seek(level.offset + step * (this.view.columns || 1));
-				else this.seek(this.offset + step * (this.view.columns || 1));
+				if (level) level.bar.seek(level.offset + step * this.view.navigationColumns);
+				else this.seek(this.offset + step * this.view.navigationColumns);
 			}
 		}, { passive: false });
 		if (source) this.source = source;
 	}
 
-	refreshMenu(focus) {
-		this.menu.items = this.contextItems();
-		if (focus) this.menu.querySelector?.(`select[aria-label="${focus}"]`)?.focus();
-	}
+	/**
+	 * Rebuild captured actions after configuration edits so submenu closures use current expressions
+	 * and definitions.
+	 */
+	refreshMenu() { this.menu.items = this.contextItems(); }
 
-	coordinateMenu() {
-		const spatial = this.view.region === 'trigraph';
-		const systems = spatial ? ['cartesian', 'cylindrical', 'spherical'] : ['cartesian', 'radial'];
-		const dimensions = sourceDimensions(this.view.region);
-		return { label: 'Coordinates', items: [
-			{ label: 'Coordinates', value: this.view.coordinateSystem,
-				options: systems.map(value => ({ value, label: value[0].toUpperCase() + value.slice(1) })),
-				action: value => { this.view.coordinateSystem = value; this.refreshMenu('Coordinates'); }
-			},
-			...coordinateDimensions(this.view.region, this.view.coordinateSystem).map((label, index) => ({
-				label, value: this.view.axes[index], options: dimensions.map((name, value) => ({ value, label: name })),
-				action: value => { this.view.setAxis(index, Number(value)); this.refreshMenu(label); }
-			}))
-		] };
-	}
-
+	/**
+	 * Derive menu descriptors from state rather than storing UI selections separately from
+	 * visualization settings.
+	 */
 	contextItems() {
-		const options = [
+		const view = this.view, config = view.pointConfiguration;
+		const definitions=config.recipes||{};
+		const save = expression => {
+			const name=globalThis.prompt?.('Factor name');
+			if(name?.trim()){view.setFactor(name.trim(),expression);this.refreshMenu();}
+		};
+		const edit = (label,value,action) => recipeMenu(label,value,definitions,action,save);
+		const change = patch => { view.pointConfiguration = { ...view.pointConfiguration, ...patch }; this.refreshMenu(); };
+		const choose = (label, value, options, action) => ({ label, value, options, action });
+		const options = values => values.map(value => ({ value, label: value[0].toUpperCase() + value.slice(1) }));
+		const text = view.shaders.includes('hex') ? 'hex' : view.shaders.includes('character') ? 'character' : 'none';
+		return [
 			{ label: 'Bars', input: 'number', min: 0, value: this.barCount, action: value => { this.barCount = value; } },
-			{ label: 'Cell', items: ['entropy', 'brightness', 'character', 'hex'].map(shader => ({
-				label: { character: 'Character', hex: 'Hex', entropy: 'Entropy', brightness: 'Brightness' }[shader],
-				kind: 'checkbox',
-				checked: this.view.shaders.includes(shader),
-				action: () => {
-					const active = this.view.shaders;
-					this.view.shaders = active.includes(shader) ? active.filter(value => value !== shader) : [...active, shader];
-				}
-			})) },
-			{ label: 'Character', items: [
-				{ label: 'Encoding', value: this.view.encoding,
-					options: [{ value: 'ascii', label: 'ASCII' }, { value: 'ascii-overbar', label: 'ASCII + Overbar' }, { value: 'cp437', label: 'CP437' }, { value: 'latin1', label: 'Latin-1' }],
-					action: value => { this.view.encoding = value; }
-				},
-				...['blankSpaces', 'blankNulls'].map(option => ({
-					label: option === 'blankSpaces' ? 'Blank Spaces' : 'Blank Nulls',
-					kind: 'checkbox', checked: this.view[option],
-					action: () => { this.view[option] = !this.view[option]; }
-				}))
-			] },
-			{ label: 'Region', items: ['linear', 'hilbert', 'digraph', 'dft', 'trigraph'].map(region => ({
+			{ label: 'Preset', items: ['linear', 'hilbert', 'digraph', 'dft', 'trigraph'].map(region => ({
 				label: { linear: 'Linear', hilbert: 'Hilbert', digraph: 'Digraph', dft: 'DFT', trigraph: 'Trigraph' }[region],
-				checked: this.view.region === region,
-				action: () => { this.view.region = region; }
-			})) }
-		];
-		const [bars, cell, character, region] = options;
-		const grid = ['linear', 'hilbert'].includes(this.view.region);
-		return [bars, region, this.coordinateMenu(),
-			...(grid ? [cell] : []),
-			...(grid && this.view.shaders.includes('character') ? [character] : []),
-			...(this.view.region === 'trigraph' ? [{ label: 'Camera', items: [
-				{ label: 'Frequency as Opacity', kind: 'checkbox', checked: this.view.frequencyOpacity, action: () => {
-					this.view.frequencyOpacity = !this.view.frequencyOpacity;
-				} }, { label: 'Reset Rotation', action: () => {
-				this.view.rotation = { yaw: -0.6, pitch: 0.45 };
-				this.view.render();
+				checked: !view._pointConfiguration && view.region === region,
+				action: () => { view.applyPreset(region); this.refreshMenu(); }
+			})) },
+			choose('Layout', config.layout, options(['linear', 'hilbert']), layout => change({ layout })),
+			choose('Space', config.space, options(Object.keys(spaces)), space => change({ space })),
+			{ label: 'Position', items: spaces[config.space].map((label, index) => ({ label, items: [
+				edit('Factor', config.position[index], factor => {
+					const position = [...config.position]; position[index] = factor; change({ position });
+				}),
+				{ label: 'Invert', kind: 'checkbox', checked: config.inverted[index], action: () => {
+					const inverted = [...config.inverted]; inverted[index] = !inverted[index]; change({ inverted });
+				} }
+			] })) },
+			{ label: 'Points', items: [
+				...['hue', 'saturation', 'lightness', 'opacity', 'size'].map(channel =>
+					edit(channel[0].toUpperCase() + channel.slice(1), view.effectiveAppearance[channel], value => {
+						view.appearance = { ...view.effectiveAppearance, [channel]: value }; this.refreshMenu();
+					})),
+				choose('Shape', view.effectiveAppearance.shape, options(['square', 'circle']), shape => {
+					view.appearance = { ...view.effectiveAppearance, shape }; this.refreshMenu();
+				}),
+				choose('Text', text, [
+					{ value: 'none', label: 'None' }, { value: 'character', label: 'Character' }, { value: 'hex', label: 'Hex' }
+				], value => {
+					view.shaders = [...view.shaders.filter(shader => !['character', 'hex'].includes(shader)), ...(value === 'none' ? [] : [value])]; this.refreshMenu();
+				}),
+				{ label: 'Reset', action: () => { view.appearance = undefined; this.refreshMenu(); } }
+			] },
+			{label:'Factors',items:[
+				{label:'New Factor',action:()=>save('value')},
+				...Object.entries(definitions).map(([name,expression])=>recipeMenu(name,expression,definitions,next=>{
+					view.setFactor(name,next==='none'?{op:'constant',value:0}:next);this.refreshMenu();
+				},save))
+			]},
+			...(text === 'character' ? [{ label: 'Character', items: [
+				choose('Encoding', view.encoding, [{ value: 'ascii', label: 'ASCII' }, { value: 'ascii-overbar', label: 'ASCII + Overbar' }, { value: 'cp437', label: 'CP437' }, { value: 'latin1', label: 'Latin-1' }], value => { view.encoding = value; }),
+				...['blankSpaces', 'blankNulls'].map(option => ({ label: option === 'blankSpaces' ? 'Blank Spaces' : 'Blank Nulls', kind: 'checkbox', checked: view[option], action: () => { view[option] = !view[option]; } }))
+			] }] : []),
+			...(view.spatial ? [{ label: 'Camera', items: [{ label: 'Reset Rotation', action: () => {
+				view.rotation = { yaw: -0.6, pitch: 0.45 }; view.render();
 			} }] }] : [])
 		];
 	}
 
+	/**
+	 * Use level count as the source of truth; zero means a whole-buffer view rather than an invisible
+	 * active selector.
+	 */
 	get barCount() { return this.levels.length; }
 
+	/**
+	 * Rebuild scope controllers in widest-to-narrowest order and reverse only their DOM presentation.
+	 * Stop obsolete autoscroll sessions before replacing bars.
+	 */
 	set barCount(count) {
 		if (!Number.isSafeInteger(count) || count < 0) throw new RangeError('Bar count must be a non-negative integer');
 		for (const level of this.levels) { level.bar.stopAuto(); level.bar.remove(); }
@@ -683,14 +1176,25 @@ export class DataScroll extends HTMLElement {
 		if (this.source) this.resetLevels(this.offset);
 	}
 
+	/**
+	 * Use immutable Blob slicing for random access and reset offsets when the source changes; do not
+	 * add a redundant ByteSource wrapper.
+	 */
 	set source(source) {
 		this._source = source instanceof Blob ? source : new Blob([source]);
 		for (const level of this.levels) level.bar.stopAuto();
 		this.resetLevels(0);
 	}
 
+	/**
+	 * Keep one root Blob identity for stable renderer caches across changing nested slices.
+	 */
 	get source() { return this._source; }
 
+	/**
+	 * Seed progressively narrower scopes around an absolute offset, then let normal reconciliation
+	 * apply final layout constraints.
+	 */
 	resetLevels(offset) {
 		let base = 0, size = this.source.size;
 		this.levels.forEach((level, index) => {
@@ -704,6 +1208,12 @@ export class DataScroll extends HTMLElement {
 		this.updateLevels();
 	}
 
+	/**
+	 * Reconcile parents before children so every local window remains inside its feeding scope.
+	 * Convert to root coordinates only at the view boundary.
+	 * anchorEnd preserves a top-resize's far edge while linear row snapping changes the resulting
+	 * length.
+	 */
 	updateLevels(changed, anchorEnd) {
 		if (!this.source) return;
 		this.view.wholeBuffer = this.levels.length === 0;
@@ -742,6 +1252,10 @@ export class DataScroll extends HTMLElement {
 		});
 	}
 
+	/**
+	 * Accept root-source-relative view navigation and translate it into the innermost bar's local
+	 * coordinates. With zero bars, preserve the whole source.
+	 */
 	seek(offset, anchorEnd) {
 		if (!this.source) return;
 		const level = this.levels.at(-1);
@@ -758,15 +1272,23 @@ customElements.define('data-scroll-view', DataScrollView);
 customElements.define('data-scroll-bar', DataScrollBar);
 customElements.define('data-scroll', DataScroll);
 
+/**
+ * Load the fragment URL through HTTP and keep the previous source on failed fetches. Initial import
+ * registers elements; only DOMContentLoaded mounts the default full-screen instance.
+ */
 function onDOMContentLoaded() {
 	const scroll = new DataScroll();
 	document.body.append(scroll);
 	let pending;
+	/**
+	 * Abort superseded fetches before replacing the root Blob, so a slow response cannot overwrite a
+	 * newer fragment selection.
+	 */
 	async function load() {
 		pending?.abort();
 		const request = pending = new AbortController();
 		try {
-			const path = location.hash.slice(1) || './cat';
+			const path = location.hash.slice(1) || './examples/cat';
 			const response = await fetch(new URL(path, document.baseURI), { signal: request.signal });
 			if (!response.ok) throw new Error(`HTTP ${response.status}`);
 			const source = await response.blob();
