@@ -588,7 +588,8 @@ export class DataScrollView extends ByteCanvas {
 	 * Determine rotation and quality behavior from the chosen space, not from the historical trigraph
 	 * preset name.
 	 */
-	get usesPoints() { return Boolean(this._pointConfiguration) || ['hilbert','hilbert3d'].includes(this.region); }
+	get usesPoints() { return Boolean(this._pointConfiguration) || ['hilbert','hilbert3d'].includes(this.region)
+		|| needsPointFactors(this.region, this.effectiveAppearance); }
 	get spatial() { return spaces[this.pointConfiguration.space].length === 3; }
 	/**
 	 * Reset a complete visualization profile while retaining named recipes; it is different from the
@@ -813,7 +814,7 @@ export class DataScrollView extends ByteCanvas {
 	}
 
 	renderSettings() {
-		return { configuration: this._pointConfiguration || (['hilbert','hilbert3d'].includes(this.region)?this.pointConfiguration:undefined), region: this.region, shaders: this.shaders, appearance: this.appearance,
+		return { configuration: this.usesPoints ? this.pointConfiguration : undefined, region: this.region, shaders: this.shaders, appearance: this.appearance,
 			frequencyOpacity: this.frequencyOpacity, coordinateSystem: this.coordinateSystem, axes: this.axes,
 			encoding: this.encoding, blankSpaces: this.blankSpaces, blankNulls: this.blankNulls };
 	}

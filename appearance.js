@@ -17,7 +17,7 @@ export function appearanceFactors() { return factorOptions; }
  * for unchanged settings.
  */
 export function defaultAppearance(region, shaders = ['entropy','brightness'], frequencyOpacity = false) {
- const mapping={hue:'none',saturation:'none',lightness:'none',opacity:'none',size:'none',shape:'square'};
+ const mapping={hue:shaders.includes('entropy')?'entropy':'none',saturation:'none',lightness:'none',opacity:'none',size:'none',shape:'square'};
  if(['linear','hilbert','hilbert3d'].includes(region)){
   const hue=shaders.includes('entropy')&&shaders.includes('brightness');
   mapping.hue=hue?'entropy':'none';mapping.lightness=shaders.includes('brightness')?'value':shaders.includes('entropy')?'entropy':'none';

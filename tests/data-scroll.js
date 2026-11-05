@@ -73,12 +73,12 @@ scroll.events.contextmenu({preventDefault(){},composedPath:()=>[scroll.bar,scrol
 if(menu[0].label!=='Bars'||menu[0].input!=='number'||menu[0].value!==1||menu[0].min!==0||!menu.some(item=>item.label==='Points'))throw Error('Shared menu incorrect');
 menu[0].action(2);await verify();
 scroll.view.region='digraph';await verify();
-if(scroll.view.columns!==256||scroll.view.rows!==256||scroll.view.length!==scroll.windowSize)throw Error('Digraph layout changed selection');
+if(scroll.view.renderer.latest.configuration.population!=='pairs'||scroll.view.length!==scroll.windowSize)throw Error('Digraph layout changed selection');
 scroll.events.contextmenu({preventDefault(){},composedPath:()=>[scroll.view,scroll]});
 if(menu.some(item=>item.label==='Cell'||item.label==='Character'))throw Error('Digraph has irrelevant controls');
 if(!menu.find(item=>item.label==='Preset').items.some(item=>item.label==='Digraph'&&item.checked))throw Error('Digraph missing from menu');
 scroll.view.region='dft';await verify();
-if(scroll.view.columns!==513||scroll.view.length!==scroll.windowSize)throw Error('DFT layout changed selection');
+if(scroll.view.renderer.latest.configuration.population!=='bins'||scroll.view.length!==scroll.windowSize)throw Error('DFT layout changed selection');
 scroll.events.contextmenu({preventDefault(){},composedPath:()=>[scroll.view,scroll]});
 if(!menu.find(item=>item.label==='Preset').items.some(item=>item.label==='DFT'&&item.checked))throw Error('DFT missing from menu');
 if(menu.some(item=>item.label==='Cell'||item.label==='Character'))throw Error('DFT has irrelevant controls');
@@ -242,3 +242,16 @@ if(ranged.view.effectiveAppearance.lightness!=='value'||ranged.view.pointConfigu
 if(ranged.view.renderer.latest.configuration.position[2].input.op!=='hilbert3d')throw Error('Hilbert 3D preset did not reach the renderer');
 const cubeProfile=JSON.stringify(ranged.view.exportProfile());ranged.view.applyPreset('linear');ranged.view.importProfile(cubeProfile);
 if(JSON.stringify(ranged.view.exportProfile())!==cubeProfile||ranged.view.axes.length!==3)throw Error('Hilbert 3D profile round trip differs');
+
+// Every preset shades hue with entropy; editing the shorthand creates a durable shared recipe.
+for(const preset of ['linear','hilbert','hilbert3d','digraph','dft','trigraph']) {
+ ranged.view.applyPreset(preset);await ranged.view.render();
+ if(ranged.view.effectiveAppearance.hue!=='entropy')throw Error(`${preset} lacks entropy hue`);
+ const hue=ranged.contextItems().find(item=>item.label==='Points').items.find(item=>item.label==='Hue');
+ const window=hue.items.find(item=>item.label==='Window');
+ if(window.value!==32)throw Error('Default entropy window changed');
+ window.action(64);await ranged.view.render();
+ if(!ranged.view.renderer.cache.recipeEntropy.values.has(64))throw Error('Shading window did not reach provider');
+ const saved=JSON.stringify(ranged.view.exportProfile());ranged.view.applyPreset('linear');ranged.view.importProfile(saved);
+ if(ranged.view.effectiveAppearance.hue.window!==64)throw Error('Entropy window lost in profile');
+}

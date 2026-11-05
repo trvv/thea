@@ -189,3 +189,20 @@ therefore consume substantial memory even for a modest source file.
 `tests/scroll-benchmark.js` measures CPU work with a canvas double. It excludes
 browser text rendering, real ImageBitmap transfer, canvas compositing, and GPU
 presentation. Use it for relative algorithm changes, not universal FPS claims.
+
+## Entropy shading
+
+Every preset defaults to Local Entropy for hue, with a 32-byte neighborhood.
+Points → Hue → Window edits its size (1–4096 bytes). Editing the shorthand
+produces an ordinary entropy recipe, saved with the appearance in profiles;
+other channels can use independent windows through the same recipe editor.
+The calculation uses a rolling count table and reads surrounding source bytes
+outside the selected interval when available. At file edges, neighborhoods clip
+to the available bytes. Entropy is normalized by the maximum achievable for the
+requested window (up to eight bits).
+
+Renderer selection checks the factors used by the effective appearance, including
+preset defaults. Unsupported native combinations use the shared recipe renderer,
+whose lazy providers and caches apply equally to preset and custom configurations.
+This still leaves legacy preset painters alongside that renderer; performance
+improvements should target shared providers and compiled expressions where possible.

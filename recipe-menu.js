@@ -46,6 +46,10 @@ export function recipeMenu(label, value, definitions, change, save, depth = 0) {
   ...axes.slice(0,2).map(({value:component,label}) => ({ label: `Linear ${label}`, action: () => set({ op: 'component', component, input: { op: 'linear', input: expression } }) }))
  ];
  const parameters=[];
+ // The shorthand is the same 32-byte source as the explicit entropy recipe. Editing its window
+ // expands it to ordinary recipe data, so dependency planning and profiles need no special state.
+ if(sourceName === 'entropy')parameters.push({label:'Window',input:'number',value:32,min:1,max:4096,step:1,
+  action:window=>set({op:'entropy',offset:{op:'offset'},window})});
  if(expression && typeof expression === 'object' && depth < 32) {
   if(expression.op === 'constant')parameters.push(parameter('Value','value'));
   if(expression.a !== undefined)parameters.push(input('Input','a'), input('Operand','b'));
