@@ -164,6 +164,17 @@ export function compileRecipes(roots, definitions = {}) {
    * but their per-point values must never alias.
    */
   createEvaluator() {
+   // Source-only graphs are common in arbitrary configurations. Lower their outputs directly,
+   // preserving the same float32/clamp contract without interpreter scratch or instruction calls.
+   if(nodes.every(node=>node.op==='factor'||node.op==='constant')) {
+    const outputs=outputEntries.map(([name,id])=>({target:bindings[name],source:nodes[id].op==='factor'?factorIndices[nodes[id].name]:-1,value:nodes[id].value}));
+    return factors=>{
+     for(let i=0;i<outputs.length;i++) {
+      const output=outputs[i],value=Math.fround(output.source<0?output.value:factors[output.source]);
+      factors[output.target]=Number.isFinite(value)?clamp(value):0;
+     }
+    };
+   }
    const slots = [];
    let size = 0;
    for (const node of nodes) { slots.push(size); size += node.type === 'vec3' ? 3 : node.type === 'vec2' ? 2 : 1; }

@@ -3,16 +3,8 @@
  * statistics are needed.
  * @module factors
  */
-import { appearanceChannels, nativeFactors } from './factor-catalog.js';
 import { compileRecipes, recipeRoots } from './recipes.js';
 export * from './factor-catalog.js';
-/**
- * Preserve optimized preset paths for supported scalar factors; expressions and cross-preset
- * sources require the general evaluator.
- */
-export function needsPointFactors(region, appearance) {
- return appearanceChannels.some(channel => typeof appearance[channel] !== 'string' || !nativeFactors[region]?.has(appearance[channel]));
-}
 /**
  * Expose reachable provider families to cost prediction. The actual provider uses the detailed
  * program plan so custom entropy windows do not also request an unused default window.

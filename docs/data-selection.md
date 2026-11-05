@@ -13,10 +13,9 @@ Do not use these quantities interchangeably:
 - **Raster resolution:** a canvas's actual pixel dimensions. General points use
   display dimensions × device-pixel ratio × interaction-quality scale.
 
-The native byte grid often renders into a small logical canvas stretched by CSS;
-text uses a larger raster for readable glyphs. Native digraphs use a 256×256 value
-space, DFTs use a phase/frequency image, and native trigraphs use the display
-raster. General points have an independent sampling budget, placement grid, and display raster.
+Every view has an independent sample budget, placement grid, and display raster.
+Presets configure byte samples, distinct tuples or frequency bins without changing
+that relationship. Text uses the same projected marks as other shading.
 Changing canvas resolution must not change selected byte ranges or keyboard row
 steps.
 
@@ -56,32 +55,26 @@ restores actual selectable scopes.
 
 ## Requested length versus committed length
 
-Optimized native linear views snap selected lengths to a complete number of rows. The original
-unsnapped request is retained in `windowSize`/`requestedLength`; recalculating a
-layout from an already-snapped length can change the chosen column count and
-oscillate between grids.
+The requested length is retained separately from the committed interval because
+scope boundaries can clamp it. Layout and raster resolution do not round selected
+lengths to complete rows; partial rows/slices remain valid.
 
 A top-edge drag holds the old end fixed. `anchorEnd` follows that intent through
 scope clamping and snapping. A bottom-edge drag holds the start fixed. Tests
 cover this because making both edges follow the snapped start loses the user's
 anchor and causes visible drift.
 
-Whole-buffer mode is the exception to row-length snapping: every byte must stay
-selected, including a trailing partial row. Rendering can sample the whole range
-rather than dropping bytes merely to make its length divisible by columns.
-An empty source remains a valid selection with length zero, despite intermediate
-layout helpers using nonzero dimensions to avoid divisions by zero. General
-point configurations keep partial rows/slices and preserve committed byte ranges
-when layout or grid dimensions change.
+Whole-buffer mode selects every byte, including trailing partial rows. An empty
+source has length zero; nonzero helper dimensions only avoid divisions by zero.
+Position and dimension edits preserve the committed byte interval.
 
 ## Traversal and repeated samples
 
 Linear downsampling can average a byte interval into one cell. Text uses an
 actual representative byte so it never renders a glyph for a fractional average.
 The app’s Hilbert preset maps exact population indices into a power-of-two
-square through coordinate expressions. Extra curve cells stay empty. The older
-low-level native Hilbert painter can repeat samples when filling a padded square;
-that compatibility helper is not the app preset's coordinate model.
+square through coordinate expressions. Extra curve cells stay empty. Low-level
+render jobs use exactly the same coordinates as the app preset.
 
 The overview bar is another separate aggregation: each pixel averages its exact
 byte interval. At more pixels than bytes, empty intervals repeat the previous
@@ -106,9 +99,9 @@ independent (`average` or `representative`), and text uses representative bytes.
 
 ## Point populations and mixed analyses
 
-Native presets select byte samples, aggregated pairs/triples, or spectrum bins.
-Their synthesized configuration preserves that population when an expression,
-text overlay, or geometry edit promotes the view to general points.
+Presets select byte samples, distinct pairs/triples, or spectrum bins through
+ordinary configuration. Expression, text and geometry edits use the same renderer
+and preserve population unless it is explicitly changed.
 
 `configuration.population` specifies what generates points; it does not restrict
 which factors may be mixed. Tuple points use the first occurrence of their tuple
@@ -126,17 +119,16 @@ is `average`. Text and the representative policy use actual bytes. Tuple/bin
 populations are
 uniformly subsampled in population order when they exceed the limit. Tuple order
 is first occurrence, not sorted tuple key order. `sampleLimit: null` explicitly
-requests all points. Native preset painters retain their specialized algorithms.
+requests all points.
 
 The committed byte range, navigation row steps, statistical provider scopes, and
 adaptive raster size remain independent. Exact histograms and FFTs still analyze
 the entire selection. Limiting points therefore bounds prepared mark storage and
 sorting, not provider memory or the initial cost of discovering distinct tuples.
 
-Native DFT accumulates bins into pixels before log scaling. Native opaque triple
-rendering retains independent coverage/depth owners. General points use point
-colors and back-to-front blending. Population preservation does not promise
-pixel-identical color scaling or edge behavior across these painters.
+Each point has its own color and footprint. Bins are not accumulated into an
+intermediate image before shading; changing coordinates uses the original points.
+Three-dimensional views use common back-to-front blending and coverage rules.
 
 Point Index and Point Count expose exact unsampled population ordinals and counts.
 For frequency-bin points, they are the bin index and one-sided bin count. In

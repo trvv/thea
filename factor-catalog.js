@@ -18,10 +18,3 @@ const names = {
 };
 export const factorOptions = Object.entries(names).map(([value, label]) => ({ value, label }));
 export const appearanceChannels = ['hue', 'saturation', 'lightness', 'opacity', 'size'];
-export const nativeFactors = {
- linear: new Set(['none','value','entropy','position','column','row']),
- hilbert: new Set(['none','value','entropy','position','column','row']),
- digraph: new Set(['none','value','byte1','byte2','count','pairCount']),
- trigraph: new Set(['none','value','byte1','byte2','byte3','count','tripleCount']),
- dft: new Set(['none','phase','frequency','amplitude'])
-};

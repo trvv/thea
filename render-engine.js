@@ -5,11 +5,12 @@
  * @see docs/rendering.md
  */
 import { settingsKey, preparationKey, presentationKey } from './render-identity.js';
+import { resolveViewJob, spaces } from './point-configuration.js';
 import { executeRender, renderCost } from './rendering.js';
 
 /**
  * A serializable snapshot, not live component state. Optional fields depend on
- * whether the job is an overview, optimized preset, or general point view.
+ * whether the job is an overview or a configured point view.
  * @typedef {object} RenderJob
  * @property {'view'|'bar'} kind
  * @property {Blob} source Immutable bytes; sourceId identifies them across clones.
@@ -17,10 +18,10 @@ import { executeRender, renderCost } from './rendering.js';
  * @property {number} [offset=0] Byte start relative to source.
  * @property {number} [length] Selected/scope byte count, not an end offset.
  * @property {string} [region] Compatibility preset name.
- * @property {object} [configuration] Presence selects the general point path.
- * @property {{columns:number, rows:number}} [sampleLayout] Native sample geometry.
- * @property {number} [columns] Logical preset width or general raster width.
- * @property {number} [rows] Logical preset height or general raster height.
+ * @property {object} [configuration] Resolved point configuration; preset defaults are materialized before dispatch.
+ * @property {{columns:number, rows:number}} [sampleLayout] Sample budget and aspect hint.
+ * @property {number} [columns] Output raster width.
+ * @property {number} [rows] Output raster height.
  * @property {number} [width] CSS view width; bar jobs use overview raster width.
  * @property {number} [height] CSS view height; bar jobs use overview raster height.
  * @property {number} [scale=1] Device-pixel ratio for view rendering.
@@ -63,9 +64,9 @@ export class RenderEngine {
 	 * do not train one universal estimate.
 	 */
 	key(job) {
-		if (job.configuration) return `points-${job.configuration.space}`;
-		if (job.region === 'trigraph' && job.frequencyOpacity) return 'trigraph-opacity';
-		return job.kind === 'bar' ? 'bar' : ['digraph', 'dft', 'trigraph'].includes(job.region) ? job.region : job.shaders.some(shader => shader === 'character' || shader === 'hex') ? 'text' : 'pixels';
+		if(job.kind === 'bar')return 'bar';
+		job=resolveViewJob(job);
+		return `points-${job.configuration.space}-${job.configuration.backend}-${job.shaders.some(shader=>shader==='character'||shader==='hex')?'text':'marks'}`;
 	}
 
 	/**
@@ -93,7 +94,7 @@ export class RenderEngine {
 	 * re-entering presentation.
 	 */
 	reportFrame(request, metrics) {
-		const frame = { job: request.job, duration: performance.now() - request.started, dimensions: metrics?.dimensions };
+		const frame = { job: request.job, duration: performance.now() - request.started, dimensions: metrics?.dimensions, timings: metrics?.timings, reused: metrics?.reused };
 		queueMicrotask(() => this.onFrame?.(frame));
 	}
 
@@ -110,7 +111,7 @@ export class RenderEngine {
 		const compatible = latest && request.job.appearanceKey === latest.appearanceKey
 			&& (request.job.presentationKey ?? presentationKey(request.job)) === (latest.presentationKey ?? presentationKey(latest));
 		if (compatible && request.job.progressive && latest.progressive && request.job.kind === 'view') return true;
-		return compatible && request.job.region === 'trigraph' && latest.region === 'trigraph'
+		return compatible && request.job.kind === 'view' && spaces[request.job.configuration?.space]?.length === 3
 			&& request.job.offset === latest.offset && request.job.length === latest.length;
 	}
 
@@ -124,7 +125,7 @@ export class RenderEngine {
 		// Own mutable settings so callers cannot change a local job after dispatch;
 		// Blob itself is immutable and keeps its identity for providers.
 		const { source, ...settings } = job;
-		job = { ...structuredClone(settings), source, sourceId: this.sourceIds.get(source) };
+		job = resolveViewJob({ ...structuredClone(settings), source, sourceId: this.sourceIds.get(source) });
 		job.appearanceKey = settingsKey(job);
 		job.preparationKey = preparationKey(job);
 		job.presentationKey = presentationKey(job);
@@ -186,7 +187,7 @@ export class RenderEngine {
 	 * Present only compatible frames and close every transferred bitmap, including stale ones, before
 	 * starting the latest pending job.
 	 */
-	finish({ id, bitmap, duration, work, dimensions, error }) {
+	finish({ id, bitmap, duration, work, dimensions, timings, reused, error }) {
 		if (error) { this.failed(); return; }
 		const request = this.active;
 		if (!request || request.id !== id) { bitmap?.close(); return; }
@@ -201,7 +202,7 @@ export class RenderEngine {
 				context.clearRect(0, 0, bitmap.width, bitmap.height);
 				context.drawImage(bitmap, 0, 0);
 				this.presented = id;
-				this.reportFrame(request, { dimensions });
+				this.reportFrame(request, { dimensions, timings, reused });
 			}
 			request.resolve(present);
 		} catch (error) { request.reject(error); }

@@ -1,208 +1,160 @@
 # Rendering, scheduling, and performance
 
-## The job is the thread boundary
+## One view pipeline
 
-`RenderEngine` owns a visible canvas. It assigns each root Blob a stable numeric
-`sourceId` through a WeakMap, then sends serializable jobs to the shared
-`executeRender` dispatcher locally or through `render-worker.js`. A Blob's object
-identity can change under structured cloning, so worker caches must use sourceId
-when available. IDs are unique **within one engine**, not across the application.
+All view jobs resolve into ordinary point configuration before dispatch. Presets
+supply defaults; no preset name selects a painter. `resolveViewJob` also accepts
+older low-level callers without configuration: it materializes preset mappings,
+converts legacy coordinate systems/axis permutations, and supplies a sample budget.
+An explicit configuration is authoritative. Overview bars retain their separate
+averaging pipeline because they summarize source intervals rather than draw points.
 
-Important job fields:
+```text
+source window → population + lazy providers → compiled recipes
+              → world coordinates / appearance → projection + ordering
+              → shared CPU raster or WebGL raster → optional text
+```
 
-| Field | Meaning |
+`RenderEngine` owns a canvas and assigns each immutable Blob an engine-local
+`sourceId`. Jobs are owned snapshots. UI and worker execution call the same
+`executeRender`; caches belong exclusively to that canvas/thread. Never run
+unrelated concurrent jobs against the same mutable cache.
+
+| Job field | Contract |
 | --- | --- |
-| `kind` | `view` or `bar`. |
-| `source`, `sourceId` | Immutable Blob and its engine-local stable identity. |
-| `offset`, `length` | Byte interval relative to that job's source, normally the root Blob. |
-| `region` | Historical preset identifier; still chooses native paths and compatibility defaults. |
-| `configuration` | When present, selects the general point/recipe renderer. |
-| `sampleLayout` | Sample-budget dimensions and aspect hint, independent of placement grid and adaptive raster quality. |
-| `columns`, `rows` | Native logical dimensions for some presets; actual raster dimensions for general points and native 3D. |
-| `width`, `height`, `scale` | View CSS dimensions and DPR; bar width/height already identify its overview raster. |
-| `pointScale` | DPR × quality scale where applicable, preserving particle size in CSS pixels. |
-| `appearance`, `shaders` | Mapping overrides and compatibility flags; `shaders` is not GPU execution. |
-| `rotation`, `interacting`, `resolutionScale` | Camera and quality-feedback snapshot. |
-| `coordinateSystem`, `axes` | Legacy image/packed-tuple transforms; raw points use `configuration.space` instead. |
+| `source`, `sourceId`, `offset`, `length` | Immutable source, engine-local identity, half-open selected interval. |
+| `region` | Preset defaults and legacy `count` interpretation; never a painter selector. |
+| `configuration` | Population, sampling, dimensions, coordinate expressions, space, footprint, backend, definitions. |
+| `sampleLayout` | Sample budget and aspect hint, independent of output resolution. |
+| `columns`, `rows` | Actual output raster dimensions. |
+| `appearance`, `shaders` | Scalar/expression mappings and compatibility color/text flags. |
+| `rotation`, `pointScale` | Camera and DPR × interaction-quality scale. |
+| `coordinateSystem`, `axes` | Compatibility inputs converted to configuration when one is absent. |
 
-Jobs should be treated as immutable snapshots once dispatched. The worker gets
-expression data and reconstructs runtime plans; it does not receive DOM nodes,
-callbacks, evaluators, or a transferable live selection controller.
+## Independent cache boundaries
 
-Each worker owns one OffscreenCanvas and one cache object. It executes a job and
-returns `{id, bitmap, duration, work}` or an error string. The caller draws and
-closes every transferred ImageBitmap, including stale results. `executeRender`
-returns null on superseded preparation, not an empty successful frame.
-
-## Scheduling and presentation are separate policies
-
-The initial UI-thread budget is 8 ms. `renderCost` estimates structural work;
-`RenderEngine` learns smoothed time-per-work-unit rates. Arbitrary-length FFTs,
-text, output raster size, and reachable recipe providers affect the estimate.
-These work units are internal calibration values, not byte counts or an FPS
-promise. Native helpers and general jobs do not report perfectly identical timing
-boundaries; use end-to-end frame timing for interaction feedback.
-
-When supported, expensive work goes to a worker. Once a mode has been offloaded,
-its later jobs stay there so incremental caches do not alternate between two
-threads. There is one active worker job and one replaceable pending request.
-Replacing the pending request resolves it false rather than allowing a long queue
-of obsolete frames to accumulate.
-
-Worker jobs finish serially under the engine protocol. A newer request does not
-interrupt a running worker's CPU loop. Instead, presentation checks determine
-whether the finished bitmap is still useful:
-
-- Never show an ID already presented.
-- Show the latest request normally.
-- During compatible progressive scrolling, permit ordered intermediate frames;
-  otherwise rapid input could keep every completed frame invisible.
-- Do not show an old source, mapping, encoding, dimensions, or incompatible
-  sampling specification just because its computation finished last.
-
-`render-identity.js` owns the setting lists used by preparation, presentation,
-and quality feedback. `appearanceKey` includes configuration, sample layout,
-appearance, text, and compatibility settings. When
-adding a render-affecting setting, audit stale-frame checks as well as drawing
-code. Native camera-only compatibility has an additional presentation allowance.
-
-Before painting a local async job, `current()` must still be true after source
-reads. Incremental helpers must stage changes until that check succeeds. An old
-request may otherwise leave a cache that produces plausible but incorrect future
-frames. Do not call `executeRender` concurrently with the same mutable cache from
-an unrelated scheduler.
-
-Worker creation/execution failure disables offloading for that engine and retries
-the latest request locally. Disconnecting a canvas terminates its worker, settles
-pending promises, invalidates continuations, and clears caches/offloading affinity.
-Learned calibration rates remain on the engine instance.
-
-## What gets cached
-
-| Cache / owner | Reuse and invalidation |
+| Stage | Reuse and invalidation |
 | --- | --- |
-| Bar overview pages | Root-source prefix sums; page LRU survives scope changes, changes identity with the source. |
-| Native grid palettes | Integer byte/entropy → packed color; fractional averages bypass the integer palette. |
-| Byte/pair/triple histograms | Shared native/general incremental selected-window counts; changes are staged before commit. |
-| Spectrum coefficients | Shared native/general exact-selection cache, reused across display/mapping changes. |
-| Native trigraph histogram | Root source and selected interval; overlap can update entering/leaving triple starts. |
-| Native projected tuple slots | Histogram Map/revision and camera/space/axes/size; consecutive revisions permit small repairs. |
-| Native visibility raster | Screen dimensions and projected geometry; dirty tiles repair changed coverage. |
-| General `factorWindow` | One selected window with any required entropy halo. A later larger halo upgrades the read. |
-| General provider results | Separate one-window caches for requested entropy sizes, counts, and spectrum components. |
-| General `preparedPoints` | Source, selection, sample layout, mappings/definitions, appearance, text settings. Camera and output-raster dimensions are excluded. |
-| Recipe plans | Bounded request/canonical caches; structurally identical cloned expressions reuse a plan. |
-| Per-evaluator scratch | Allocated independently from the shared IR so concurrent canvases cannot alias point values. |
+| Overview summaries | Per-source prefix pages and coarse totals; bounded detailed-page LRU. |
+| Selected byte window | Source/selection plus entropy halos; larger halos upgrade the cached read. |
+| Histograms | Incremental byte/pair/triple counts over valid tuple starts; all reads are staged before mutation. |
+| Spectrum | Exact-selection coefficients; phase and amplitude arrays are lazy. |
+| Entropy | One result per requested window size for the selected source interval. |
+| Recipe plans | Bounded structural caches; cloned expressions share plans, evaluators own scratch. |
+| `pointGeometry` | Source/range, sampling/population, position/space/dimensions/definitions, text sampling. Color, opacity, size, shape, encoding, backend and footprint are excluded. |
+| `preparedPoints` | Geometry plus appearance/text settings. Camera and output raster dimensions are excluded. |
+| Projection and ordering | Geometry, camera, raster size, space, footprint and point scale. Color/opacity/shape/size changes reuse them; mark size is applied after projection. |
+| CPU raster storage | Reused until output dimensions change; pixels are recomposited for each frame. |
 
-Caches in the UI thread and worker are distinct. Moving a mode between them loses
-that mode's warm state. Mutating an expression without going through the setters
-also bypasses validation and render scheduling; use immutable replacement.
+Truncation records visible sample ordinals alongside world coordinates. An
+appearance-only pass evaluates exactly those samples, including the case where
+none are visible. It does not need to evaluate position expressions again.
 
-### Overview pages
+Geometry/preparation keys are separate from presentation identity. Every setting
+that changes output still participates in stale-frame rejection, even when it
+can reuse part of the computation.
 
-Each page covers 65,536 bytes and stores a Uint32 prefix sum. At 255 per byte the
-sum still fits in 32 bits. The LRU retains 64 pages, roughly 16 MiB per bar. A sparse page-total Map survives prefix eviction; whole
-pages use those totals without rebuilding prefixes. The last completed overview
-raster is also reused for identical ranges and pixel counts. Each
-pixel averages its exact byte interval; this makes navigating nested scopes
-consistent rather than changing the sampling approximation as the window moves.
+## Operation-based optimizations
 
-### Native trigraph
+Add optimizations at the stage that owns the work, with eligibility based on
+operations or mark properties. Do not branch on preset names or build a second
+factor layout.
 
-Sliding triples overlap by two bytes. Histogram keys are packed as
-`first * 65536 + second * 256 + third`. A changed window updates only outgoing and
-incoming **valid triple starts** when that is cheaper than a full rebuild. Reads
-include the extra trailing bytes needed to form boundary tuples. All changed
-reads complete before the existing Map is mutated.
+- Source/constant-only recipe graphs lower directly to output assignments,
+  preserving float32 rounding, finite guards, and clamping.
+- Appearance mappings with at most two color inputs can use bounded exact
+  8-bit color tables. Only exactly representable normalized input values use a
+  table; fractional/custom values take the scalar conversion. Tables are bounded
+  by the appearance-plan cache and work with any preset or coordinate recipes.
+- CPU opaque square interiors use packed row fills. Boundary pixels, circles,
+  and translucent marks retain the four-probe coverage and blending rules.
+- Geometry, projection and depth order survive changes that cannot affect them.
+  Both backends consume the same prepared marks, projected positions and order.
 
-The raster tracks dense typed-array slots, a key→slot Map, and linked spatial bins
-with 2-pixel tiles. Removing a slot can move the final slot into it. That move must
-repair bin links **and stored visibility owner IDs**. Revision gaps, a new Map, or
-camera/viewport changes require rebuilding instead of applying an incomplete delta.
+`tests/rasterization.js` compares optimized CPU output against an independent
+four-probe reference over fractional positions/sizes, clipping, both shapes,
+transparency and ordering. `tests/render-pipeline.js` verifies preset/explicit
+configuration equivalence and stage invalidation. Browser tests compare CPU and
+WebGL across spaces and shapes and exercise capability/context-loss fallback.
 
-Opaque particles keep four independent depth owners per pixel. This preserves rear
-particles through partially covered edges; fading one nearest particle against
-black creates dark halos. Depth ties use stable tuple keys rather than Map order.
-Changing occurrence counts can also change the frame's peak shade, so cached
-geometry does not mean cached final brightness is valid.
+## Timing and benchmarks
 
-For white particles, opacity is order independent. Optical depth adds as
-`0.25 * log1p(count)` and transmittance is its negative exponential. Incremental
-removal/insertion can update that sum without sorting. This shortcut must not be
-reused for particles with different colors.
+View results expose `timings` for preparation, projection, sorting and
+rasterization/text, and `reused` for geometry and projection. Frame callbacks
+receive these through local and worker execution. Preparation currently includes
+provider reads and analysis as well as recipe evaluation; those sub-stages are
+not timed separately. End-to-end frame duration also includes worker transport
+and presentation. Instrumentation is developer data, with no page status UI.
 
-Native custom appearance keeps tuple aggregation/projection but depth-sorts
-colored marks. The general point renderer also sorts 3D marks back-to-front. Its
-four coverage probes are combined into a pixel alpha blend, unlike the native
-opaque renderer's four retained depth owners. Their edge behavior is not promised
-to be identical.
+`bun tests/scroll-benchmark.js` reports cold, warm, appearance-edit, camera and
+scroll costs with deterministic fixtures. An optional repository path runs the
+same fixtures against an older checkout for an equivalent-configuration comparison.
+See [recorded comparisons and limitations](performance.md).
+The canvas double excludes browser text compositing, actual ImageBitmap transfer,
+and GPU presentation; timings are relative observations, not universal FPS claims.
 
-## Adaptive resolution
+Removing old painters also removes their separate visual conventions: fixed
+256-pixel digraph rasters, peak-scaled tuple gray, pre-aggregation of DFT bins into
+pixels, tuple-only wireframes, and separate per-probe depth-owner repair. All
+callers now use the configurable point semantics already used by customized and
+entropy-shaded tuple/spectrum views. Former very tight byte-grid loops can still
+outperform the general pipeline on dense simple input; unification is not a claim
+that every former specialized case is already faster.
 
-Quality changes belong to 3D **spaces**, not only the Trigraph preset. The default
-budget is approximately 16.7 ms. The controller requires two sustained slow reports
-before reducing dimension scale, ignores one resized-cache warmup report, and
-requires six sufficiently fast reports to increase it. Scale never goes below
-0.25, and roughly 180 ms without motion restores full detail.
+## Scheduling and presentation
 
-A reduction that fails to improve timing is rolled back and locked for that
-interaction. This is important when histogram work, an FFT, or point preparation
-is the bottleneck: shrinking the canvas cannot fix it. Feedback from a stale
-source, mapping, viewport, or quality scale is ignored.
+The default UI-thread budget is 8 ms. Structural work estimates use reachable
+providers, expression complexity, population, output size, FFT working size and
+backend. Calibration/offloading affinity follows space, backend and text mode,
+rather than preset names. Once offloaded, a workload stays on its worker to retain
+cache locality. Each canvas has one active and one replaceable pending job.
 
-Grid-sized 3D marks derive their footprint from placement-cell dimensions and
-perspective; point-sized marks retain their existing perspective particle-size convention.
+Reject already-presented IDs and frames with incompatible sources/settings/output
+sizes. Compatible progressive scrolling and camera-only changes in any 3D space
+can present completed intermediate frames so continuous input does not starve the
+display. Worker errors retry only the newest request locally. Disconnect terminates
+the worker, settles pending work, and disposes local GPU resources.
 
-`pointScale` changes alongside the raster so particles keep their CSS size, and
-`sampleLayout` stays native so the selection does not change. Perspective size is
-continuous, using the same `3.5 - depth` denominator as projection; avoid integer
-size/depth buckets that make particles pop near the camera.
+Supersession is checked after asynchronous reads. Long synchronous loops still run
+to completion; cancellation latency remains an avenue for improvement. Histogram
+changes are staged before commit so cancellation cannot poison later frames.
 
-## Cost and memory pitfalls
+## Coverage, acceleration and adaptive quality
 
-Offloading preserves UI responsiveness; it does not remove computation. General
-colored 3D rendering still sorts points on the CPU. CPU rasterization is the default;
-`configuration.backend: "webgl"` uploads sorted marks for instanced quad drawing.
-It retains the four-probe coverage rule and falls back on unavailable WebGL2,
-viewport limits, errors, or context loss. Providers, recipes, projection, sorting,
-and text still run on CPU. Browser tests compare both mark shapes across all
-spaces within three 8-bit color steps, with a tighter mean-error bound. Camera changes
-reuse prepared points but need new projection/sorting/compositing. Adaptive scale
-cannot reduce fixed per-point work.
+The CPU rasterizer is the reference. Three-dimensional points are ordered
+back-to-front; four sample probes determine pixel coverage, followed by ordered
+alpha blending. This preserves rear contributions at partially covered edges.
+WebGL2 uses instanced quads with the same coverage rule. CPU providers, recipes,
+projection, sorting and text remain in place. WebGL is opt-in and falls back on
+unavailable contexts, viewport limits, errors or context loss.
 
-General points default to a 262,144-point sample budget. This bounds prepared
-mark/sort storage, not exact provider arrays or tuple-discovery metadata. Projection,
-order, and software image buffers are reused between frames.
-
-FFT buffers can greatly exceed selected bytes: Bluestein uses power-of-two
-convolution buffers for non-power-of-two selections, and returned Float64 views
-can retain larger backing buffers. The shared spectrum cache copies only the one-sided coefficients so those padded
-working buffers can be released. Phase/amplitude arrays and normalization are
-additional work only when requested.
-
-Overview LRUs are per bar. Entropy arrays are per requested window size. Triple
-histograms can contain many distinct keys. Native depth/owner arrays alone cost
-48 bytes per raster pixel (four Float64 depths and four Uint32 owners), before
-backgrounds, opacity arrays, and particle storage. High DPR and many bars can
-therefore consume substantial memory even for a modest source file.
-
-`tests/scroll-benchmark.js` measures CPU work with a canvas double. It excludes
-browser text rendering, real ImageBitmap transfer, canvas compositing, and GPU
-presentation. Use it for relative algorithm changes, not universal FPS claims.
+The adaptive controller belongs to all 3D spaces. Two sustained slow reports can
+reduce raster scale; six fast reports permit recovery, and roughly 180 ms idle
+restores detail. Scale remains at least 0.25. An ineffective reduction rolls back
+and locks for that interaction. Sample budgets, selected bytes, and navigation
+strides do not change with raster quality. Perspective size changes continuously
+with the same `3.5 - depth` denominator as projection.
 
 ## Entropy shading
 
-Every preset defaults to Local Entropy for hue, with a 32-byte neighborhood.
-Points → Hue → Window edits its size (1–4096 bytes). Editing the shorthand
-produces an ordinary entropy recipe, saved with the appearance in profiles;
-other channels can use independent windows through the same recipe editor.
-The calculation uses a rolling count table and reads surrounding source bytes
-outside the selected interval when available. At file edges, neighborhoods clip
-to the available bytes. Entropy is normalized by the maximum achievable for the
-requested window (up to eight bits).
+Every preset defaults to Local Entropy hue with a 32-byte neighborhood.
+Points → Hue → Window selects 1–4096 bytes. Editing the shorthand creates a normal
+entropy recipe saved in profiles; channels may have independent windows.
+One rolling count-table implementation serves both built-in and custom windows.
+The built-in 32-byte factor retains its 8-bit quantization. Halo reads extend past
+the selection within the source, clipping at file edges. Normalization uses the
+requested window's achievable entropy, up to eight bits.
 
-Renderer selection checks the factors used by the effective appearance, including
-preset defaults. Unsupported native combinations use the shared recipe renderer,
-whose lazy providers and caches apply equally to preset and custom configurations.
-This still leaves legacy preset painters alongside that renderer; performance
-improvements should target shared providers and compiled expressions where possible.
+## Remaining performance work
+
+Sampling bounds prepared marks, not full-window provider storage or tuple discovery.
+Sparse byte/entropy paging, incremental tuple representative discovery, finer
+provider timings, dependency-specific color/size buffers, generic dirty-region
+raster updates, and GPU projection remain useful next steps. Restore no removed
+shortcut without making its applicability and numerical/coverage contracts explicit.
+
+FFT working buffers can exceed input size, especially for Bluestein lengths;
+the spectrum cache copies only one-sided coefficients so padded buffers can be
+released. Triple maps can approach one key per tuple. Overview detailed pages are
+bounded to 64 × 65,536-byte prefix arrays per bar (roughly 16 MiB), with coarse
+page totals retained separately. Multiple bars/workers still duplicate caches.

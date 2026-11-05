@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { compileAppearance, defaultAppearance } from '../appearance.js';
-import { executeRender, cellColor } from '../rendering.js';
-import { RenderCanvas } from './render-canvas.js';
+import { executeRender } from '../rendering.js';
+import { RenderCanvas, cellColor } from './render-canvas.js';
 import { RenderEngine } from '../render-engine.js';
 const base={kind:'view',source:new Blob([Uint8Array.from({length:256},(_,i)=>i)]),offset:0,length:256,
  columns:16,rows:16,width:16,height:16,scale:1,shaders:['entropy','brightness'],region:'linear'};
 const mapped=defaultAppearance('linear');
-const compiled=compileAppearance('linear',mapped);
-assert.equal(compiled,compileAppearance('linear',{...mapped}));
+const compiled=compileAppearance(mapped);
+assert.equal(compiled,compileAppearance({...mapped}));
 for(let value=0;value<256;value+=17)for(let entropy=0;entropy<256;entropy+=17){
  const rgba=new Uint8ClampedArray(4);compiled.rgba([value/255,entropy/255],rgba);
  assert.deepEqual([...rgba].slice(0,3),cellColor(value,entropy,base.shaders));
@@ -43,3 +43,15 @@ const engine=new RenderEngine(canvas);engine.version=2;engine.presented=0;
 engine.latest={...base,appearanceKey:'new',sourceId:1,progressive:true};
 assert.equal(engine.canPresent({id:1,job:{...engine.latest,appearanceKey:'old'}}),false,'Stale mappings must not be presented');
 console.log('Appearance checks pass: cached mappings, default parity, independent entropy, all views, size/shape/opacity, stale-frame rejection.');
+
+// Exact tables must preserve float32 recipe outputs, including all byte/entropy pairs.
+const numeric=compileAppearance({hue:1,saturation:'none',lightness:0,opacity:'none',size:'none',shape:'square'});
+const values=new Float64Array(2),rgba=new Uint8ClampedArray(4);
+for(let entropy=0;entropy<256;entropy++)for(let value=0;value<256;value++) {
+ values[0]=Math.fround(value/255);values[1]=Math.fround(entropy/255);numeric.rgba(values,rgba);
+ assert.deepEqual([...rgba].slice(0,3),cellColor(values[0]*255,values[1]*255,base.shaders));
+}
+for(const value of [0.12345,0.5,0.50001,0.99999]) {
+ values[0]=value;values[1]=0.1234567;numeric.rgba(values,rgba);
+ assert.deepEqual([...rgba].slice(0,3),cellColor(value*255,values[1]*255,base.shaders),'Non-quantized color was rounded into a table');
+}

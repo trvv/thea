@@ -1,26 +1,7 @@
 import assert from 'node:assert/strict';
-import { paintView, cellColor } from '../rendering.js';
-import { trigraphCounts } from '../trigraph.js';
+import { trigraphCounts } from '../histograms.js';
 import { overviewValues } from '../overview.js';
 import { RenderCanvas } from './render-canvas.js';
-
-// The LUT must preserve every 8-bit hue/lightness combination exactly.
-const bytes = Uint8Array.from({ length: 65536 }, (_, i) => i & 255);
-const entropy = Uint8Array.from({ length: 65536 }, (_, i) => i >>> 8);
-const canvas = new RenderCanvas();
-for (const shaders of [[], ['brightness'], ['entropy'], ['entropy', 'brightness']]) {
-	paintView(canvas, bytes, entropy, 256, 256, null, shaders, { scale: 1 });
-	for (let i = 0; i < bytes.length; i++) {
-		const expected = Uint8ClampedArray.from([...cellColor(bytes[i], entropy[i], shaders), 255]);
-		assert.deepEqual(canvas.pixels.subarray(i * 4, i * 4 + 4), expected);
-	}
-}
-// Fractional averages must retain clamped-array rounding and full precision.
-for (const shaders of [['brightness'], ['entropy'], ['entropy', 'brightness']]) {
-	paintView(canvas, new Uint8Array([0, 1, 1, 2]), new Uint8Array([4, 5, 5, 6]), 2, 1, null, shaders, { scale: 1 });
-	assert.deepEqual(canvas.pixels.subarray(0, 4), Uint8ClampedArray.from([...cellColor(0.5, 4.5, shaders), 255]));
-	assert.deepEqual(canvas.pixels.subarray(4, 8), Uint8ClampedArray.from([...cellColor(1.5, 5.5, shaders), 255]));
-}
 
 const data = Uint8Array.from({ length: 131200 }, (_, i) => (i * i + i * 17 + Math.floor(i / 31)) & 255);
 const source = new Blob([data]);
@@ -68,4 +49,4 @@ const large = new Blob([new Uint8Array(5 * 1024 * 1024)]);
 const boundedCache = {};
 await overviewValues({ source: large, width: 48, height: 100 }, boundedCache);
 assert(boundedCache.overview.pages.size <= 64, 'Overview cache exceeded its memory bound');
-console.log('Scroll checks pass: exact color LUT, fractional averages, incremental histogram equivalence, cancelled updates, exact overview averages, cached reads, bounded memory.');
+console.log('Scroll checks pass: incremental histogram equivalence, cancelled updates, exact overview averages, cached reads, bounded memory.');

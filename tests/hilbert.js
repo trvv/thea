@@ -86,10 +86,10 @@ let reads=0;class Source extends Blob{slice(...args){reads++;return super.slice(
 const source=new Source([Uint8Array.from({length:512},(_,i)=>i%7)]);
 const base={kind:'view',source,offset:0,length:64,region:'linear',shaders:[],columns:64,rows:48,width:64,height:48,scale:1,pointScale:1,
  sampleLayout:{columns:8,rows:8},configuration:{...presetConfiguration('linear'),space:'cube',footprint:'point',position:Object.values(roots)}};
-const appearance={...defaultAppearance('linear'),hue:'none',lightness:'none'},helpers={entropyShading,hilbertCells,byteCharacter};
+const appearance={...defaultAppearance('linear'),hue:'none',lightness:'none'};
 for(const population of ['bytes','bins','pairs','triples']){
  const job={...base,configuration:{...base.configuration,population}};
- const visit=await pointFactors(job,appearance,{},()=>true,helpers),points=[];
+ const visit=await pointFactors(job,appearance,{},()=>true),points=[];
  visit((values,label,ctx)=>points.push({index:ctx.pointIndex,count:ctx.pointCount,offset:ctx.offset}));
  const expectedCount=population==='bytes'?64:population==='bins'?33:7;
  assert.equal(points.length,expectedCount);
@@ -102,7 +102,7 @@ for(const population of ['bytes','bins','pairs','triples']){
 assert(reads>0,'Tuple populations must inspect bytes');
 reads=0;await executeRender(new RenderCanvas(),{...base,appearance});assert.equal(reads,0,'Coordinate-only Hilbert read source bytes');
 const sampled={...base,configuration:{...base.configuration,sampleLimit:8}};
-const indices=[];(await pointFactors(sampled,appearance,{},()=>true,helpers))((values,label,ctx)=>indices.push(ctx.pointIndex));
+const indices=[];(await pointFactors(sampled,appearance,{},()=>true))((values,label,ctx)=>indices.push(ctx.pointIndex));
 assert.deepEqual(indices,[0,8,16,24,32,40,48,56],'Sample limit renumbered exact byte indices');
 console.log('Hilbert checks pass: cube orientation, exhaustive adjacency/uniqueness, exact indices, shared vec3, validation, menus, populations, laziness, camera reuse.');
 

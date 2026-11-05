@@ -13,7 +13,6 @@ import { RenderCanvas } from './render-canvas.js';
 let reads=0;
 class Source extends Blob { slice(...args){reads++;return super.slice(...args);} }
 const bytes=Uint8Array.from({length:200000},(_,i)=>(i*71+(i>>>3))%251),source=new Source([bytes]);
-const helpers={entropyShading,hilbertCells,byteCharacter};
 const base={kind:'view',source,offset:0,length:512,region:'trigraph',columns:64,rows:48,width:64,height:48,scale:1,
  pointScale:1,sampleLayout:{columns:32,rows:16},configuration:presetConfiguration('trigraph'),shaders:[]};
 const plain={...defaultAppearance('linear'),hue:'none',lightness:'none'};
@@ -43,7 +42,7 @@ for(const population of ['pairs','triples']){
  const width=population==='pairs'?2:3;
  const configuration={...base.configuration,population};
  const appearance={...plain,hue:'phase',opacity:'pairCount',size:'entropy'};
- const visit=await pointFactors({...base,configuration},appearance,{},()=>true,helpers);
+ const visit=await pointFactors({...base,configuration},appearance,{},()=>true);
  const seen=new Set(),expected=new Map();
  for(let i=0;i+width<=base.length;i++){
   const key=[...bytes.subarray(i,i+width)].join('/');if(!expected.has(key))expected.set(key,i);
@@ -57,12 +56,12 @@ for(const population of ['pairs','triples']){
 }
 const spectrumJob={...base,region:'dft',configuration:presetConfiguration('dft')};
 let binPoints=0;
-(await pointFactors(spectrumJob,plain,{},()=>true,helpers))((values)=>{assert.equal(values[slots.frequency],2*binPoints/base.length);binPoints++;});
+(await pointFactors(spectrumJob,plain,{},()=>true))((values)=>{assert.equal(values[slots.frequency],2*binPoints/base.length);binPoints++;});
 assert.equal(binPoints,base.length/2+1);
 
 const limited={...base,configuration:{...presetConfiguration('linear'),sampleLimit:7},length:512};
 let samples=0,lastOffset;
-(await pointFactors(limited,plain,{},()=>true,helpers))((values,label,context)=>{samples++;lastOffset=context.offset;});
+(await pointFactors(limited,plain,{},()=>true))((values,label,context)=>{samples++;lastOffset=context.offset;});
 assert.equal(samples,7);assert(lastOffset>400);assert.equal(limited.length,512);
 assert(limitedSampleLayout({columns:10000,rows:10000,length:100000000},limited.configuration).columns*limitedSampleLayout({columns:10000,rows:10000},limited.configuration).rows<=7);
 assert.throws(()=>validateConfiguration({...limited.configuration,sampleLimit:0}));
@@ -92,15 +91,15 @@ assert.equal(cache.pointBackend,'cpu');
 await executeRender(b,{...grid,configuration:{...grid.configuration,position:[{op:'factor',name:'column'},{op:'factor',name:'row'},'none']}});
 assert.deepEqual(a.pixels,b.pixels);
 
-// Presentation-only native DFT changes reuse coefficients and source reads.
-const native={...base,configuration:undefined,region:'dft'};
-const dftCache={};await executeRender(a,native,dftCache);
+// Presentation-only DFT changes reuse coefficients and source reads.
+const presetJob={...base,configuration:undefined,region:'dft'};
+const dftCache={};await executeRender(a,presetJob,dftCache);
 const spectrum=dftCache.factorSpectrum,before=reads;
-await executeRender(a,{...native,columns:32,rows:24},dftCache);
+await executeRender(a,{...presetJob,columns:32,rows:24},dftCache);
 assert.equal(reads,before);assert.equal(dftCache.factorSpectrum,spectrum);
-await executeRender(a,{...native,configuration:presetConfiguration('dft')},dftCache);
+await executeRender(a,{...presetJob,configuration:presetConfiguration('dft')},dftCache);
 assert.equal(dftCache.factorSpectrum,spectrum);
-await executeRender(a,{...native,length:513},dftCache);
+await executeRender(a,{...presetJob,length:513},dftCache);
 assert.equal(dftCache.factorSpectrum.real.length,257);
 assert.equal(dftCache.factorSpectrum.real.buffer.byteLength,257*8,'Spectrum cache retained padded FFT backing storage');
 

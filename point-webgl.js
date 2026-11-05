@@ -70,8 +70,8 @@ export class PointWebGL {
   for(let n=0;n<prepared.size;n++){
    const i=order?order[n]:n,q=i*4,p=n*8;
    instances[p]=projected[q];instances[p+1]=projected[q+1];
-   instances[p+2]=spatial?projected[q+3]:cellWidth*projected[q+3]/2;
-   instances[p+3]=spatial?projected[q+3]:cellHeight*projected[q+3]/2;
+   instances[p+2]=(spatial?projected[q+3]:cellWidth/2)*prepared.sizes[i];
+   instances[p+3]=(spatial?projected[q+3]:cellHeight/2)*prepared.sizes[i];
    for(let c=0;c<4;c++)instances[p+4+c]=prepared.colors[q+c]/255;
   }
   if(this.canvas.width!==width)this.canvas.width=width;

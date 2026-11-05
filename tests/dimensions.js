@@ -81,8 +81,8 @@ assert.equal(recipeRoots(manual,defaultAppearance('hilbert')).p0,'value');
 let reads=0;class Source extends Blob{slice(...args){reads++;return super.slice(...args);}}
 const source=new Source([Uint8Array.from({length:256},(_,i)=>(i*17+(i>>>2))%251)]);
 const job={kind:'view',source,offset:0,length:128,region:'linear',configuration:cube,sampleLayout:{columns:16,rows:8},shaders:[],columns:96,rows:72,width:96,height:72,scale:1,pointScale:1};
-const plain={...defaultAppearance('linear'),hue:'none',lightness:'none'},helpers={entropyShading,hilbertCells,byteCharacter};
-const visit=await pointFactors(job,plain,{},()=>true,helpers),indices=[];
+const plain={...defaultAppearance('linear'),hue:'none',lightness:'none'};
+const visit=await pointFactors(job,plain,{},()=>true),indices=[];
 visit((values,label,context)=>indices.push(context.pointIndex));
 assert.equal(indices.length,36,'The range product should define the available grid cells');assert(indices.at(-1)>120,'Grid sampling dropped the tail of the selection');assert.equal(reads,0);
 for(const population of ['bytes','pairs','triples','bins']){

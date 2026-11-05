@@ -1,62 +1,51 @@
-// CPU benchmark with a canvas double; excludes native browser/GPU compositing.
-import { executeRender } from '../rendering.js';
-import { RenderCanvas } from './render-canvas.js';
-const bytes=new Uint8Array(2**21);let seed=12345;
-for(let i=0;i<bytes.length;i++){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;bytes[i]=seed&255;}
-const source=new Blob([bytes]);
-for(const region of ['linear','hilbert','digraph','trigraph']){
- const canvas=new RenderCanvas(),cache={};const times=[];
- for(let frame=0;frame<7;frame++){
-  const started=performance.now();
-  const result=await executeRender(canvas,{kind:'view',source,sourceId:1,offset:frame*1024,length:2**18,columns:512,rows:512,region,shaders:['entropy','brightness'],width:768,height:512,scale:1,encoding:'ascii'},cache);
-  if(frame>1)times.push(performance.now()-started);
+// Non-gating CPU benchmark. Optional repository path allows identical fixtures against an older checkout.
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+const root=process.argv[2]?pathToFileURL(resolve(process.argv[2])+'/'):new URL('../',import.meta.url);
+const {executeRender}=await import(new URL('rendering.js',root));
+const {presetConfiguration}=await import(new URL('point-configuration.js',root));
+const {defaultAppearance}=await import(new URL('appearance.js',root));
+const {RenderCanvas}=await import(new URL('tests/render-canvas.js',root));
+let seed=123;
+const bytes=Uint8Array.from({length:2**19},()=>{seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return seed&255;});
+const source=new Blob([bytes]),median=values=>values.sort((a,b)=>a-b)[values.length>>1];
+for(const space of ['square','cube'])for(const mode of ['scroll','appearance','repeat','camera']) {
+ const canvas=new RenderCanvas(),cache={},times=[],stages={preparation:[],projection:[],sorting:[],rasterization:[]};
+ const configuration={...presetConfiguration('linear'),space,footprint:space==='square'?'grid':'point',sampleLimit:65536,
+  position:space==='square'?['column','row','none']:['value','byte2','byte3']};
+ const appearance={...defaultAppearance('linear'),hue:'value',lightness:'entropy'};
+ const base={kind:'view',source,sourceId:1,offset:0,length:2**18,columns:512,rows:384,region:'linear',shaders:['entropy','brightness'],
+  configuration,appearance,sampleLayout:{columns:256,rows:256},rotation:{yaw:-0.6,pitch:0.45}};
+ let cold;
+ for(let frame=0;frame<20;frame++) {
+  const job={...base,offset:mode==='scroll'?frame*32:0,
+   rotation:mode==='camera'?{yaw:-0.6+frame*0.02,pitch:0.45}:base.rotation,
+   appearance:mode==='appearance'?{...appearance,hue:frame%2?'byte2':'value'}:appearance};
+  const start=performance.now(),metrics=await executeRender(canvas,job,cache),elapsed=performance.now()-start;
+  if(frame===0)cold=elapsed;
+  if(frame>=5) {
+   times.push(elapsed);
+   for(const stage of Object.keys(stages))if(metrics.timings)stages[stage].push(metrics.timings[stage]);
+  }
  }
- times.sort((a,b)=>a-b);console.log(region, 'scroll median ms:',times[2].toFixed(2));
+ const points=cache.preparedPoints,raster=cache.pointRaster;
+ const buffers=[points.positions,points.geometry?.indices,points.colors,points.sizes,raster.projected,raster.order,raster.image?.data];
+ const retained=[...new Set(buffers.filter(Boolean).map(view=>view.buffer))].reduce((sum,buffer)=>sum+buffer.byteLength,0);
+ console.log(`${space}/${mode}: cold ${cold.toFixed(2)} ms; steady median ${median(times).toFixed(2)} ms; mark/raster ${(retained/2**20).toFixed(2)} MiB`);
+ if(stages.preparation.length)console.log('  stages ms:',Object.fromEntries(Object.entries(stages).map(([name,values])=>[name,+median(values).toFixed(2)])));
 }
-
-const barCanvas=new RenderCanvas(),barCache={},times=[];
-for(let frame=0;frame<9;frame++){
- const started=performance.now();
- await executeRender(barCanvas,{kind:'bar',source,sourceId:1,offset:frame*1024,length:2**20,width:48,height:768},barCache);
- if(frame>1)times.push(performance.now()-started);
-}
-times.sort((a,b)=>a-b);console.log('nested bar scroll median ms:',times[3].toFixed(2));
-
-const largeCanvas=new RenderCanvas(),largeCache={},largeTimes=[];
-for(let frame=0;frame<9;frame++){
- const started=performance.now();
- await executeRender(largeCanvas,{kind:'view',source,sourceId:1,offset:frame*1024,length:2**20,columns:1024,rows:768,region:'trigraph',shaders:[],rotation:{yaw:-0.6,pitch:0.45}},largeCache);
- if(frame>1)largeTimes.push(performance.now()-started);
-}
-largeTimes.sort((a,b)=>a-b);console.log('trigraph 1 MiB / 1024x768 steady scroll median ms:',largeTimes[3].toFixed(2));
-
-// General points: separate cold preparation, camera-only reuse, and scrolling.
-// Report retained mark/scratch buffers rather than unstable process-wide GC totals.
-const {presetConfiguration}=await import('../point-configuration.js');
-const {defaultAppearance}=await import('../appearance.js');
-for(const sampleLimit of [4096,65536]){
- const pointCanvas=new RenderCanvas(),pointCache={};
- const job={kind:'view',source,sourceId:1,offset:0,length:2**20,columns:512,rows:384,width:512,height:384,scale:1,pointScale:1,
-  region:'linear',shaders:[],sampleLayout:{columns:1024,rows:1024},
-  configuration:{...presetConfiguration('linear'),space:'cube',footprint:'point',sampleLimit,position:['value','byte2','byte3']},
-  appearance:{...defaultAppearance('linear'),hue:'value',lightness:'byte2',opacity:'pairCount'}};
- let started=performance.now();await executeRender(pointCanvas,job,pointCache);const cold=performance.now()-started;
- const camera=[],scroll=[];
- for(let frame=0;frame<7;frame++){
-  started=performance.now();await executeRender(pointCanvas,{...job,rotation:{yaw:frame*0.05,pitch:0.45}},pointCache);
-  if(frame>1)camera.push(performance.now()-started);
+// Resolve every preset through the same stages with a modest point budget.
+for(const region of ['linear','hilbert','hilbert3d','digraph','dft','trigraph']) {
+ const configuration={...presetConfiguration(region),sampleLimit:4096},cache={},canvas=new RenderCanvas(),times=[];
+ for(let frame=0;frame<10;frame++) {
+  const start=performance.now();
+  await executeRender(canvas,{kind:'view',source,sourceId:1,offset:frame*32,length:65536,columns:256,rows:192,region,
+   shaders:['entropy','brightness'],configuration,sampleLayout:{columns:64,rows:64}},cache);
+  if(frame>=3)times.push(performance.now()-start);
  }
- for(let frame=0;frame<7;frame++){
-  started=performance.now();await executeRender(pointCanvas,{...job,offset:frame*1024},pointCache);
-  if(frame>1)scroll.push(performance.now()-started);
- }
- camera.sort((a,b)=>a-b);scroll.sort((a,b)=>a-b);
- const points=pointCache.preparedPoints,raster=pointCache.pointRaster;
- const storage=points.positions.byteLength+points.colors.byteLength+points.sizes.byteLength+raster.projected.byteLength+raster.order.byteLength+raster.image.data.byteLength;
- console.log(`general ${sampleLimit} points: cold ${cold.toFixed(2)} ms, camera ${camera[2].toFixed(2)} ms, scroll ${scroll[2].toFixed(2)} ms, mark/raster buffers ${(storage/2**20).toFixed(2)} MiB`);
+ console.log(`${region}/4096-point scroll median: ${median(times).toFixed(2)} ms`);
 }
-
-const hugeSource=new Blob([new Uint8Array(8*2**20)]),hugeCache={};
-const coldOverview=await executeRender(new RenderCanvas(),{kind:'bar',source:hugeSource,width:1,height:1},hugeCache);
-const coarseOverview=await executeRender(new RenderCanvas(),{kind:'bar',source:hugeSource,width:2,height:1},hugeCache);
-console.log('8 MiB overview: cold work',coldOverview.work,'resized coarse work',coarseOverview.work);
+const overviewSource=new Blob([new Uint8Array(8*2**20)]),overviewCache={},canvas=new RenderCanvas();
+const cold=await executeRender(canvas,{kind:'bar',source:overviewSource,width:1,height:1},overviewCache);
+const warm=await executeRender(canvas,{kind:'bar',source:overviewSource,width:2,height:1},overviewCache);
+console.log('8 MiB overview work:',{cold:cold.work,resized:warm.work});

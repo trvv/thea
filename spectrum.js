@@ -1,4 +1,4 @@
-/** Selection-scoped spectrum shared by native DFT and mixed point factors. */
+/** Selection-scoped spectrum shared by all point populations. */
 import { fourierSpectrum } from './fourier.js';
 
 export function matchingSpectrum(job, cache) {

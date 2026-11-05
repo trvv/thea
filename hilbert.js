@@ -35,3 +35,28 @@ export function hilbert3D(index, order, out, offset = 0) {
  for (let axis = 0; axis < 3; axis++) out[offset + axis] = (out[offset + axis] + 0.5) / side;
  return out;
 }
+
+// Map Hilbert traversal indices to row-major cells in a power-of-two square.
+/**
+ * Produce a traversal-to-cell permutation, not a byte reorder. Callers must pass a power-of-two
+ * side so every cell is visited exactly once.
+ */
+export function hilbertCells(side) {
+	const cells = new Uint32Array(side * side);
+	for (let index = 0; index < cells.length; index++) {
+		let x = 0, y = 0, remaining = index;
+		for (let scale = 1; scale < side; scale *= 2) {
+			const rx = Math.floor(remaining / 2) & 1;
+			const ry = (remaining ^ rx) & 1;
+			if (!ry) {
+				if (rx) { x = scale - 1 - x; y = scale - 1 - y; }
+				[x, y] = [y, x];
+			}
+			x += scale * rx;
+			y += scale * ry;
+			remaining = Math.floor(remaining / 4);
+		}
+		cells[index] = y * side + x;
+	}
+	return cells;
+}

@@ -18,15 +18,23 @@ export { factorIndices } from './factors.js';
  */
 export function configurationFactors() { return factorOptions; }
 /**
- * Represent preset intent as raw mappings while preserving the separate optimized implementation
- * for unchanged presets.
+ * Presets supply ordinary configuration data. Legacy coordinate options are converted here,
+ * before rendering, rather than remapping a finished image.
  */
-export function presetConfiguration(region) {
+export function presetConfiguration(region, {coordinateSystem = 'cartesian', axes, recipes = {}} = {}) {
  if(!['linear','hilbert','hilbert3d','digraph','dft','trigraph'].includes(region))throw new TypeError('Unknown preset');
- return {population:region==='digraph'?'pairs':region==='trigraph'?'triples':region==='dft'?'bins':'bytes',
+ const configuration = {population:region==='digraph'?'pairs':region==='trigraph'?'triples':region==='dft'?'bins':'bytes',
   backend:'cpu',footprint:['linear','hilbert','hilbert3d'].includes(region)?'grid':'point',sampleLimit:defaultSampleLimit,sampling:['hilbert','hilbert3d'].includes(region)?'representative':'average',dimensions:validateDimensions(), space:region==='trigraph'||region==='hilbert3d'?'cube':'square',
   position:region==='hilbert3d'?[0,1,2].map(axis=>hilbert3DCoordinate(axis)):region==='hilbert'?[hilbertCoordinate(0,{op:'pointIndex'}),hilbertCoordinate(1,{op:'pointIndex'}),'none']:region==='linear'?['column','row','slice']:region==='dft'?['phase','frequency','none']:['value','byte2',region==='trigraph'?'byte3':'none'],
-  inverted:region==='dft'?[false,true,false]:[false,false,false]};
+  inverted:region==='dft'?[false,true,false]:[false,false,false],recipes};
+ if(axes) {
+  const {position,inverted}=configuration;
+  configuration.position=axes.map(axis=>position[axis]);
+  configuration.inverted=axes.map(axis=>inverted[axis]);
+  if(axes.length===2){configuration.position.push(position[2]);configuration.inverted.push(inverted[2]);}
+ }
+ configuration.space=({radial:'circle',cylindrical:'cylinder',spherical:'sphere'})[coordinateSystem]||configuration.space;
+ return configuration;
 }
 
 /**
@@ -66,11 +74,21 @@ export function compilePosition(configuration, dimensions) {
   if(inverted[0])a=1-a;if(inverted[1])b=1-b;if(inverted[2])c=1-c;
   if(dimensions){a=dimensionCoordinate(a,dimensions.width);b=dimensionCoordinate(b,dimensions.height);if(spaces[space].length===3)c=dimensionCoordinate(c,dimensions.depth);}
   if(spaces[space].length===2)c=0.5;
-  if(![a,b,c].every(Number.isFinite))return null;
+  if(!Number.isFinite(a)||!Number.isFinite(b)||!Number.isFinite(c))return null;
   if(space==='circle'){out[0]=a*Math.cos(b*Math.PI*2);out[1]=-a*Math.sin(b*Math.PI*2);out[2]=0;}
   else if(space==='cylinder'){out[0]=a*Math.cos(b*Math.PI*2);out[1]=c*2-1;out[2]=a*Math.sin(b*Math.PI*2);}
   else if(space==='sphere'){out[0]=a*Math.sin(c*Math.PI)*Math.cos(b*Math.PI*2);out[1]=a*Math.cos(c*Math.PI);out[2]=a*Math.sin(c*Math.PI)*Math.sin(b*Math.PI*2);}
   else {out[0]=a*2-1;out[1]=b*2-1;out[2]=space==='cube'?c*2-1:0;}
   return out;
  };
+}
+
+/** Resolve old callers once at the job boundary; explicit configurations are authoritative. */
+export function resolveViewJob(job) {
+ if(job.kind!=='view')return job;
+ if(job.region!==undefined&&job.configuration&&job.sampleLayout&&job.shaders&&job.offset!==undefined&&job.length!==undefined)return job;
+ const region=job.region??'linear';
+ return {...job,region,offset:job.offset??0,length:job.length??job.source.size,shaders:job.shaders??['entropy','brightness'],
+  configuration:job.configuration||presetConfiguration(region,job),
+  sampleLayout:job.sampleLayout||{columns:job.columns,rows:job.rows}};
 }

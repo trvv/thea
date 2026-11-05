@@ -11,12 +11,11 @@ import { settingsKey } from './render-identity.js';
 import { limitedSampleLayout, populations } from './populations.js';
 import { recipeMenu } from './recipe-menu.js';
 import { validateDefinitions, reference } from './recipes.js';
-import { needsPointFactors } from './factors.js';
 import { spaces, presetConfiguration, validateConfiguration } from './point-configuration.js';
 import { defaultAppearance, validateAppearance } from './appearance.js';
 import { AdaptiveResolution } from './adaptive-resolution.js';
 import { RenderEngine } from "./render-engine.js";
-export { byteCharacter, hilbertCells, entropyShading, cellColor } from "./rendering.js";
+export { byteCharacter, hilbertCells, entropyShading } from "./rendering.js";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -498,8 +497,7 @@ export class DataScrollView extends ByteCanvas {
 	get shaders() { return [...(this._shaders || ['entropy', 'brightness'])]; }
 
 	/**
-	 * Preserve character/hex exclusivity, clear stale color overrides when legacy shaders change, and
-	 * promote non-grid text to the general point path.
+	 * Preserve character/hex exclusivity and clear stale color overrides when compatibility flags change.
 	 */
 	set shaders(shaders) {
 		if (!Array.isArray(shaders) || shaders.some(shader => !['entropy', 'brightness', 'character', 'hex'].includes(shader))) {
@@ -508,24 +506,18 @@ export class DataScrollView extends ByteCanvas {
 		if (['entropy', 'brightness'].some(shader => shaders.includes(shader) !== this.shaders.includes(shader))) {
 			if (this._appearances) delete this._appearances[this.region];
 		}
-		const promoted = !this._pointConfiguration && !['linear', 'hilbert', 'hilbert3d'].includes(this.region) && shaders.some(shader => ['character', 'hex'].includes(shader));
-		if (promoted) {
-			this._pointConfiguration = validateConfiguration(this.pointConfiguration);
-			this.resetResolution();
-		}
 		const label = shaders.findLast(shader => shader === 'character' || shader === 'hex');
 		this._shaders = [...new Set(shaders.filter(shader => !['character', 'hex'].includes(shader) || shader === label))];
-		if (promoted) this.configurationChanged(); else this.render();
+		this.render();
 	}
 
 	/**
-	 * Expose preset intent lazily so reading configuration alone does not abandon the optimized preset
-	 * renderer.
+	 * Resolve preset defaults lazily; all configurations use the same renderer.
 	 */
-	get pointConfiguration() { return structuredClone(this._pointConfiguration || {...presetConfiguration(this.region),recipes:this._recipes||{}}); }
+	get pointConfiguration() { return structuredClone(this._pointConfiguration || presetConfiguration(this.region,{coordinateSystem:this.coordinateSystem,axes:this.axes,recipes:this._recipes||{}})); }
 	/**
-	 * Validate geometry, named definitions, and current appearance together before entering the
-	 * general renderer; reset interaction state only after validation succeeds.
+	 * Validate geometry, named definitions, and appearance together; reset interaction state only
+	 * after validation succeeds.
 	 */
 	set pointConfiguration(value) {
 		const configuration = validateConfiguration({...value,recipes:value.recipes??this._recipes});
@@ -547,8 +539,7 @@ export class DataScrollView extends ByteCanvas {
 
 
 	/**
-	 * Validate the entire definition set to catch indirect cycles; unused definitions should not force
-	 * an optimized preset onto the general path.
+	 * Validate the entire definition set to catch indirect cycles; unused definitions remain lazy.
 	 */
 	setFactor(name, expression) {
 		if(typeof name!=='string'||!name.trim()||name.length>64)throw new TypeError('Invalid factor name');
@@ -563,7 +554,7 @@ export class DataScrollView extends ByteCanvas {
 	 */
 	get resolvedSampleLayout() {
   const layout = this.sampleLayout(this.windowLayout ? this.requestedLength : this.length || 1, this.windowLayout?.limit ?? this.source?.size ?? 1);
-  return this.usesPoints ? limitedSampleLayout(layout, this.pointConfiguration) : layout;
+  return limitedSampleLayout(layout, this.pointConfiguration);
  }
 	/**
 	 * Byte row steps follow the placement grid; other populations navigate the source sample grid.
@@ -577,7 +568,7 @@ export class DataScrollView extends ByteCanvas {
 	}
 
 	get navigationGrid() {
-		const configuration = this.usesPoints ? this.pointConfiguration : undefined;
+		const configuration = this.pointConfiguration;
 		return configuration?.population === 'bytes'
 			? pointGrid(configuration, this.length, this.resolvedSampleLayout) : this.resolvedSampleLayout;
 	}
@@ -588,8 +579,6 @@ export class DataScrollView extends ByteCanvas {
 	 * Determine rotation and quality behavior from the chosen space, not from the historical trigraph
 	 * preset name.
 	 */
-	get usesPoints() { return Boolean(this._pointConfiguration) || ['hilbert','hilbert3d'].includes(this.region)
-		|| needsPointFactors(this.region, this.effectiveAppearance); }
 	get spatial() { return spaces[this.pointConfiguration.space].length === 3; }
 	/**
 	 * Reset a complete visualization profile while retaining named recipes; it is different from the
@@ -605,22 +594,16 @@ export class DataScrollView extends ByteCanvas {
 	}
 
 	/**
-	 * An absent override preserves preset behavior and its optimized path.
+	 * An absent override uses the preset appearance defaults.
 	 */
 	get appearance() { return structuredClone(this._appearances?.[this.region]); }
 	/**
-	 * Validate against the current named factors, then promote expressions or unsupported sources to
-	 * the general path before rendering.
+	 * Validate appearance against current named factors before rendering.
 	 */
 	set appearance(value) {
 		const appearance = value ? validateAppearance(this.region, value, this.pointConfiguration.recipes) : undefined;
-		const promoted = appearance && !this._pointConfiguration && needsPointFactors(this.region, appearance);
-		if (promoted) {
-			this._pointConfiguration = validateConfiguration(this.pointConfiguration);
-			this.resetResolution();
-		}
 		(this._appearances ||= {})[this.region] = appearance;
-		if (promoted) this.configurationChanged(); else this.render();
+		this.render();
 	}
 	/**
 	 * Give menus concrete defaults without storing a redundant override or changing renderer
@@ -663,12 +646,12 @@ export class DataScrollView extends ByteCanvas {
 	}
 
 	/**
-	 * Retain the native white-particle compatibility flag; general recipes express opacity as a
+	 * Retain the occurrence-opacity compatibility flag; recipes express opacity as a
 	 * mapping.
 	 */
 	get frequencyOpacity() { return this._frequencyOpacity || false; }
 	/**
-	 * Discard native trigraph appearance overrides so the compatibility switch actually changes its
+	 * Discard trigraph appearance overrides so the compatibility switch actually changes its
 	 * preset default.
 	 */
 	set frequencyOpacity(value) { this._frequencyOpacity = Boolean(value); if (this._appearances) delete this._appearances.trigraph; this.render(); }
@@ -718,7 +701,7 @@ export class DataScrollView extends ByteCanvas {
 	}
 
 	/**
-	 * Use linear as the initial optimized preset without allocating settings eagerly.
+	 * Use linear as the initial preset without allocating settings eagerly.
 	 */
 	get region() { return this._region || 'linear'; }
 
@@ -739,39 +722,31 @@ export class DataScrollView extends ByteCanvas {
 	}
 
 	/**
-	 * Return native logical dimensions for optimized presets or display pixels for general points,
-	 * while sharing the same snapped byte length.
+	 * Keep raster dimensions separate from the selected byte interval and placement grid.
 	 */
 	layout(requestedLength, size = this.source?.size ?? requestedLength) {
 		const sample = this.sampleLayout(requestedLength, size);
-		if (!this.usesPoints) return sample;
 		const scale = globalThis.devicePixelRatio || 1;
 		return { columns: Math.max(1, Math.round(this.clientWidth * scale)), rows: Math.max(1, Math.round(this.clientHeight * scale)), length: sample.length };
 	}
 
 	/**
-	 * Snap linear selections to complete rows and keep Hilbert grids square/power-of-two. Whole-buffer
-	 * mode preserves every byte instead of truncating to a convenient grid.
+	 * Choose a sample budget from source length and display aspect, preserving every selected byte.
+	 * Coordinate recipes determine the placement grid independently.
 	 */
 	sampleLayout(requestedLength, size = this.source?.size ?? requestedLength) {
 		const length = Math.min(size, Math.max(1, Math.round(requestedLength)));
-		if (!this.usesPoints && this.region === 'trigraph') {
-			const scale = globalThis.devicePixelRatio || 1;
-			return { columns: Math.max(1, Math.round(this.clientWidth * scale)), rows: Math.max(1, Math.round(this.clientHeight * scale)), length };
-		}
-		if (!this.usesPoints && this.region === 'dft') return { columns: 513, rows: Math.max(1, Math.min(1024, Math.round(this.clientHeight * (globalThis.devicePixelRatio || 1)))), length };
-		if (!this.usesPoints && this.region === 'digraph') return { columns: 256, rows: 256, length };
 
 		const aspect = this.shaders.includes('hex') ? 1.2 : this.shaders.includes('character') ? 0.6 : 1;
 		const ratio = Math.max(1, this.clientWidth) / (Math.max(1, this.clientHeight) * aspect);
 		const columns = clamp(Math.round(Math.sqrt(length * ratio)), 1, Math.max(1, length));
-		const rows = this.usesPoints ? Math.max(1,Math.ceil(length/columns)) : clamp(this.wholeBuffer ? Math.floor(length / columns) : Math.round(length / columns), 1, Math.max(1, Math.floor(size / columns)));
-		return { columns, rows, ...(this.usesPoints?{aspect:ratio}:{}), length: this.usesPoints || this.wholeBuffer ? length : size ? columns * rows : 0 };
+		const rows = Math.max(1,Math.ceil(length/columns));
+		return {columns,rows,aspect:ratio,length};
 	}
 
 	/**
 	 * Receive an authoritative window from DataScroll and avoid work when neither source, selected
-	 * range, nor native layout changed.
+	 * range, nor raster layout changed.
 	 * Offsets here are root-Blob-relative; the separate requestedLength remains the unsnapped
 	 * navigation request.
 	 */
@@ -814,13 +789,13 @@ export class DataScrollView extends ByteCanvas {
 	}
 
 	renderSettings() {
-		return { configuration: this.usesPoints ? this.pointConfiguration : undefined, region: this.region, shaders: this.shaders, appearance: this.appearance,
+		return { configuration: this.pointConfiguration, region: this.region, shaders: this.shaders, appearance: this.appearance,
 			frequencyOpacity: this.frequencyOpacity, coordinateSystem: this.coordinateSystem, axes: this.axes,
 			encoding: this.encoding, blankSpaces: this.blankSpaces, blankNulls: this.blankNulls };
 	}
 
 	/**
-	 * Negotiate layout changes with DataScroll before dispatching a job. Keep sampleLayout native
+	 * Negotiate layout changes with DataScroll before dispatching a job. Keep sampleLayout independent of raster quality
 	 * while scaling only raster dimensions and particle footprints during motion.
 	 */
 	async render() {
@@ -837,7 +812,7 @@ export class DataScrollView extends ByteCanvas {
 			const rendered = await this.renderer.render({
 				kind: 'view', progressive: true, source: this.source, offset: this.offset, length: this.length,
 				columns: Math.max(1, Math.round(columns * resolutionScale)), rows: Math.max(1, Math.round(rows * resolutionScale)),
-				resolutionScale, pointScale: (this.spatial || this._pointConfiguration) ? (globalThis.devicePixelRatio || 1) * resolutionScale : 1, interacting: this.spatial && this.resolution.moving,
+				resolutionScale, pointScale: (globalThis.devicePixelRatio || 1) * resolutionScale, interacting: this.spatial && this.resolution.moving,
 				...this.renderSettings(), sampleLayout: this.resolvedSampleLayout, rotation: this.rotation,
 				width: this.clientWidth, height: this.clientHeight, scale: globalThis.devicePixelRatio || 1
 			});

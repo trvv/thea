@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { fourierSpectrum, fourierImage } from '../fourier.js';
+import { fourierSpectrum } from '../fourier.js';
+import { spectrumComponents } from '../spectrum.js';
 import { executeRender, renderCost } from '../rendering.js';
 import { RenderCanvas } from './render-canvas.js';
 
@@ -21,36 +22,31 @@ for (const length of [0, 1, 2, 3, 4, 5, 7, 8, 11, 16, 31, 64]) {
 	}
 }
 
-const width = 513, height = 129, length = 64;
-const tone = (bin, phase = 0, amplitude = 1) => Float64Array.from({ length }, (_, i) => amplitude * Math.cos(2 * Math.PI * bin * i / length + phase));
-const pixel = (image, x, y) => image[y * width + x];
-const frequencyRow = bin => height - 1 - Math.round(2 * bin / length * (height - 1));
-for (const [phase, x] of [[0, 256], [Math.PI / 2, 384], [-Math.PI / 2, 128], [Math.PI, 512]]) {
-	const image = fourierImage(tone(7, phase), width, height);
-	assert.equal(pixel(image, x, frequencyRow(7)), 255, `Wrong phase/frequency mapping: ${phase}`);
-	assert.equal(image.filter(Boolean).length, 1, 'Numerical noise created spurious points');
+const length=64;
+const tone=(bin,phase=0,amplitude=1)=>Float64Array.from({length},(_,i)=>amplitude*Math.cos(2*Math.PI*bin*i/length+phase));
+for(const [phase,normalized] of [[0,0.5],[Math.PI/2,0.75],[-Math.PI/2,0.25],[Math.PI,1]]) {
+ const spectrum=spectrumComponents(fourierSpectrum(tone(7,phase)),length,true,true);
+ assert(Math.abs(spectrum.phases[7]-normalized)<1e-10,'Phase convention changed');
+ assert.equal(spectrum.amplitudes[7],1);
+ assert.equal(spectrum.amplitudes.filter(Boolean).length,1,'Numerical noise created spurious amplitude');
 }
-const constant = fourierImage(new Uint8Array(length).fill(123), width, height);
-assert.equal(pixel(constant, 256, height - 1), 255, 'DC is not centered on the bottom row');
-assert.equal(constant.filter(Boolean).length, 1);
-const nyquist = fourierImage(Float64Array.from({ length }, (_, i) => i % 2 ? -1 : 1), width, height);
-assert.equal(pixel(nyquist, 256, 0), 255, 'Nyquist is not at the top');
-const weakerTone = tone(12, 0, 0.25);
-const twoTones = Float64Array.from(tone(5), (value, i) => value + weakerTone[i]);
-const mixed = fourierImage(twoTones, width, height);
-assert(pixel(mixed, 256, frequencyRow(5)) > pixel(mixed, 256, frequencyRow(12)), 'Brightness does not reflect amplitude');
-assert(pixel(mixed, 256, frequencyRow(12)) > 0);
-for (const data of [new Uint8Array(), new Uint8Array(1), new Uint8Array(17)]) assert(fourierImage(data, width, height).every(value => value === 0));
-assert.equal(fourierImage(new Uint8Array([42]), width, height).filter(Boolean).length, 1);
-
-const source = new Blob([new Uint8Array([255, ...new Array(7).fill(12), 0])]);
-const job = { kind: 'view', source, offset: 1, length: 7, columns: width, rows: height, region: 'dft', shaders: ['entropy', 'brightness', 'character'] };
-const canvas = new RenderCanvas();
-await executeRender(canvas, job);
-const expected = fourierImage(new Uint8Array(7).fill(12), width, height);
-for (let i = 0; i < expected.length; i++) {
-	assert.deepEqual([...canvas.pixels.subarray(i * 4, i * 4 + 4)], [expected[i], expected[i], expected[i], 255]);
+for(const [samples,bin] of [[new Uint8Array(length).fill(123),0],[Float64Array.from({length},(_,i)=>i%2?-1:1),length/2]]) {
+ const spectrum=spectrumComponents(fourierSpectrum(samples),length,true,true);
+ assert.equal(spectrum.phases[bin],0.5);assert.equal(spectrum.amplitudes[bin],1);
+ assert.equal(spectrum.amplitudes.filter(Boolean).length,1);
 }
-assert.equal(canvas.commands.length, 0, 'DFT applied character overlays');
-assert(renderCost({ ...job, length: 1000000 }) > renderCost(job), 'Worker estimate ignores FFT size');
-console.log('DFT checks pass: direct-sum reference, arbitrary lengths, phase sign/center, frequency orientation, amplitude, DC/Nyquist, empty data, selection bounds, worker cost.');
+const combined=Float64Array.from(tone(5), (value,i)=>value+tone(12,0,0.25)[i]);
+const amplitudes=spectrumComponents(fourierSpectrum(combined),length,false,true).amplitudes;
+assert(amplitudes[5]>amplitudes[12]&&amplitudes[12]>0);
+const source=new Blob([new Uint8Array([255,...new Array(7).fill(12),0])]),cache={};
+const job={kind:'view',source,offset:1,length:7,columns:129,rows:129,region:'dft',shaders:[]};
+await executeRender(new RenderCanvas(),job,cache);
+assert.equal(cache.preparedPoints.size,4);
+assert(Math.abs(cache.preparedPoints.positions[0])<1e-7,'DC phase is not centered');
+assert.equal(cache.preparedPoints.positions[1],1,'Zero frequency is not at the bottom');
+for(let k=0;k<4;k++) {
+ assert(Math.abs(cache.preparedPoints.positions[k*3+1]-(1-4*k/7))<1e-6,'Frequency coordinates changed');
+ assert.equal(cache.preparedPoints.colors[k*4],k===0?255:0);
+}
+assert(renderCost({...job,length:1000000})>renderCost(job),'Worker estimate ignores FFT size');
+console.log('DFT checks pass: defining DFT sum, arbitrary lengths, phase, amplitude, DC/Nyquist, selection bounds, bin coordinates, worker cost.');

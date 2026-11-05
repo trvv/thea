@@ -36,7 +36,7 @@ there is no HTTP Range reader or incremental streaming source today.
 | --- | --- |
 | Selection | A full-screen view with zero or more nested overview bars; yellow selectors identify each child scope. |
 | Navigation | Wheel and keyboard movement, draggable selector edges, middle-button velocity scrolling/resizing, and 3D rotation. |
-| Presets | Linear, Hilbert, Hilbert 3D, Digraph, DFT, and Trigraph. Most unchanged presets retain specialized CPU paths; Hilbert uses coordinate expressions. |
+| Presets | Linear, Hilbert, Hilbert 3D, Digraph, DFT, and Trigraph. All supply ordinary configuration to one shared CPU/WebGL pipeline. |
 | Dimensions | Per-axis ranges/step, Scale or Truncate, and independent Fit; defaults are Scale and Fit on. |
 | Spaces | Square, circle, cube, cylinder, sphere; scalar factors map to their positional channels. |
 | Point appearance | Hue, saturation, lightness, opacity, size, and square/circle marks. Character or hex overlays are optional. |
@@ -56,11 +56,11 @@ profile-library UI; reloading without saving still loses settings.
 ## Read next
 
 - [Architecture and source map](architecture.md): ownership, element APIs,
-  compatibility paths, events, and a configuration example.
+  configuration boundaries, events, and a configuration example.
 - [Dimensions and coordinate mappings](dimensions.md): ranges, cells, Scale/Truncate,
   Fit, natural domains, and explicit Hilbert presets.
 - [Selection and sampling](data-selection.md): coordinate systems for offsets,
-  nested scopes, snapping, and what a rendered sample actually represents.
+  nested scopes, selection anchors, and what a rendered sample represents.
 - [Rendering and performance](rendering.md): worker protocol, stale frames,
   caches, particle rasterization, quality feedback, and memory costs.
 - [Recipes and shader contract](recipes.md): the expression format, types,

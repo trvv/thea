@@ -17,3 +17,10 @@ export function presentationKey(job) {
  return JSON.stringify([settingsKey(job), job.sourceId, job.columns, job.rows,
   job.width, job.height, job.scale, job.pointScale]);
 }
+
+/** Color, shape, size, encoding, backend, and footprint do not alter world coordinates. */
+export function geometryKey(job) {
+ const {backend,footprint,...configuration}=job.configuration;
+ return JSON.stringify([job.sourceId,job.offset,job.length,job.region,configuration,job.sampleLayout,
+  job.shaders.some(flag=>flag==='character'||flag==='hex')]);
+}

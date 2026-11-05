@@ -55,14 +55,14 @@ const noReads={...job,configuration:{...job.configuration,position:[hilbertCoord
 await executeRender(new RenderCanvas(),{...noReads,appearance});assert.equal(reads,0,'Coordinate recipe read the source');
 const mixed={...job,appearance:{...appearance,hue:{op:'entropy',offset:{op:'offset'},window:64},lightness:reference('next')},
  configuration:{...job.configuration,position:[hilbertCoordinate(0),hilbertCoordinate(1),'none']}};
-const helpers={entropyShading,hilbertCells,byteCharacter},cache={};
-const visit=await pointFactors(mixed,mixed.appearance,cache,()=>true,helpers);
+const cache={};
+const visit=await pointFactors(mixed,mixed.appearance,cache,()=>true);
 assert(cache.recipeEntropy.values.has(64));assert(!cache.factorEntropy&&!cache.factorSpectrum&&!cache.factorCounts,'Recipe requested unrelated providers');
 const outputs=[];const compiled=compileRecipes({x:mixed.appearance.hue,y:reference('next')},{next});const run=compiled.createEvaluator();
 visit((factors,label,context)=>{const input=new Float64Array(Math.max(factors.length,compiled.factorCount));input.set(factors);run(input,context);outputs.push(input[compiled.bindings.x]);});
 const expected=windowEntropy(signal,64);for(let i=0;i<64;i++)assert(Math.abs(outputs[i]-expected[i+16])<1e-6);
 const windowBefore=cache.factorWindow;
-await pointFactors({...mixed,rotation:{yaw:1}},mixed.appearance,cache,()=>true,helpers);assert.equal(cache.factorWindow,windowBefore);
+await pointFactors({...mixed,rotation:{yaw:1}},mixed.appearance,cache,()=>true);assert.equal(cache.factorWindow,windowBefore);
 const spectrumRecipe={op:'spectrum',kind:'phase',input:{op:'invert',input:'position'}};
 assert(requiredFactors(job.configuration,{...appearance,hue:spectrumRecipe}).has('phase'));
 assert(renderCost({...job,appearance:{...appearance,hue:spectrumRecipe}})>renderCost({...job,appearance}));
@@ -87,3 +87,14 @@ for(const space of ['square','circle','cube','cylinder','sphere']){
  assert.deepEqual(first.snapshot(),second.snapshot(),'Serialized recipes changed rendering');
 }
 console.log('Recipe checks pass: typed DAG, shared expressions, arithmetic, Hilbert coordinates, named factors, validation/cycles, lazy providers, configurable entropy, editing, serialization, GLSL/WGSL emission.');
+
+// Direct source/constant lowering retains the interpreter's float32 and finite-output contract.
+const primitive=compileRecipes({x:'value',y:constant(2),z:constant(-1)});
+const interpreted=compileRecipes({x:{op:'add',a:'value',b:constant(0)}});
+const direct=primitive.createEvaluator(),generic=interpreted.createEvaluator();
+for(const input of [NaN,Infinity,-Infinity,-0.5,0,0.123456789,0.5,1,1.5]) {
+ const a=new Float64Array(primitive.factorCount),b=new Float64Array(interpreted.factorCount);a[0]=b[0]=input;
+ direct(a,{});generic(b,{});
+ assert.equal(a[primitive.bindings.x],b[interpreted.bindings.x]);
+ assert.equal(a[primitive.bindings.y],1);assert.equal(a[primitive.bindings.z],0);
+}

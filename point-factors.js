@@ -4,6 +4,9 @@
  * @module point-factors
  * @see docs/recipes.md
  */
+import { byteCharacter } from './text.js';
+import { windowEntropy, entropyShading } from './entropy.js';
+export { windowEntropy } from './entropy.js';
 import { pointGrid, gridCoordinates } from './dimensions.js';
 import { compileRecipes, recipeRoots } from './recipes.js';
 import { factorCount, factorIndices as slots } from './factors.js';
@@ -21,12 +24,10 @@ import { populationOffsets, defaultSampleLimit } from './populations.js';
  *   cloning.
  * @param {function(): boolean} current Checked after awaited reads before publishing new cache
  *   contents.
- * @param {object} helpers Injected byte/layout helpers avoid importing the render dispatcher back
- *   into its provider.
  * @returns {Promise<function|null>} Visitor that reuses its factor array and context; consumers
  *   must copy values they retain.
  */
-export async function pointFactors(job, appearance, cache, current, helpers, compiled) {
+export async function pointFactors(job, appearance, cache, current, compiled) {
  const config = job.configuration;
  const program=compiled||compileRecipes(recipeRoots(config,appearance),config.recipes);
  const used=new Set(program.required);
@@ -61,7 +62,7 @@ export async function pointFactors(job, appearance, cache, current, helpers, com
   bytes = window.data.subarray(job.offset - window.start, job.offset - window.start + job.length);
   if (windows.has(32)) {
    if (!matches(cache.factorEntropy)) cache.factorEntropy = { source, key,
-    values: helpers.entropyShading(window.data).subarray(job.offset - window.start, job.offset - window.start + job.length) };
+    values: entropyShading(window.data).subarray(job.offset - window.start, job.offset - window.start + job.length) };
    metrics = cache.factorEntropy.values;
   }
  }
@@ -113,6 +114,8 @@ export async function pointFactors(job, appearance, cache, current, helpers, com
    return kind==='frequency'?2*bin/Math.max(1,job.length):kind==='phase'?phases[bin]:amplitudes[bin];
   }
  };
+ const nextByte=used.has('byte2'),thirdByte=used.has('byte3'),previousByte=used.has('previous'),frequency=used.has('frequency');
+ const average=population==='bytes'&&!text&&config.sampling!=='representative'&&job.length>count&&(used.has('value')||entropy);
  const visit = emit => {
   for (let i = 0; i < count; i++) {
    const index = Math.floor(i * available / count);
@@ -120,7 +123,7 @@ export async function pointFactors(job, appearance, cache, current, helpers, com
     : Math.floor(i * job.length / count);
    if (sample >= job.length) continue;
    let value = bytes?.[sample] ?? 0, metric = metrics?.[sample] ?? 0;
-   if (population === 'bytes' && !text && config.sampling !== 'representative' && job.length > count && (used.has('value') || entropy)) {
+   if (average) {
     const end = Math.floor((i + 1) * job.length / count); value = metric = 0;
     for (let j = sample; j < end; j++) { value += bytes?.[j] ?? 0; metric += metrics?.[j] ?? 0; }
     value /= end - sample; metric /= end - sample;
@@ -133,45 +136,23 @@ export async function pointFactors(job, appearance, cache, current, helpers, com
     gridCoordinates(cellIndex,grid,coordinates);
     values[slots.column]=coordinates[0];values[slots.row]=coordinates[1];values[slots.slice]=coordinates[2];
    }
-   if (used.has('byte2')) values[slots.byte2] = (bytes[sample + 1] ?? 0) / 255;
-   if (used.has('byte3')) values[slots.byte3] = (bytes[sample + 2] ?? 0) / 255;
-   if (used.has('previous')) values[slots.previous] = (bytes[sample - 1] ?? 0) / 255;
+   if (nextByte) values[slots.byte2] = (bytes[sample + 1] ?? 0) / 255;
+   if (thirdByte) values[slots.byte3] = (bytes[sample + 2] ?? 0) / 255;
+   if (previousByte) values[slots.previous] = (bytes[sample - 1] ?? 0) / 255;
    if (byteCounts) values[slots.byteCount] = occurrenceFactor(counts.byte[bytes[sample]]);
    if (pairCounts) values[slots.pairCount] = sample + 1 < job.length ? occurrenceFactor(counts.pair[bytes[sample] * 256 + bytes[sample + 1]]) : 0;
    if (tripleCounts) values[slots.tripleCount] = sample + 2 < job.length ? occurrenceFactor(counts.triple.get(bytes[sample] * 65536 + bytes[sample + 1] * 256 + bytes[sample + 2]) || 0) : 0;
    if (legacyCount) values[slots.count] = values[job.region === 'trigraph' ? slots.tripleCount : job.region === 'digraph' ? slots.pairCount : slots.byteCount];
    // The one-sided spectrum spans the same normalized offset as the byte samples.
    const bin = population === 'bins' ? index : Math.min(bins - 1, Math.floor(sample * bins / job.length));
-   if (used.has('frequency')) values[slots.frequency] = 2 * bin / Math.max(1, job.length);
+   if (frequency) values[slots.frequency] = 2 * bin / Math.max(1, job.length);
    if (phase) values[slots.phase] = phases[bin];
    if (amplitude) values[slots.amplitude] = amplitudes[bin];
    const label = !text ? undefined : job.shaders.includes('hex') ? bytes[sample].toString(16).padStart(2, '0').toUpperCase()
-    : helpers.byteCharacter(bytes[sample], job.encoding, job.blankSpaces, job.blankNulls);
+    : byteCharacter(bytes[sample], job.encoding, job.blankSpaces, job.blankNulls);
    context.offset=sample;context.pointIndex=pointIndex;emit(values, label, context);
   }
  };
- visit.grid=grid;
+ visit.grid=grid;visit.count=count;
  return visit;
-}
-
-// Normalized local entropy for configurable windows. The 32-byte built-in keeps
-// its existing quantization; custom windows use a sliding count table as well.
-/**
- * Maintain count-table entropy in linear time for configurable neighborhoods. Normalize by
- * achievable entropy for the requested window, not by the visible byte count near file edges.
- */
-export function windowEntropy(bytes,size){
- const result=new Float32Array(bytes.length),counts=new Uint32Array(256);
- const weights=Float64Array.from({length:size+1},(_,n)=>n?n*Math.log2(n):0);
- const maximum=Math.min(8,Math.log2(size));if(!maximum)return result;
- let start=0,end=0,sum=0;
- const update=(byte,delta)=>{const count=counts[byte];sum+=weights[count+delta]-weights[count];counts[byte]+=delta;};
- for(let i=0;i<bytes.length;i++){
-  const left=Math.max(0,i-Math.floor(size/2)),right=Math.min(bytes.length,i+size-Math.floor(size/2));
-  while(start<left)update(bytes[start++],-1);
-  while(end<right)update(bytes[end++],1);
-  const length=end-start;
-  result[i]=Math.max(0,Math.min(1,(Math.log2(length)-sum/length)/maximum));
- }
- return result;
 }

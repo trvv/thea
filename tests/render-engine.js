@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { RenderEngine } from '../render-engine.js';
-import { executeRender, entropyShading, hilbertCells, cellColor } from '../rendering.js';
-import { RenderCanvas } from './render-canvas.js';
+import { executeRender, entropyShading, hilbertCells } from '../rendering.js';
+import { RenderCanvas, cellColor } from './render-canvas.js';
 
 class TestWorker {
 	messages = [];
@@ -14,12 +14,12 @@ class TestWorker {
 		const { id, job } = this.messages[index];
 		const result = await executeRender(this.canvas, job, this.cache);
 		const bitmap = this.canvas.transferToImageBitmap();
-		this.onmessage({ data: { id, bitmap, duration: duration ?? result.duration, work: result.work } });
+		this.onmessage({ data: { id, bitmap, ...result, duration: duration ?? result.duration } });
 		assert(bitmap.closed, 'Bitmaps must be released, including stale frames');
 	}
 }
 
-const source = new Blob([Uint8Array.from({ length: 1024 }, (_, i) => i % 256)]);
+const source = new Blob([Uint8Array.from({ length: 131072 }, (_, i) => i % 256)]);
 const job = {
 	kind: 'view', source, offset: 32, length: 16, columns: 4, rows: 4, region: 'linear',
 	shaders: ['entropy', 'brightness'], width: 80, height: 48, scale: 2,
@@ -244,3 +244,17 @@ for (let i = 0; i < 16; i++) assert.deepEqual([...brightness.pixels.slice(i * 4,
 const mix = cellColor(0, 0, ['entropy', 'brightness']);
 assert(mix[0] > mix[1], 'Entropy hue must survive at a zero byte');
 console.log('Render checks pass: local/worker parity, overlays, bars, adaptive routing, coalescing, stale frames, resource cleanup, fallback, shader math.');
+
+// Camera progress and stage diagnostics belong to any 3D configuration, not a preset name.
+for(const region of ['linear','hilbert3d']) {
+ const worker=new TestWorker(),engine=new RenderEngine(new RenderCanvas(),{budget:0,workerFactory:()=>worker});
+ const frames=[];engine.onFrame=frame=>frames.push(frame);
+ const settings={...job,region,configuration:{space:'cube',population:'bytes',footprint:'point',sampleLimit:16,
+  position:['value','byte2','byte3'],inverted:[false,false,false],backend:'cpu'},sampleLayout:{columns:4,rows:4}};
+ const first=engine.render({...settings,rotation:{yaw:0,pitch:0}});
+ const second=engine.render({...settings,rotation:{yaw:1,pitch:0}});
+ await worker.complete(0);assert.equal(await first,true,'Custom 3D camera was starved');
+ await worker.complete(1);assert.equal(await second,true);
+ assert(frames.length===2&&frames.every(frame=>frame.timings&&frame.reused),'Worker lost stage diagnostics');
+ engine.cancel();
+}

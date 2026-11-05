@@ -104,33 +104,3 @@ export function fourierSpectrum(samples) {
 	}
 	return { real: real.subarray(0, length), imaginary: imaginary.subarray(0, length) };
 }
-
-/**
- * Render only the one-sided spectrum for real byte signals. Combine amplitudes landing in the same
- * pixel before log scaling, and suppress meaningless phase noise near zero.
- */
-export function fourierImage(samples, width, height, spectrum = fourierSpectrum(samples)) {
-	const values = new Float64Array(width * height);
-	const length = samples.length;
-	const { real, imaginary } = spectrum;
-	const amplitudes = new Float64Array(length ? Math.floor(length / 2) + 1 : 0);
-	let peak = 0;
-	for (let k = 0; k < amplitudes.length; k++) {
-		amplitudes[k] = Math.hypot(real[k], imaginary[k]) / length * (k === 0 || k * 2 === length ? 1 : 2);
-		peak = Math.max(peak, amplitudes[k]);
-	}
-	for (let k = 0; k < amplitudes.length; k++) {
-		const amplitude = amplitudes[k];
-		if (!amplitude || amplitude < peak * 1e-10) continue;
-		// Suppress numerical phase jitter for effectively real coefficients.
-		const phase = Math.abs(imaginary[k]) < Math.hypot(real[k], imaginary[k]) * 1e-12
-			? real[k] >= 0 ? 0 : Math.PI : Math.atan2(imaginary[k], real[k]);
-		const x = Math.round((phase + Math.PI) / (2 * Math.PI) * (width - 1));
-		const y = height - 1 - Math.round(2 * k / length * (height - 1));
-		values[y * width + x] += amplitude;
-	}
-	peak = 0;
-	for (const value of values) peak = Math.max(peak, value);
-	const scale = peak ? 255 / Math.log1p(peak) : 0;
-	return Uint8Array.from(values, value => Math.round(Math.log1p(value) * scale));
-}

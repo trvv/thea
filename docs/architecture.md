@@ -77,22 +77,16 @@ picker, persistence layer, server API, or live stream transport.
 
 ## Settings: profiles, compatibility, and raw configuration
 
-The transition to general recipes is not complete removal of the original
-renderers. There are two deliberate paths:
+Every view uses one point pipeline. Presets supply configuration and appearance
+rather than selecting renderers. Reading `view.pointConfiguration` resolves those
+defaults lazily; assigning it changes the same data consumed by the shared pipeline.
+Strings, expressions, text overlays and custom spaces do not trigger promotion or
+switch factor layouts. Byte, tuple and bin populations retain their sampling
+contracts across edits. See [selection semantics](data-selection.md#point-populations-and-mixed-analyses).
 
-1. **Optimized preset path:** no explicit `job.configuration`; `region` selects
-   linear/Hilbert grids, pair histograms, a DFT image, or a tuple-based 3D raster.
-2. **General point path:** an explicit `configuration` selects spaces and scalar
-   recipes independently. `renderPoints` returns before legacy image remapping.
-
-Reading `view.pointConfiguration` synthesizes preset intent without switching
-paths. Assigning it switches to the general path. Assigning an appearance
-expression or a source unsupported by the native preset also promotes the view.
-The native paths retain useful specialized caches. The app’s Hilbert preset
-uses explicit coordinate recipes through the general pipeline. Promotion preserves the preset
-point population (pairs, triples, bins, or bytes), but aggregation-to-pixel color and
-edge behavior can still differ from a native painter.
-See [selection semantics](data-selection.md#presets-and-general-points-are-not-the-same-sample-domain).
+Legacy jobs/profiles without configuration are normalized before rendering.
+Coordinate-system and axis-permutation choices become ordinary space/position
+settings. Explicit configuration remains authoritative.
 
 `applyPreset(name)` resets appearance overrides, legacy coordinates/axes, shader
 flags, camera orientation, and raw configuration. Named factor definitions remain
@@ -134,8 +128,7 @@ the compatibility `axes` API instead requires a permutation. Geometry is based
 on `space`, so any raw view in cube/cylinder/sphere gets rotation and adaptive
 quality, regardless of its historical `region`.
 
-Defaults are supplied lazily: an absent appearance override preserves native
-preset behavior. Use `effectiveAppearance` to get concrete channel values when
+Defaults are supplied lazily: an absent appearance override uses preset mappings. Use `effectiveAppearance` to get concrete channel values when
 changing one channel. All channel assignments are validated before replacement;
 use setters and `setFactor`, rather than mutating returned objects in place. Public configuration, appearance,
 axis, and shader getters return owned snapshots.
@@ -148,19 +141,20 @@ axis, and shader getters return owned snapshots.
 | `dimensions.js` | Per-axis ranges, natural defaults, grid cells, Scale/Truncate, and Fit. |
 | `populations.js`, `profiles.js` | Point populations/sample budgets and versioned profile JSON. |
 | `render-identity.js` | Shared preparation/presentation/quality setting identity. |
-| `histograms.js`, `spectrum.js` | Statistical preparation shared by native painters and general providers. |
+| `histograms.js`, `spectrum.js` | Incremental counts and selection-scoped spectral providers. |
 | `render-engine.js`, `render-worker.js` | Scheduling, transfer protocol, presentation order, thread-local cache lifetime. |
-| `rendering.js` | One dispatcher shared by both threads and the optimized grid/digraph painters. |
+| `rendering.js` | Shared view dispatcher, structural cost estimation, and overview painting. |
 | `overview.js` | Exact overview averaging without rereading every nested scope. |
-| `trigraph.js` | Incremental triple counts, projected dense slots, visibility repair, opacity and colored native rendering. |
-| `fourier.js` | Selection-length FFT/Bluestein spectrum and native phase/frequency image. |
-| `coordinates.js` | Compatibility image remapping and byte-triple coordinate transforms. |
+| `fourier.js` | Selection-length FFT/Bluestein spectrum. |
+| `entropy.js`, `text.js` | Shared entropy windows and byte glyph decoding. |
 | `factor-catalog.js`, `factors.js` | Stable factor-slot ABI and reachability/cost planning. |
 | `recipes.js` | Validation, named references, shared typed IR, CPU evaluator compilation. |
 | `point-factors.js` | Lazy source/window providers and sampled byte-offset contexts. |
 | `spaces.js`, `point-configuration.js` | Shared positional channels, preset intent, mapping validation, geometry transform. |
-| `appearance.js` | Default channel mappings, HSL conversion, native palettes, point appearance compilation. |
-| `point-renderer.js`, `point-webgl.js` | General preparation/projection/sorting and CPU or WebGL rasterization. |
+| `appearance.js` | Default channel mappings, HSL conversion, and exact conditional color tables. |
+| `point-renderer.js` | Shared recipe preparation with separate geometry and appearance invalidation. |
+| `point-projection.js` | Camera projection and cached depth ordering. |
+| `point-raster.js`, `point-webgl.js` | Shared CPU coverage and optional WebGL rasterization. |
 | `recipe-menu.js` | DOM-independent descriptors for expression edits. |
 | `recipe-shaders.js` | GLSL/WGSL function-library generation from validated IR. |
 | `adaptive-resolution.js` | Measured interaction-quality feedback independent of source selection. |

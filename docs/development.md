@@ -26,7 +26,7 @@ suite. Run from the repository root:
 
 ```sh
 for test in recipes recipe-shaders hilbert dimensions pipeline point-factors point-configuration appearance \
-  data-scroll context-menu render-engine render-thread-smoke trigraph \
+  data-scroll context-menu render-engine render-thread-smoke render-pipeline rasterization trigraph \
   trigraph-opacity coordinates adaptive-resolution scroll-performance digraph fourier
 do
   bun "tests/$test.js" || exit 1
@@ -69,14 +69,15 @@ permission to launch processes and bind a local port in restricted environments.
 | `render-engine` | Local/worker parity with a worker double, routing, bounded pending queue, stale-frame rejection, bitmap cleanup, fallback. |
 | `render-thread-smoke` | Actual Bun worker execution of the shared renderer and timer progress on the main thread. |
 | `adaptive-resolution` | Sustained miss/fast thresholds, recovery, unsuccessful-reduction rollback, DPR footprints, selection stability. |
-| `trigraph`, `trigraph-opacity` | Sliding tuple boundaries, exact incremental/fresh equivalence, owner repair, soft edges, projection, white opacity updates. |
+| `trigraph`, `trigraph-opacity` | Sliding tuple boundaries, cached/fresh equivalence, projection, opacity, colored depth ordering. |
 | `coordinates`, `point-configuration` | Coordinate conventions, repeated mappings, all spaces, sample/camera/raster cache boundaries. |
 | `point-factors` | Laziness, exact neighbors, entropy/histogram/FFT reuse, hidden axes, selection boundaries, empty/short inputs. |
 | `dimensions` | Ranges/cell counts, Scale/Truncate, independent Fit, Cartesian/radial domains, coordinate presets, and profile migration. |
 | `hilbert` | True 3D Hilbert orientation, exhaustive small-cube uniqueness/adjacency, exact large indices, vec3 sharing, menu deduplication, and population semantics. |
 | `recipes` | Typed DAGs, sharing, named references, cycle/type limits, menu edits, configurable entropy, serialization, shader emission. |
 | `recipe-shaders` | Representative generated GLSL compiled, linked, executed, and compared against CPU results; WGSL structural generation checks. |
-| `appearance`, `scroll-performance` | Palette parity, fractional rounding, source/cache reuse and bounded overview storage. |
+| `appearance`, `scroll-performance` | Color parity, source/cache reuse and bounded overview storage. |
+| `render-pipeline`, `rasterization` | Preset/configuration equivalence, stage invalidation, exact optimized/reference CPU coverage. |
 | `digraph`, `fourier` | Overlapping pairs, chunk/selection boundaries, defining DFT sums, prime lengths, phase/frequency convention, amplitude scaling. |
 
 DOM/canvas doubles do not validate browser fonts, text compositing, real native
@@ -116,7 +117,7 @@ never reappear. Canvas-double tests are a useful complement, not a substitute.
 The source-factor catalog should grow only for primitive measurements. Prefer a
 recipe over adding a new built-in enum for each combination or normalization.
 Adding a canonical slot is an ABI change: update `factorCount`, providers, and
-shader source inputs together. Native compact factor arrays are separate.
+shader source inputs together. All configurations use the same factor layout.
 
 ### Add a space or change projection
 
@@ -124,8 +125,8 @@ Update space channels, validation/geometry, menu labels, and 2D/3D interaction
 classification. `spaces.js` supplies channel counts to recipes, controls, and
 geometry; add the corresponding transform in `point-configuration.js`. Preserve axis
 conventions, angular seams, normalized bounds, and continuous perspective size.
-If changing native tuple projection too, audit `coordinates.js`, wireframes,
-spatial-bin reach, and the dirty visibility tests.
+Update `point-projection.js` and the projection/raster invalidation tests when
+changing camera or footprint behavior.
 
 ### Add a setting
 
@@ -148,10 +149,10 @@ bytes silently, or shrinking source selections along with the raster.
 | Selection drifts during resize | Lost `anchorEnd`, snapping from committed rather than requested length, or raster dimensions used as sample columns. |
 | Repeated Hilbert cells | Square-fill sampling can repeat representative bytes; inspect sampling before blaming source duplication. |
 | Changing a range leaves a point cloud in place | Scale with Fit on cancels geometrically; use Truncate for a domain window or turn Fit off to change occupied extent. |
-| Raw preset-like output looks different | Native tuple/bin aggregation and raw byte-offset points are different sample domains. |
+| Preset-like output looks different | Compare population, sampling, dimensions and appearance; all views use the same painter. |
 | Expression mostly saturates | Raw `byte` gives 0–255; built-ins are normalized; final outputs clamp to 0–1. |
 | Neighbor access is inaccurate far into a large selection | Keep address arithmetic in index operations; visual float32 operations can still lose precision. Shader indices are signed 32-bit. |
-| Rare trigraph corruption after scrolling | Cancelled histogram mutation, missed revision, dense-slot owner repair, or insufficient spatial-bin reach. |
+| Corruption after scrolling | Cancelled histogram mutation or incomplete source/range/cache identity. |
 | More workers do not speed scrolling | Data reads, cache duplication, fixed per-point preparation, sorting, or transfer/presentation can dominate. |
 | Reduced resolution stays equally slow | The bottleneck may be source/statistical/point work; see adaptive rollback. |
 | Text counts as a passing pixel test but looks wrong | The test double records text commands; actual fonts/combining glyphs are browser behavior. |

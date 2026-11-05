@@ -6,16 +6,16 @@ import { defaultAppearance, occurrenceFactor } from '../appearance.js';
 import { entropyShading, byteCharacter, hilbertCells, executeRender, renderCost } from '../rendering.js';
 import { fourierSpectrum } from '../fourier.js';
 import { RenderCanvas } from './render-canvas.js';
-let reads=0,entropyCalls=0,hilbertCalls=0;
+let reads=0;
 class Source extends Blob { slice(...args) { reads++; return super.slice(...args); } }
 const data=Uint8Array.from({length:64},(_,i)=>[3,5,3,7][i%4]);
 const source=new Source([data]);
 const base={kind:'view',source,sourceId:1,offset:4,length:16,columns:32,rows:24,width:32,height:24,scale:1,
  region:'linear',configuration:presetConfiguration('linear'),sampleLayout:{columns:4,rows:4},shaders:[]};
 const plain={...defaultAppearance('linear'),hue:'none',lightness:'none'};
-const helpers={byteCharacter,entropyShading(bytes){entropyCalls++;return entropyShading(bytes);},hilbertCells(side){hilbertCalls++;return hilbertCells(side);}};
+
 async function collect(job=base,appearance=plain,cache={}) {
- const visit=await pointFactors(job,appearance,cache,()=>true,helpers),points=[];
+ const visit=await pointFactors(job,appearance,cache,()=>true),points=[];
  visit((values,label)=>points.push({values:[...values],label}));return points;
 }
 const idle={};await collect(base,plain,idle);
@@ -52,13 +52,14 @@ for(let i=0;i<mixed.length;i++){
  assert(Math.abs(phasePoints[i].values[slots.phase]-(angle+Math.PI)/(2*Math.PI))<1e-12);
 }
 const counted=await collect(neighbors,{...plain,hue:'byteCount',lightness:'tripleCount',size:'entropy'},cache);
-assert.equal(entropyCalls,1);assert(cache.factorCounts.byte&&cache.factorCounts.triple);
+assert(cache.factorEntropy);assert(cache.factorCounts.byte&&cache.factorCounts.triple);
+const entropyEntry=cache.factorEntropy,expectedEntropy=entropyShading(data);
+for(let i=0;i<counted.length;i++)assert.equal(counted[i].values[slots.entropy],expectedEntropy[base.offset+i]/255);
 assert.equal(counted[0].values[slots.byteCount],occurrenceFactor(8));
 let triple=0;for(let i=0;i<selected.length-2;i++)if(selected[i]===3&&selected[i+1]===5&&selected[i+2]===3)triple++;
 assert.equal(counted[0].values[slots.tripleCount],occurrenceFactor(triple));
-await collect(base,{...plain,hue:'entropy'},cache);assert.equal(entropyCalls,1,'Entropy repeated for same window');
+await collect(base,{...plain,hue:'entropy'},cache);assert.equal(cache.factorEntropy,entropyEntry,'Entropy repeated for same window');
 await collect({...base,configuration:{...base.configuration,position:['value','byte2','none']}},plain,cache);
-assert.equal(hilbertCalls,0,'Unused Hilbert coordinates were generated');
 const fresh={};await collect({...base,offset:8},phaseStyle,cache);await collect({...base,offset:8},phaseStyle,fresh);
 assert.deepEqual(cache.factorSpectrum.real,fresh.factorSpectrum.real,'Spectrum cache survived the wrong window');
 assert(renderCost({...base,appearance:phaseStyle})>renderCost({...base,appearance:plain}),'Cost prediction omits FFT');

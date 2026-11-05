@@ -35,9 +35,8 @@ view.appearance = {
 };
 ```
 
-Preset promotion keeps its point population. Switching a string mapping to an
-identity expression no longer turns distinct tuples into repeated byte samples.
-Native and general painter edge/color scaling can still differ.
+All presets and custom configurations use one pipeline. Switching a string
+mapping to an identity expression keeps the same population and coverage rules.
 
 Sampling limits never narrow the selected interval. Exact statistics still use
 all selected bytes. A limit bounds mark preparation/sorting, not full FFT arrays,
@@ -82,7 +81,7 @@ raster differences documented in [dimensions](dimensions.md#hilbert-and-profiles
 
 ## Execution boundaries
 
-`histograms.js` shares incremental counts across native/general clients.
+`histograms.js` provides incremental counts for all configurations.
 `spectrum.js` shares selection-scoped coefficients and lazy phase/amplitude arrays.
 Cancellation is checked after awaited reads and before histogram mutation.
 `render-identity.js` centralizes setting identity; camera/raster changes retain

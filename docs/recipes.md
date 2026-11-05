@@ -126,10 +126,9 @@ preset: pairs for Digraph, triples for Trigraph, byte occurrences otherwise. New
 recipes should use an explicit count name to avoid preset-dependent meaning.
 
 Canonical slots are stable and shared with emitted shaders. Slice is appended at
-slot 15, making 16 inputs; earlier slots retain their indices. Compact native preset
-factor arrays are a different layout: native byte2/phase occupy slot 1/0, for
-example, whereas canonical byte2/phase occupy 6/9. `compileAppearance` explicitly
-bridges these modes. Never pass a compact native tuple to the general evaluator.
+slot 15, making 16 inputs; earlier slots retain their indices. Every preset and
+custom configuration uses this layout. Compiled output slots follow the source
+slots; appearance/position compilation consumes the program's bindings.
 
 ## Operation reference
 

@@ -10,6 +10,16 @@ Truncate, and independent Fit (on by default). Profile version 3 migrates the
 previous arrangement settings. See [dimensions](dimensions.md) for the current
 model. The proposals below retain their original priority rationale.
 
+The preset painters have since been removed as well. All view configurations now
+share provider, recipe, geometry, appearance, projection/order and raster stages.
+Geometry and projection/order reuse is independent of appearance edits; simple
+source graphs, exact conditional color tables, and opaque square row fills are
+shared optimizations. Developer frame metrics expose preparation, projection,
+sorting and raster timings. See [rendering](rendering.md) for current cache
+boundaries, benchmark usage and remaining dense-grid overhead. Preparation still
+combines provider reads/calculation and recipe evaluation, so finer instrumentation
+and sparse providers remain useful next work.
+
 The guiding constraint is composability: point population determines which marks
 exist, while each analysis keeps its own scope and sampling relationship. Byte,
 tuple, spectral, and contextual analyses should remain freely mixable. Prefer
@@ -158,7 +168,7 @@ the next step, not evidence that the entire pipeline should move to the GPU.
 Upload prepared positions, colors, and sizes once per preparation revision, then
 change camera/viewport uniforms during rotation. An opaque path that does not
 require ordered alpha blending is a promising first target. Coverage semantics
-need care: current software coverage and native tuple depth owners are not
+need care: the current four-probe coverage and ordered pixel blending are not
 identical to ordinary depth-tested quads.
 
 Translucent points still need ordering. Moving projection while retaining CPU
@@ -245,7 +255,7 @@ than building a migration framework speculatively.
 
 The context menu now exposes population, sample limit, footprint, and backend.
 These are useful model controls, but they differ in how often users need them.
-Review their names, grouping, defaults, reset behavior, and promotion behavior
+Review their names, grouping, defaults and reset behavior
 before adding more controls. Model fields need not map one-to-one to permanent
 top-level menu items. Backend is an execution preference; population changes what
 marks mean; a sample limit changes which members are drawn. Their placement

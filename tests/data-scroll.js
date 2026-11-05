@@ -38,7 +38,7 @@ async function verify(){
   base+=level.offset;size=level.length;
  }
  if(scroll.offset!==base||scroll.view.offset!==base||scroll.view.length!==size)throw Error('Visualizer offset mismatch');
- if(scroll.barCount && scroll.view.region==='linear' && scroll.view.length!==scroll.view.resolvedSampleLayout.columns*scroll.view.resolvedSampleLayout.rows)throw Error('Incomplete visualizer grid');
+ if(scroll.view.resolvedSampleLayout.columns*scroll.view.resolvedSampleLayout.rows<Math.min(scroll.view.length,scroll.view.pointConfiguration.sampleLimit))throw Error('Sample grid is too small');
 }
 if(scroll.barCount!==1)throw Error('Default count not one');
 scroll.seek(5000);await verify();

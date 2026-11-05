@@ -36,3 +36,11 @@ export class RenderCanvas {
 		};
 	}
 }
+
+// Independent scalar reference for the legacy entropy/brightness color convention.
+export function cellColor(value, entropy, shaders) {
+ const brightness=shaders.includes('brightness'),varied=shaders.includes('entropy');
+ if(!brightness||!varied){const gray=brightness?value:varied?entropy:255;return [gray,gray,gray];}
+ const hue=entropy/255*300,lightness=0.15+value/255*0.70,amplitude=0.75*Math.min(lightness,1-lightness);
+ return [0,8,4].map(channel=>{const k=(channel+hue/30)%12;return Math.round(255*(lightness-amplitude*Math.max(-1,Math.min(k-3,9-k,1))));});
+}
