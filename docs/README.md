@@ -39,6 +39,7 @@ there is no HTTP Range reader or incremental streaming source today.
 | Presets | Linear, Hilbert, Hilbert 3D, Digraph, DFT, and Trigraph. All supply ordinary configuration to one shared CPU/WebGL pipeline. |
 | Dimensions | Per-axis ranges/step, Scale or Truncate, and independent Fit; defaults are Scale and Fit on. |
 | Spaces | Square, circle, cube, cylinder, sphere; scalar factors map to their positional channels. |
+| Inspection | Left-click point provenance grouped by position, shading and text traits; supports mixed analyses and worker rendering. |
 | Point appearance | Hue, saturation, lightness, opacity, size, and square/circle marks. Character or hex overlays are optional. |
 | Factor recipes | Explicit 2D/3D Hilbert coordinates, exact population indices, primitive sources, arithmetic, byte lookup, local entropy, spectrum sampling, coordinate vectors, named scalar factors, and shared subexpressions. |
 | Scheduling | Predicted expensive jobs use a worker when supported; ordered presentation and adaptive 3D quality preserve interaction. |
@@ -61,6 +62,7 @@ profile-library UI; reloading without saving still loses settings.
   Fit, natural domains, and explicit Hilbert presets.
 - [Selection and sampling](data-selection.md): coordinate systems for offsets,
   nested scopes, selection anchors, and what a rendered sample represents.
+- [Point inspection](inspection.md): click behavior, source/recipe provenance, picking and frame ownership.
 - [Rendering and performance](rendering.md): worker protocol, stale frames,
   caches, particle rasterization, quality feedback, and memory costs.
 - [Recipes and shader contract](recipes.md): the expression format, types,

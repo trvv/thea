@@ -6,6 +6,7 @@
  */
 import { settingsKey, preparationKey, presentationKey } from './render-identity.js';
 import { resolveViewJob, spaces } from './point-configuration.js';
+import { inspectPoint } from './point-inspection.js';
 import { executeRender, renderCost } from './rendering.js';
 
 /**
@@ -154,6 +155,7 @@ export class RenderEngine {
 			if (result) {
 				this.measure(request.job, result.duration, result.work);
 				this.presented = Math.max(this.presented, request.id);
+				this.presentedJob=request.job;this.presentedRemote=false;this.cancelInspection();
 				this.reportFrame(request, result);
 			}
 			request.resolve(Boolean(result));
@@ -174,6 +176,13 @@ export class RenderEngine {
 				const worker = this.worker = this.workerFactory();
 				worker.onmessage = ({ data }) => {
 					if (worker !== this.worker) { data.bitmap?.close(); return; }
+					if(data.inspection!==undefined){
+      if(this.workerInspection===data.inspection)this.workerInspection=undefined;
+      this.finishInspection(data);
+      const pending=this.pendingInspection;this.pendingInspection=null;
+      if(pending&&this.inspection?.id===pending.inspection)this.sendInspection(pending);
+      return;
+     }
 					this.finish(data);
 				};
 				worker.onerror = event => { event.preventDefault(); if (worker === this.worker) this.failed(); };
@@ -202,6 +211,7 @@ export class RenderEngine {
 				context.clearRect(0, 0, bitmap.width, bitmap.height);
 				context.drawImage(bitmap, 0, 0);
 				this.presented = id;
+				this.presentedJob=request.job;this.presentedRemote=true;this.cancelInspection();
 				this.reportFrame(request, { dimensions, timings, reused });
 			}
 			request.resolve(present);
@@ -212,11 +222,42 @@ export class RenderEngine {
 		if (next) this.start(next);
 	}
 
+ /** Inspect the displayed snapshot, even if a newer render is pending. Metadata stays in its owner thread. */
+ inspect(x,y) {
+  this.cancelInspection();
+  if(!this.presentedJob||this.presentedJob.kind!=='view')return Promise.resolve(null);
+  const id=this.inspectionSerial=(this.inspectionSerial||0)+1,frameId=this.presented,job=this.presentedJob;
+  return new Promise((resolve,reject)=>{
+   this.inspection={id,frameId,resolve,reject};
+   if(this.presentedRemote&&this.worker) {
+    const message={inspection:id,frameId,job,x,y};
+    if(this.workerInspection!==undefined)this.pendingInspection=message;else this.sendInspection(message);
+   }else {
+    inspectPoint(job,this.cache,x,y,()=>this.inspection?.id===id&&this.presented===frameId)
+     .then(point=>this.finishInspection({inspection:id,point}),error=>this.finishInspection({inspection:id,error:error.message}));
+   }
+  });
+ }
+ sendInspection(message) {
+  this.workerInspection=message.inspection;
+  try{this.worker.postMessage(message);}
+  catch(error){this.workerInspection=undefined;this.finishInspection({inspection:message.inspection,error:error.message});}
+ }
+ finishInspection({inspection,point,error}) {
+  const request=this.inspection;if(!request||request.id!==inspection)return;
+  this.inspection=null;
+  if(request.frameId!==this.presented)request.resolve(null);
+  else if(error)request.reject(new Error(error));
+  else request.resolve(point);
+ }
+ cancelInspection() {this.inspection?.resolve(null);this.inspection=null;this.pendingInspection=null;}
+
 	/**
 	 * Fall back only for the newest request; replaying an obsolete queue after worker failure would
 	 * regress the visible state.
 	 */
 	failed() {
+		this.cancelInspection();this.workerInspection=undefined;
 		this.supported = false;
 		this.worker?.terminate();
 		this.worker = null;
@@ -234,6 +275,7 @@ export class RenderEngine {
 	 * disconnects.
 	 */
 	cancel() {
+		this.cancelInspection();this.workerInspection=undefined;this.presentedJob=null;
 		this.version++;
 		this.latest = null;
 		this.worker?.terminate();

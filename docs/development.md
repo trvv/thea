@@ -26,7 +26,7 @@ suite. Run from the repository root:
 
 ```sh
 for test in recipes recipe-shaders hilbert dimensions pipeline point-factors point-configuration appearance \
-  data-scroll context-menu render-engine render-thread-smoke render-pipeline rasterization trigraph \
+  data-scroll context-menu render-engine render-thread-smoke render-pipeline rasterization point-inspection trigraph \
   trigraph-opacity coordinates adaptive-resolution scroll-performance digraph fourier
 do
   bun "tests/$test.js" || exit 1
@@ -77,6 +77,7 @@ permission to launch processes and bind a local port in restricted environments.
 | `recipes` | Typed DAGs, sharing, named references, cycle/type limits, menu edits, configurable entropy, serialization, shader emission. |
 | `recipe-shaders` | Representative generated GLSL compiled, linked, executed, and compared against CPU results; WGSL structural generation checks. |
 | `appearance`, `scroll-performance` | Color parity, source/cache reuse and bounded overview storage. |
+| `point-inspection` | Byte/tuple/bin origins, averaged sources, entropy/DFT provenance, mixed recipes, picking and evaluator trace parity. |
 | `render-pipeline`, `rasterization` | Preset/configuration equivalence, stage invalidation, exact optimized/reference CPU coverage. |
 | `digraph`, `fourier` | Overlapping pairs, chunk/selection boundaries, defining DFT sums, prime lengths, phase/frequency convention, amplitude scaling. |
 

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { inspectPoint } from '../point-inspection.js';
 import { RenderEngine } from '../render-engine.js';
 import { executeRender, entropyShading, hilbertCells } from '../rendering.js';
 import { RenderCanvas, cellColor } from './render-canvas.js';
@@ -10,6 +11,11 @@ class TestWorker {
 	terminated = false;
 	postMessage(message) { this.messages.push(message); }
 	terminate() { this.terminated = true; }
+ async completeInspection(index) {
+  const {inspection,job,x,y}=this.messages[index];
+  const point=await inspectPoint(job,this.cache,x,y);
+  this.onmessage({data:{inspection,point}});
+ }
 	async complete(index, duration) {
 		const { id, job } = this.messages[index];
 		const result = await executeRender(this.canvas, job, this.cache);
@@ -258,3 +264,33 @@ for(const region of ['linear','hilbert3d']) {
  assert(frames.length===2&&frames.every(frame=>frame.timings&&frame.reused),'Worker lost stage diagnostics');
  engine.cancel();
 }
+
+// Inspection follows the displayed frame, crosses worker messages, and rejects stale replies.
+const inspectionJob={...job,columns:64,rows:64,sampleLayout:{columns:4,rows:4}};
+const localInspector=new RenderEngine(new RenderCanvas(),{budget:Infinity});
+await localInspector.render(inspectionJob);
+const localInfo=await localInspector.inspect(24,24);assert.equal(localInfo.point.sourceOffset,job.offset+5);
+const inspectionWorker=new TestWorker(),remoteInspector=new RenderEngine(new RenderCanvas(),{budget:0,workerFactory:()=>inspectionWorker});
+let frame=remoteInspector.render(inspectionJob);await inspectionWorker.complete(0);await frame;
+let picked=remoteInspector.inspect(24,24);await inspectionWorker.completeInspection(1);
+assert.deepEqual(await picked,localInfo,'Worker inspection differs from local');
+frame=remoteInspector.render({...inspectionJob,offset:64});
+picked=remoteInspector.inspect(24,24);
+assert.equal(inspectionWorker.messages[3].job.offset,inspectionJob.offset,'Inspection used a pending frame');
+await inspectionWorker.complete(2);await frame;assert.equal(await picked,null,'Changed frame retained pending inspection');
+await inspectionWorker.completeInspection(3);
+picked=remoteInspector.inspect(24,24);remoteInspector.cancel();assert.equal(await picked,null,'Disconnect left inspection pending');
+localInspector.cancel();
+
+const coalescedWorker=new TestWorker(),coalescedInspector=new RenderEngine(new RenderCanvas(),{budget:0,workerFactory:()=>coalescedWorker});
+frame=coalescedInspector.render(inspectionJob);await coalescedWorker.complete(0);await frame;
+const obsoletePick=coalescedInspector.inspect(24,24);
+const skippedPick=coalescedInspector.inspect(8,8);
+const latestPick=coalescedInspector.inspect(40,24);
+assert.equal(await obsoletePick,null);assert.equal(await skippedPick,null);
+assert.equal(coalescedWorker.messages.length,2,'Inspection built an unbounded worker queue');
+await coalescedWorker.completeInspection(1);
+assert.equal(coalescedWorker.messages.length,3,'Latest pending inspection was not dispatched');
+await coalescedWorker.completeInspection(2);
+assert.equal((await latestPick).point.sourceOffset,inspectionJob.offset+6);
+coalescedInspector.cancel();

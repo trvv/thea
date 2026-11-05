@@ -152,6 +152,7 @@ axis, and shader getters return owned snapshots.
 | `point-factors.js` | Lazy source/window providers and sampled byte-offset contexts. |
 | `spaces.js`, `point-configuration.js` | Shared positional channels, preset intent, mapping validation, geometry transform. |
 | `appearance.js` | Default channel mappings, HSL conversion, and exact conditional color tables. |
+| `point-inspection.js`, `point-provenance.js`, `inspection-content.js` | On-demand picking, source/recipe descriptions, and plain DOM popup content. |
 | `point-renderer.js` | Shared recipe preparation with separate geometry and appearance invalidation. |
 | `point-projection.js` | Camera projection and cached depth ordering. |
 | `point-raster.js`, `point-webgl.js` | Shared CPU coverage and optional WebGL rasterization. |

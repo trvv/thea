@@ -116,8 +116,8 @@ export async function pointFactors(job, appearance, cache, current, compiled) {
  };
  const nextByte=used.has('byte2'),thirdByte=used.has('byte3'),previousByte=used.has('previous'),frequency=used.has('frequency');
  const average=population==='bytes'&&!text&&config.sampling!=='representative'&&job.length>count&&(used.has('value')||entropy);
- const visit = emit => {
-  for (let i = 0; i < count; i++) {
+ const visit = (emit, first = 0, last = count) => {
+  for (let i = first; i < Math.min(count,last); i++) {
    const index = Math.floor(i * available / count);
    const sample = offsets ? offsets[index] : population === 'bins' ? Math.floor(index * job.length / bins)
     : Math.floor(i * job.length / count);
@@ -150,9 +150,10 @@ export async function pointFactors(job, appearance, cache, current, compiled) {
    if (amplitude) values[slots.amplitude] = amplitudes[bin];
    const label = !text ? undefined : job.shaders.includes('hex') ? bytes[sample].toString(16).padStart(2, '0').toUpperCase()
     : byteCharacter(bytes[sample], job.encoding, job.blankSpaces, job.blankNulls);
-   context.offset=sample;context.pointIndex=pointIndex;emit(values, label, context);
+   context.offset=sample;context.pointIndex=pointIndex;context.sampleOrdinal=i;emit(values, label, context);
   }
  };
  visit.grid=grid;visit.count=count;
+ visit.provenance={window:needBytes?cache.factorWindow:undefined,bytes,spectrum,counts,grid,average,bins,pointCount,count,available};
  return visit;
 }

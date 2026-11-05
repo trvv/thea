@@ -167,14 +167,83 @@ try{
   await repeated.view.render();
   assert(repeated.view.dimensionRanges.width.end===1,'Resolved range feedback used selected-byte count instead of actual tuple count');
   repeated.remove();
+  // Actual click popups must work in both execution threads and describe the displayed source.
+  const {hitPoint}=await import('/point-inspection.js');
+  for(const backend of ['local','worker']) {
+   const inspectScroll=new DataScroll(new Blob([Uint8Array.from({length:16},(_,i)=>i*11)]),16);
+   inspectScroll.barCount=0;
+   const inspectedView=inspectScroll.view;
+   inspectedView.renderer.budget=backend==='local'?Infinity:0;
+   if(backend==='local')inspectedView.renderer.supported=false;
+   document.body.append(inspectScroll);
+   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+   await inspectedView.render();
+   const clickPoint=async()=>{
+    const reference={},job=inspectedView.renderer.presentedJob;
+    await executeRender(document.createElement('canvas'),job,reference);
+    let coordinate;
+    for(let i=0;i<reference.preparedPoints.size;i++) {
+     const projected=reference.pointRaster.projected,x=projected[i*4],y=projected[i*4+1];
+     if(hitPoint(reference.preparedPoints,reference.pointRaster.projection,x,y)>=0){coordinate=[x,y];break;}
+    }
+    assert(coordinate,'No inspectable reference point');
+    const bounds=inspectedView.canvas.getBoundingClientRect();
+    inspectedView.canvas.dispatchEvent(new MouseEvent('click',{button:0,bubbles:true,composed:true,
+     clientX:bounds.left+coordinate[0]*bounds.width/job.columns,clientY:bounds.top+coordinate[1]*bounds.height/job.rows}));
+    for(let i=0;i<200&&!inspectedView.inspector?.matches(':popover-open');i++)await new Promise(resolve=>setTimeout(resolve,5));
+    assert(inspectedView.inspector?.matches(':popover-open'),backend+' click popup did not open');
+    return inspectedView.inspector;
+   };
+   let popup=await clickPoint();
+   assert(popup.textContent.includes('Byte 0 @ 0')&&popup.textContent.includes('Source Offset'),'Byte popup lacks value/index');
+   assert(popup.textContent.includes('Hue: Local Entropy')&&popup.textContent.includes('Lightness: Byte Value'),'Popup lacks trait associations');
+   assert(popup.getAttribute('role')==='dialog'&&inspectScroll.shadowRoot.activeElement===inspectedView,'Popup focus escaped the view');
+   inspectedView.applyPreset('dft');await inspectedView.render();
+   assert(!popup.matches(':popover-open'),'Changed view retained an old popup');
+   popup=await clickPoint();
+   assert(popup.textContent.includes('Bin ')&&popup.textContent.includes('Real')&&popup.textContent.includes('Imaginary'),'DFT popup lacks coefficient provenance');
+   if(backend==='worker')assert(inspectedView.renderer.worker,'Inspection did not exercise a real worker');
+   popup.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,composed:true}));
+   assert(!popup.matches(':popover-open')&&inspectScroll.shadowRoot.activeElement===inspectedView,'Escape did not dismiss inspection/restore focus');
+   inspectScroll.remove();assert(!inspectedView.renderer.worker&&!popup.matches(':popover-open'),'Disconnect retained popup/worker');
+  }
   return {sourceBytes:source.size,population:before};
  })()`);
+ // Real pointer input verifies that capture/preventDefault still allows stationary 3D clicks.
+ const pointLocation=await evaluate(`(async()=>{
+  const {DataScroll}=await import('/main.js'),{executeRender}=await import('/rendering.js'),{hitPoint}=await import('/point-inspection.js');
+  const fixture=window.inspectionFixture=new DataScroll(new Blob([Uint8Array.from({length:64},(_,i)=>i*3)]),64);
+  fixture.barCount=0;fixture.view.applyPreset('hilbert3d');fixture.view.renderer.budget=0;document.body.append(fixture);
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));await fixture.view.render();
+  const view=fixture.view,cache={},job=view.renderer.presentedJob;await executeRender(document.createElement('canvas'),job,cache);
+  const bounds=view.canvas.getBoundingClientRect();
+  for(let i=0;i<cache.preparedPoints.size;i++) {
+   const p=cache.pointRaster.projected,x=p[i*4],y=p[i*4+1];
+   if(hitPoint(cache.preparedPoints,cache.pointRaster.projection,x,y)>=0)return {x:bounds.left+x*bounds.width/job.columns,y:bounds.top+y*bounds.height/job.rows};
+  }
+  throw Error('No 3D point to click');
+ })()`);
+ await call('Input.dispatchMouseEvent',{type:'mouseMoved',...pointLocation});
+ await call('Input.dispatchMouseEvent',{type:'mousePressed',...pointLocation,button:'left',clickCount:1});
+ await call('Input.dispatchMouseEvent',{type:'mouseReleased',...pointLocation,button:'left',clickCount:1});
+ const inspectionDeadline=Date.now()+5000;
+ while(Date.now()<inspectionDeadline&&!await evaluate("window.inspectionFixture.view.inspector?.matches(':popover-open')"))await Bun.sleep(10);
+ assert(await evaluate("window.inspectionFixture.view.inspector?.matches(':popover-open')"),'A real stationary 3D click failed to inspect');
+ const yaw=await evaluate('window.inspectionFixture.view.rotation.yaw');
+ await evaluate('window.inspectionFixture.view.closeInspection()');
+ await call('Input.dispatchMouseEvent',{type:'mousePressed',...pointLocation,button:'left',clickCount:1});
+ const dragged={x:pointLocation.x+20,y:pointLocation.y+10};
+ await call('Input.dispatchMouseEvent',{type:'mouseMoved',...dragged,button:'left',buttons:1});
+ await call('Input.dispatchMouseEvent',{type:'mouseReleased',...dragged,button:'left',clickCount:1});
+ assert(await evaluate('window.inspectionFixture.view.rotation.yaw')!==yaw,'Real pointer drag failed to rotate');
+ assert(!await evaluate("window.inspectionFixture.view.inspector?.matches(':popover-open')"),'Camera drag opened inspection');
+ await evaluate('window.inspectionFixture.remove();delete window.inspectionFixture');
  await call('Page.navigate',{url:`http://127.0.0.1:${server.port}/#fixture.bin`});
  const loadedDeadline=Date.now()+10000;
  while(Date.now()<loadedDeadline&&!await evaluate("document.querySelector('data-scroll')?.source?.size === 65536"))await Bun.sleep(25);
  assert(await evaluate("document.querySelector('data-scroll')?.source?.size === 65536"),'Bootstrap failed to mount/load the fragment');
  assert.equal(pageErrors.length,0,JSON.stringify(pageErrors));
- console.log('Browser checks pass: component import, real worker/bitmap, CPU/WebGL parity and fallback, mixed populations, profiles, snapshots, sample/quality boundaries, source replacement, DPR/text, native popover keyboard focus, disconnect.',result);
+ console.log('Browser checks pass: component import, real worker/bitmap, CPU/WebGL parity and fallback, mixed populations, profiles, snapshots, sample/quality boundaries, source replacement, DPR/text, point inspection, real 3D click/drag, native popover keyboard focus, disconnect.',result);
 }finally{
  socket?.close();browser?.kill();if(browser)await browser.exited;server.stop(true);await rm(profile,{recursive:true,force:true});
 }

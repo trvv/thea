@@ -24,3 +24,6 @@ export function geometryKey(job) {
  return JSON.stringify([job.sourceId,job.offset,job.length,job.region,configuration,job.sampleLayout,
   job.shaders.some(flag=>flag==='character'||flag==='hex')]);
 }
+
+/** Exact displayed frame, including selection and camera, for on-demand inspection. */
+export const frameKey=job=>JSON.stringify([preparationKey(job),presentationKey(job),job.rotation]);

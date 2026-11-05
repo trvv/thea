@@ -5,6 +5,7 @@
  * @see docs/architecture.md
  * @see docs/data-selection.md
  */
+import { inspectionContent } from './inspection-content.js';
 import { dimensionNames, defaultDimension, pointGrid } from './dimensions.js';
 import { validateProfile, parseProfile } from './profiles.js';
 import { settingsKey } from './render-identity.js';
@@ -61,6 +62,23 @@ export class Popup extends HTMLElement {
 	 * Let native popover dismissal semantics handle the top layer instead of hiding a custom overlay.
 	 */
 	close() { this.hidePopover(); }
+}
+
+/** Data-only popup for a clicked mark, sharing native dismissal with other popovers. */
+export class PointPopup extends Popup {
+ constructor() {
+  super();
+  this.shadowRoot.innerHTML+=`<style>
+   :host { max-width: min(640px, calc(100vw - 16px)); }
+   table { border-collapse: collapse; }
+   th { text-align: left; vertical-align: top; }
+   th, td { padding: 2px 4px; }
+   td { overflow-wrap: anywhere; }
+   summary { cursor: pointer; }
+  </style>`;
+ }
+ connectedCallback() {super.connectedCallback();this.setAttribute('role','dialog');this.setAttribute('aria-label','Point information');this.tabIndex=-1;}
+ show(info,x,y) {this.replaceChildren(inspectionContent(info));this.open(x,y);this.focus();}
 }
 
 let submenuSerial = 0;
@@ -377,6 +395,7 @@ export class DataScrollView extends ByteCanvas {
 		this.rotation = { yaw: -0.6, pitch: 0.45 };
 		this.resolution = new AdaptiveResolution();
 		this.renderer.onFrame = ({ job, duration, dimensions }) => {
+			this.closeInspection();
 			if (dimensions && job.source === this.source && job.offset === this.offset && job.length === this.length
 				&& settingsKey(job) === settingsKey({ ...job, ...this.renderSettings(), sampleLayout: this.resolvedSampleLayout })) {
 				this.dimensionFrame = { source: job.source, offset: job.offset, length: job.length,
@@ -388,7 +407,9 @@ export class DataScrollView extends ByteCanvas {
 			if (this.resolution.record(duration, job.resolutionScale)) this.scheduleRotationRender();
 		};
 		this.addEventListener('pointerdown', event => {
-			if (event.button !== 0) return;
+			if (event.button !== 0 || event.composedPath?.().includes(this.inspector)) return;
+			this.suppressInspectionClick=false;
+			this.closeInspection();
 			this.focus();
 			if (!this.spatial) return;
 			event.preventDefault();
@@ -399,6 +420,8 @@ export class DataScrollView extends ByteCanvas {
 		this.addEventListener('pointermove', event => {
 			if (!this.rotationDrag || !this.hasPointerCapture(event.pointerId)) return;
 			const drag = this.rotationDrag;
+			if(Math.hypot(event.clientX-drag.x,event.clientY-drag.y)<4&&!this.suppressInspectionClick)return;
+			this.suppressInspectionClick=true;
 			this.noteMovement();
 			this.rotation = { yaw: drag.yaw + (event.clientX - drag.x) * 0.01,
 				pitch: clamp(drag.pitch + (event.clientY - drag.y) * 0.01, -Math.PI / 2, Math.PI / 2) };
@@ -409,10 +432,14 @@ export class DataScrollView extends ByteCanvas {
 			if (this.hasPointerCapture(event.pointerId)) this.releasePointerCapture(event.pointerId);
 			stopRotation();
 		});
-		this.addEventListener('pointercancel', stopRotation);
+		this.addEventListener('pointercancel', () => {this.suppressInspectionClick=true;stopRotation();});
 		this.addEventListener('lostpointercapture', stopRotation);
+		this.addEventListener('click',event=>{
+			if(event.button!==0||this.suppressInspectionClick||event.composedPath?.().includes(this.inspector))return;
+			this.inspectAt(event.clientX,event.clientY);
+		});
 		this.addEventListener('keydown', event => {
-			if (event.altKey || event.ctrlKey || event.metaKey || !this.source) return;
+			if (event.altKey || event.ctrlKey || event.metaKey || !this.source || event.composedPath?.().includes(this.inspector)) return;
 			const columns = this.navigationColumns;
 			const steps = {
 				ArrowLeft: -1, ArrowRight: 1,
@@ -425,6 +452,31 @@ export class DataScrollView extends ByteCanvas {
 			this.dispatchEvent(new CustomEvent('seek', { detail: this.offset + steps[event.key] }));
 		});
 	}
+
+ /** Inspect raster coordinates from the currently displayed frame, independent of DPR/quality. */
+ async inspectAt(clientX,clientY) {
+  this.closeInspection();
+  const version=this.inspectionVersion,bounds=this.canvas.getBoundingClientRect();
+  if(!bounds.width||!bounds.height)return;
+  try {
+   const info=await this.renderer.inspect((clientX-bounds.left)*this.canvas.width/bounds.width,
+    (clientY-bounds.top)*this.canvas.height/bounds.height);
+   if(!info||version!==this.inspectionVersion||!this.isConnected)return;
+   if(!this.inspector){
+    this.inspector=new PointPopup();
+    this.inspector.addEventListener('keydown',event=>{
+     if(event.key==='Escape'){event.preventDefault();this.closeInspection();this.focus();}
+    });
+    this.shadowRoot.append(this.inspector);
+   }
+   this.inspector.show(info,clientX,clientY);
+  }catch(error){if(version===this.inspectionVersion)this.failure(error);}
+ }
+ closeInspection() {
+  this.inspectionVersion=(this.inspectionVersion||0)+1;
+  this.renderer.cancelInspection();
+  if(this.inspector?.matches?.(':popover-open'))this.inspector.close();
+ }
 
 	/**
 	 * Only 3D spaces participate in adaptive quality; an idle timer restores full detail after motion
@@ -476,6 +528,7 @@ export class DataScrollView extends ByteCanvas {
 	 * Stop quality timers and pointer-drag work before the base canvas destroys its worker.
 	 */
 	disconnectedCallback() {
+		this.closeInspection();
 		this.resetResolution();
 		this.cancelRotationRender();
 		this.rotationDrag = null;
@@ -799,6 +852,7 @@ export class DataScrollView extends ByteCanvas {
 	 * while scaling only raster dimensions and particle footprints during motion.
 	 */
 	async render() {
+		this.closeInspection();
 		const version = this.version = (this.version || 0) + 1;
 		if (!this.source || !this.isConnected) return;
 		const layout = this.windowLayout ? this.layout(this.requestedLength, this.windowLayout.limit) : this.layout(this.length);
@@ -1334,6 +1388,7 @@ export class DataScroll extends HTMLElement {
 
 customElements.define('ui-popup', Popup);
 customElements.define('context-menu', ContextMenu);
+customElements.define('point-popup', PointPopup);
 customElements.define('data-scroll-view', DataScrollView);
 customElements.define('data-scroll-bar', DataScrollBar);
 customElements.define('data-scroll', DataScroll);

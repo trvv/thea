@@ -10,7 +10,7 @@ import { compilePosition } from './point-configuration.js';
 import { projectPoints } from './point-projection.js';
 import { paintCPU } from './point-raster.js';
 import { paintWebGL } from './point-webgl.js';
-import { preparationKey, geometryKey } from './render-identity.js';
+import { preparationKey, geometryKey, frameKey } from './render-identity.js';
 import { pointFactors } from './point-factors.js';
 
 // Requested providers yield normalized factors for position and appearance. Prepared points survive camera changes in either renderer thread.
@@ -21,12 +21,11 @@ import { pointFactors } from './point-factors.js';
  * @returns {Promise<object|null>} Frame metrics, or null after supersession; does not remap the
  *   completed image.
  */
-export async function renderPoints(canvas, job, cache, current) {
+export async function preparePoints(job, cache, current) {
  const config=job.configuration, region=job.region;
  const appearance=job.appearance||defaultAppearance(region,job.shaders,job.frequencyOpacity);
  const signature=job.preparationKey ?? preparationKey(job);
  let prepared=cache.preparedPoints;
- const started=performance.now();
  let geometryReused=true;
  if(!prepared||prepared.source!==(job.sourceId??job.source)||prepared.signature!==signature){
   const coordinatesKey=geometryKey(job);
@@ -66,6 +65,13 @@ export async function renderPoints(canvas, job, cache, current) {
   prepared=cache.preparedPoints={source:job.sourceId??job.source,signature,geometry:world,positions,colors,sizes,labels,size,grid:visit.grid,shape:style.shape,text};
  }
  if(!current())return null;
+ return {prepared,geometryReused};
+}
+
+export async function renderPoints(canvas, job, cache, current) {
+ const started=performance.now(),result=await preparePoints(job,cache,current);
+ if(!result||!current())return null;
+ const {prepared,geometryReused}=result,config=job.configuration;
  const preparation=performance.now()-started;
  const {columns:width,rows:height}=job;
  if(canvas.width!==width)canvas.width=width;if(canvas.height!==height)canvas.height=height;
@@ -86,6 +92,7 @@ export async function renderPoints(canvas, job, cache, current) {
    context.fillText(prepared.labels[i],projected[q],projected[q+1]);
   }
  }
+ cache.pointFrame={key:frameKey(job),source:job.sourceId??job.source,prepared,projection};
  return {duration:performance.now()-started,dimensions:prepared.grid.dimensions,
   timings:{preparation,projection:projection.projection||0,sorting:projection.sorting||0,rasterization:performance.now()-rasterStarted},
   reused:{geometry:geometryReused,projection:projection.reused}};

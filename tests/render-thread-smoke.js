@@ -28,6 +28,8 @@ try {
 	assert.equal(await engine.render(job), true);
 	assert(ticks > 0, 'Main thread did not process events while worker rendered');
 	assert(closed, 'Returned bitmap was not released');
+ const inspected=await engine.inspect(256,256);
+ assert(inspected?.point.population==='bytes'&&inspected.nodes.length,'Real worker inspection did not return source traits');
 	const expected = new RenderCanvas();
 	await executeRender(expected, job);
 	assert.deepEqual(canvas.pixels, expected.pixels);

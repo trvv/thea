@@ -257,3 +257,17 @@ for(const preset of ['linear','hilbert','hilbert3d','digraph','dft','trigraph'])
  const saved=JSON.stringify(ranged.view.exportProfile());ranged.view.applyPreset('linear');ranged.view.importProfile(saved);
  if(ranged.view.effectiveAppearance.hue.window!==64)throw Error('Entropy window lost in profile');
 }
+
+// Clicking a 3D mark inspects it; a camera drag must not also open the inspector.
+ranged.view.applyPreset('hilbert3d');await ranged.view.render();
+let inspections=0;ranged.view.inspectAt=()=>inspections++;
+ranged.view.events.pointerdown({button:0,pointerId:9,clientX:10,clientY:10,preventDefault(){}});
+ranged.view.events.pointermove({pointerId:9,clientX:30,clientY:20});
+ranged.view.events.pointerup({pointerId:9});
+ranged.view.events.click({button:0,clientX:30,clientY:20});
+if(inspections!==0)throw Error('Camera drag opened inspection');
+ranged.view.events.pointerdown({button:0,pointerId:10,clientX:10,clientY:10,preventDefault(){}});
+ranged.view.events.pointermove({pointerId:10,clientX:11,clientY:11});
+ranged.view.events.pointerup({pointerId:10});
+ranged.view.events.click({button:0,clientX:11,clientY:11});
+if(inspections!==1)throw Error('Stationary 3D click did not inspect');

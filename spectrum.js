@@ -36,6 +36,7 @@ export function spectrumComponents(spectrum, length, phase, amplitude) {
    const value = Math.hypot(spectrum.real[k], spectrum.imaginary[k]) / length * (k === 0 || k * 2 === length ? 1 : 2);
    values[k] = value; peak = Math.max(peak, value);
   }
+  spectrum.peakAmplitude=peak;
   const scale = peak ? 1 / Math.log1p(peak) : 0;
   for (let k = 0; k < bins; k++) values[k] = values[k] < peak * 1e-10 ? 0 : Math.log1p(values[k]) * scale;
  }

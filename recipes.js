@@ -163,10 +163,10 @@ export function compileRecipes(roots, definitions = {}) {
    * Allocate scratch per evaluator instead of per cached plan: multiple canvases may reuse one IR,
    * but their per-point values must never alias.
    */
-  createEvaluator() {
+  createEvaluator(trace) {
    // Source-only graphs are common in arbitrary configurations. Lower their outputs directly,
    // preserving the same float32/clamp contract without interpreter scratch or instruction calls.
-   if(nodes.every(node=>node.op==='factor'||node.op==='constant')) {
+   if(!trace&&nodes.every(node=>node.op==='factor'||node.op==='constant')) {
     const outputs=outputEntries.map(([name,id])=>({target:bindings[name],source:nodes[id].op==='factor'?factorIndices[nodes[id].name]:-1,value:nodes[id].value}));
     return factors=>{
      for(let i=0;i<outputs.length;i++) {
@@ -242,6 +242,7 @@ export function compileRecipes(roots, definitions = {}) {
       if (nodes[i].type === 'vec2' || nodes[i].type === 'vec3') values[slot + 1] = Math.fround(values[slot + 1]);
       if (nodes[i].type === 'vec3') values[slot + 2] = Math.fround(values[slot + 2]);
      } else if (!Number.isSafeInteger(values[slot])) throw new RangeError('Recipe index exceeds the safe integer range');
+     if(trace)trace(nodes[i],nodes[i].type==='vec3'?Array.from(values.subarray(slot,slot+3)):nodes[i].type==='vec2'?Array.from(values.subarray(slot,slot+2)):values[slot]);
     }
     for (const [name, id] of outputEntries) {
      const value = values[slots[id]]; factors[bindings[name]] = Number.isFinite(value) ? clamp(value) : 0;
