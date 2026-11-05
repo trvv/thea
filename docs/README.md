@@ -37,6 +37,7 @@ there is no HTTP Range reader or incremental streaming source today.
 | Selection | A full-screen view with zero or more nested overview bars; yellow selectors identify each child scope. |
 | Navigation | Wheel and keyboard movement, draggable selector edges, middle-button velocity scrolling/resizing, and 3D rotation. |
 | Presets | Linear, Hilbert, Digraph, DFT, and Trigraph. Unchanged presets retain specialized CPU paths. |
+| Layout | Mapped coordinates, Linear 2D/3D, Hilbert 2D/3D; grid columns and rows per slice define strides. |
 | Spaces | Square, circle, cube, cylinder, sphere; scalar factors map to their positional channels. |
 | Point appearance | Hue, saturation, lightness, opacity, size, and square/circle marks. Character or hex overlays are optional. |
 | Factor recipes | Explicit 2D/3D Hilbert coordinates, exact population indices, primitive sources, arithmetic, byte lookup, local entropy, spectrum sampling, coordinate vectors, named scalar factors, and shared subexpressions. |
@@ -45,9 +46,10 @@ there is no HTTP Range reader or incremental streaming source today.
 | Sampling | General points default to at most 262,144 samples; selection ranges and exact statistical providers stay independent. |
 | Shader preparation | The typed recipe graph emits GLSL and WGSL function libraries with explicit provider interfaces. |
 
-Version 1 profiles can be exported/imported as JSON through `view.exportProfile()`
+Version 2 profiles can be exported/imported as JSON through `view.exportProfile()`
 and `view.importProfile(profileOrJSON)`. They include named factors, population,
-sampling budget, geometry, appearance, camera, and backend settings. Hosts can
+sampling budget, grid strides, geometry, appearance, camera, and backend settings.
+Version 1 profiles are accepted and migrated on import. Hosts can
 store that JSON in files or localStorage. There is no automatic persistence or
 profile-library UI; reloading without saving still loses settings.
 

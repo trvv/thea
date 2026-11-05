@@ -27,10 +27,6 @@ export function populationOffsets(job, bytes, cache) {
 export function limitedSampleLayout(layout, configuration) {
  const limit = configuration.sampleLimit === null ? Infinity : configuration.sampleLimit ?? defaultSampleLimit;
  if (layout.columns * layout.rows <= limit) return layout;
- if (configuration.layout === 'hilbert') {
-  const side = 2 ** Math.max(0, Math.floor(Math.log2(Math.sqrt(limit))));
-  return { ...layout, columns: side, rows: side };
- }
  const columns = Math.max(1, Math.min(limit, Math.round(Math.sqrt(limit * layout.columns / layout.rows))));
  return { ...layout, columns, rows: Math.max(1, Math.floor(limit / columns)) };
 }

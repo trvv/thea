@@ -21,8 +21,10 @@ own normalized lookup input.
 view.pointConfiguration = {
   ...view.pointConfiguration,
   population: 'triples',
+  layout: 'mapped',
+  position: ['value', 'byte2', 'byte3'],
   sampleLimit: 262144, // null explicitly requests all samples
-  footprint: 'point', // 'grid' uses sample-cell dimensions
+  footprint: 'point', // 'grid' uses placement-cell dimensions, including perspective in 3D
   backend: 'cpu',     // 'webgl' requests accelerated rasterization with fallback
   space: 'sphere'
 };
@@ -42,8 +44,35 @@ Sampling limits never narrow the selected interval. Exact statistics still use
 all selected bytes. A limit bounds mark preparation/sorting, not full FFT arrays,
 entropy arrays, or metadata needed to discover distinct tuples. Tuple/bin points
 are subsampled in population order. Byte values/entropy can average intervals;
-text and Hilbert samples remain representative bytes. Footprint is explicit so
+text and the representative sampling policy use actual bytes. Footprint is explicit so
 expression spelling cannot change mark size.
+
+## Layout and slicing
+
+```js
+view.applyLayout('linear3d'); // activates a cube if the current space is 2D
+view.pointConfiguration = {
+  ...view.pointConfiguration,
+  grid: {columns: 16, rows: 8}
+};
+```
+
+This advances columns every point, rows every 16 points, and slices every 128
+points. Dimensions of 0 select automatic sizing. The generated Slice factor can
+also control color, opacity, size, or a manually mapped position channel.
+
+Layout has five choices: `mapped`, `linear`, `linear3d`, `hilbert`, and `hilbert3d`.
+Arranged layouts supply effective positional channels without erasing stored
+manual mappings. Editing an axis in the menu switches to `mapped`; programmatic
+position recipes must also select `layout: 'mapped'`. Layout/stride changes keep
+the current population, sampling policy, and committed selected byte interval.
+They do not reorder provider input or change which statistical analysis runs.
+
+The grid is defined over unsampled population indices, so a sampling limit does
+not reflow it. Hilbert layouts generate power-of-two squares/cubes; linear layouts
+use the grid overrides, with partial final rows/slices retained. See
+[selection and sampling](data-selection.md#layout-and-strides) for coordinate and
+stride formulas.
 
 ## Explicit 3D Hilbert traversal
 
@@ -64,10 +93,15 @@ view.importProfile(localStorage.getItem('thea-profile'));
 ```
 
 The host chooses storage and names. `profiles.js` also exports `serializeProfile`
-and `parseProfile`. Version 1 includes population, sample policy, geometry,
-appearance, definitions, text/compatibility settings, camera, and backend. Source
+and `parseProfile`. Version 2 includes layout, grid strides, population, sample
+policy, geometry, appearance, definitions, text/compatibility settings, camera, and backend. Source
 URLs and selected ranges are session state and excluded. Imports validate before
-replacing state. Exported profiles and public settings are owned snapshots.
+replacing state. Version 1 profiles migrate to version 2: custom axis mappings
+select Mapped Coordinates, while canonical Column/Row mappings retain their
+linear/Hilbert arrangement. Legacy Hilbert sampling retains the representative
+policy. General placement/sampling conventions have changed; migration preserves
+settings intent rather than guaranteeing identical legacy raster pixels. Exported
+profiles and public settings are owned snapshots.
 
 ## Execution boundaries
 

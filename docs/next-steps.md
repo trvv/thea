@@ -4,6 +4,12 @@ These are proposals following the pipeline improvements in `77148df`, not a list
 of features already implemented. The [pipeline contracts](pipeline.md) describe
 current behavior; the [roadmap](roadmap.md) gives the broader direction.
 
+Implemented since this proposal: Layout is now an explicit mapped/linear/Hilbert
+arrangement in 2D/3D, Column/Row/Slice support grid strides, and profile version 2
+includes these settings with version 1 migration. See [pipeline contracts](pipeline.md)
+for the current behavior. The remaining proposals below retain their original
+priority rationale.
+
 The guiding constraint is composability: point population determines which marks
 exist, while each analysis keeps its own scope and sampling relationship. Byte,
 tuple, spectral, and contextual analyses should remain freely mixable. Prefer

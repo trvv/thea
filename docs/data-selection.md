@@ -1,20 +1,22 @@
 # Selection and sampling
 
-## Three independent sizes
+## Four independent sizes
 
 Do not use these quantities interchangeably:
 
 - **Selected bytes:** `offset` and `length` identify a half-open source interval
   `[offset, offset + length)`.
-- **Sample layout:** `sampleLayout.columns/rows` determine traversal, sampling,
-  row stepping, and the generated column/row factors.
+- **Sample budget:** `sampleLayout.columns/rows` and `sampleLimit` bound the
+  number of general byte samples. These dimensions are independent of placement.
+- **Point grid:** columns, rows, and slices determine placement coordinates and
+  row/slice strides over the unsampled population.
 - **Raster resolution:** a canvas's actual pixel dimensions. General points use
   display dimensions × device-pixel ratio × interaction-quality scale.
 
 The native byte grid often renders into a small logical canvas stretched by CSS;
 text uses a larger raster for readable glyphs. Native digraphs use a 256×256 value
 space, DFTs use a phase/frequency image, and native trigraphs use the display
-raster. General points have a native sample grid and a separate display raster.
+raster. General points have an independent sampling budget, placement grid, and display raster.
 Changing canvas resolution must not change selected byte ranges or keyboard row
 steps.
 
@@ -54,7 +56,7 @@ restores actual selectable scopes.
 
 ## Requested length versus committed length
 
-Linear views snap selected lengths to a complete number of rows. The original
+Optimized native linear views snap selected lengths to a complete number of rows. The original
 unsnapped request is retained in `windowSize`/`requestedLength`; recalculating a
 layout from an already-snapped length can change the chosen column count and
 oscillate between grids.
@@ -68,13 +70,15 @@ Whole-buffer mode is the exception to row-length snapping: every byte must stay
 selected, including a trailing partial row. Rendering can sample the whole range
 rather than dropping bytes merely to make its length divisible by columns.
 An empty source remains a valid selection with length zero, despite intermediate
-layout helpers using nonzero dimensions to avoid divisions by zero.
+layout helpers using nonzero dimensions to avoid divisions by zero. General
+point configurations keep partial rows/slices and preserve committed byte ranges
+when layout or grid dimensions change.
 
 ## Traversal and repeated samples
 
 Linear downsampling can average a byte interval into one cell. Text uses an
 actual representative byte so it never renders a glyph for a fractional average.
-Hilbert traversal maps sample index to a cell in a power-of-two square. When the
+Native Hilbert traversal maps sample index to a cell in a power-of-two square. When the
 square has more cells than bytes, sampling repeats some bytes to fill it. Repeated
 colors therefore do not establish that the source itself was duplicated.
 
@@ -82,13 +86,44 @@ The overview bar is another separate aggregation: each pixel averages its exact
 byte interval. At more pixels than bytes, empty intervals repeat the previous
 average. The overview image is not a literal one-byte-per-pixel dump.
 
-The **global Layout setting** affects generated column/row factors and sampling.
-It will not move points whose positions only depend on byte values or spectrum
-factors. Explicit recipe expressions `Hilbert(Position).X/Y` or
-`Linear(Position).X/Y` provide independent coordinate factors usable in any
-position or appearance channel. Their 2D vectors can also feed the axes of a 3D
-space. Explicit `Hilbert3D(Point Index).X/Y/Z` expressions provide a true cube
-traversal; global Layout remains a 2D traversal choice.
+## Layout and strides
+
+Layout is an explicit arrangement: Mapped Coordinates uses stored factor recipes;
+Linear 2D/3D and Hilbert 2D/3D generate point positions from population indices.
+The same arrangement works with bytes, distinct tuples, and frequency bins. A 3D
+layout chosen through the menu switches a 2D space to a cube. Existing 3D spaces
+remain selected; users may independently map grid channels into radial spaces.
+
+For a linear 3D grid with `C` columns and `R` rows per slice:
+
+```text
+column = index % C
+row    = floor(index / C) % R
+slice  = floor(index / (C * R))
+```
+
+The row stride is `C`; the slice stride is `C * R`. The number of slices is
+`ceil(pointCount / (C * R))`. Channels are normalized cell centers. Grid → Columns
+and Rows per Slice set these dimensions; 0 means automatic, and Reset restores
+both to automatic. Automatic 3D dimensions form a roughly cubic volume. The last
+row or slice can be partial; no selected bytes or points are discarded to fill it.
+
+Column, Row, and Slice can also be used independently in mapped position or
+appearance expressions. Mapped layouts generate a 3D linear grid in a 3D space,
+or when rows per slice is explicitly set. Otherwise Slice is the sole plane's
+center, 0.5. Hilbert arrangements choose their own power-of-two dimensions and do
+not use the linear-grid stride overrides.
+
+Sample limits do not renumber population indices or reflow the full grid. Layout
+changes do not switch the byte sampling policy or reorder the input to FFT,
+entropy, or occurrence providers. The sampling policy is an independent profile
+field (`average` or `representative`); text always uses representative bytes.
+
+Editing a position factor in the menu selects Mapped Coordinates. Switching back
+to Mapped Coordinates without editing restores the stored manual mappings.
+Explicit `Hilbert(Position).X/Y` and `Hilbert3D(Point Index).X/Y/Z` expressions
+remain available for channel-specific transforms. Use `layout: 'mapped'` when
+setting such position recipes programmatically.
 
 ## Point populations and mixed analyses
 
@@ -107,8 +142,9 @@ statistics, and a tuple point can do the same. Changing population is an explici
 configuration/menu action, separate from choosing factors.
 
 General point sampling defaults to a limit of 262,144. Byte points span the entire
-selected interval; linear value/entropy cells average their sampled intervals,
-while Hilbert and text use representative bytes. Tuple/bin populations are
+selected interval; value/entropy samples average their intervals when `sampling`
+is `average`. Text and the representative policy use actual bytes. Tuple/bin
+populations are
 uniformly subsampled in population order when they exceed the limit. Tuple order
 is first occurrence, not sorted tuple key order. `sampleLimit: null` explicitly
 requests all points. Native preset painters retain their specialized algorithms.

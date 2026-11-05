@@ -49,7 +49,7 @@ export async function renderPoints(canvas, job, cache, current, helpers) {
   const visit = await pointFactors(job, appearance, cache, current, helpers, program);
   if (!visit || !current()) return null;
   visit(emit);
-  prepared=cache.preparedPoints={source:job.sourceId??job.source,signature,positions,colors,sizes,labels,size,shape:style.shape,text};
+  prepared=cache.preparedPoints={source:job.sourceId??job.source,signature,positions,colors,sizes,labels,size,grid:visit.grid,shape:style.shape,text};
  }
  if(!current())return null;
  const {columns:width,rows:height}=job;
@@ -68,14 +68,14 @@ export async function renderPoints(canvas, job, cache, current, helpers) {
  const projected=scratch.projected;
  const focal=Math.max(0,Math.min(width-1,height-1))*0.8;
  const grid=config.footprint ? config.footprint==='grid' : config.position.some(factor=>factor==='column'||factor==='row'||factor?.op==='factor'&&['column','row'].includes(factor.name));
- const cellWidth=grid?width/job.sampleLayout.columns:Math.max(1,job.pointScale||1)*1.5;
- const cellHeight=grid?height/job.sampleLayout.rows:cellWidth;
+ const cellWidth=grid?width/prepared.grid.columns:Math.max(1,job.pointScale||1)*1.5;
+ const cellHeight=grid?height/prepared.grid.rows:cellWidth;
  for(let i=0;i<prepared.size;i++){
   const p=i*3,q=i*4,x=prepared.positions[p],y=prepared.positions[p+1],z=prepared.positions[p+2];
   if(spatial){
    const rx=x*cy+z*sy,rz=z*cy-x*sy,ry=y*cp-rz*sp,depth=y*sp+rz*cp;
    projected[q]=(width-1)/2+rx*focal/(3.5-depth);projected[q+1]=(height-1)/2-ry*focal/(3.5-depth);projected[q+2]=depth;
-   projected[q+3]=projectedPointSize(depth)*(job.pointScale||1)*prepared.sizes[i]/2;
+   projected[q+3]=(grid?2*focal/((3.5-depth)*Math.max(prepared.grid.columns,prepared.grid.rows,prepared.grid.slices)):projectedPointSize(depth)*(job.pointScale||1))*prepared.sizes[i]/2;
   }else{
    const circle=config.space==='circle',scale=circle?Math.min(width,height)/2:0;
    projected[q]=circle?width/2+x*scale:(x+1)*width/2;

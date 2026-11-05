@@ -66,6 +66,14 @@ try{
    let maximum=0,total=0;for(let i=0;i<a.length;i++){const difference=Math.abs(a[i]-b[i]);maximum=Math.max(maximum,difference);total+=difference;}
    assert(maximum<=3&&total/a.length<0.1,'CPU/WebGL raster mismatch '+space+'/'+shape+': '+maximum+'/'+total/a.length);
   }
+  for(const layout of ['linear3d','hilbert3d'])for(const shape of ['circle','square']){
+   const job={...spec,length:64,configuration:{...spec.configuration,layout,footprint:'grid',grid:{columns:4,rows:3}},appearance:{...spec.appearance,hue:'slice',shape}};
+   await executeRender(cpu,job,{});await executeRender(gpu,{...job,configuration:{...job.configuration,backend:'webgl'}},gpuCache);
+   assert(gpuCache.pointBackend==='webgl','3D grid did not use WebGL');
+   const a=cpu.getContext('2d').getImageData(0,0,96,72).data,b=gpu.getContext('2d').getImageData(0,0,96,72).data;
+   let maximum=0,total=0;for(let i=0;i<a.length;i++){const difference=Math.abs(a[i]-b[i]);maximum=Math.max(maximum,difference);total+=difference;}
+   assert(maximum<=3&&total/a.length<0.1,'CPU/WebGL 3D grid mismatch '+layout+'/'+shape+': '+maximum+'/'+total/a.length);
+  }
   gpuCache.pointGPU.gl.getExtension('WEBGL_lose_context').loseContext();
   await new Promise(resolve=>setTimeout(resolve,50));
   await executeRender(gpu,{...spec,configuration:{...spec.configuration,backend:'webgl'}},gpuCache);
@@ -86,8 +94,24 @@ try{
   assert(JSON.stringify(view.exportProfile())===JSON.stringify(profile),'Profile round trip changed settings');
   const old=view.exportProfile();try{view.importProfile({...old,version:99});}catch{}
   assert(JSON.stringify(view.exportProfile())===JSON.stringify(old),'Invalid profile changed state');
+  const mappedPosition=view.pointConfiguration.position,rangeBeforeLayout=[view.offset,view.length];
+  view.appearance={...view.effectiveAppearance,hue:'value',lightness:'byte2'};
+  scroll.refreshMenu();
+  scroll.contextItems().find(item=>item.label==='Layout').action('linear3d');await view.render();
+  assert(view.pointConfiguration.layout==='linear3d','Layout control did not select 3D arrangement');
+  const linearPixels=pixels().slice();
+  scroll.contextItems().find(item=>item.label==='Layout').action('hilbert3d');await view.render();
+  assert(pixels().some((value,index)=>value!==linearPixels[index]),'Trigraph did not change with Layout');
+  assert(view.offset===rangeBeforeLayout[0]&&view.length===rangeBeforeLayout[1],'Layout changed the selection');
+  scroll.contextItems().find(item=>item.label==='Layout').action('linear3d');
+  let gridMenu=scroll.contextItems().find(item=>item.label==='Grid');gridMenu.items.find(item=>item.label==='Columns').action(4);
+  gridMenu=scroll.contextItems().find(item=>item.label==='Grid');gridMenu.items.find(item=>item.label==='Rows per Slice').action(3);
+  await view.render();
+  assert(view.pointConfiguration.grid.columns===4&&view.pointConfiguration.grid.rows===3,'Grid controls lost the strides');
+  view.applyLayout('mapped');await view.render();
+  assert(JSON.stringify(view.pointConfiguration.position)===JSON.stringify(mappedPosition),'Mapped coordinates were not restored');
   view.pointConfiguration={...view.pointConfiguration,population:'bytes',sampleLimit:64,space:'cube',backend:'webgl',
-   position:[0,1,2].map(axis=>hilbert3DCoordinate(axis))};
+   layout:'mapped',position:[0,1,2].map(axis=>hilbert3DCoordinate(axis))};
   view.focus();
   scroll.menu.items=recipeMenu('Factor',{op:'pointIndex'},{},expression=>{
    view.pointConfiguration={...view.pointConfiguration,position:[...view.pointConfiguration.position.slice(0,2),expression]};

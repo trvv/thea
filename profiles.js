@@ -5,11 +5,18 @@ import { needsPointFactors } from './factors.js';
 import { validateAppearance } from './appearance.js';
 
 export function validateProfile(value) {
- if (!value || value.version !== 1) throw new TypeError('Unsupported visualization profile version');
+ if (!value || ![1,2].includes(value.version)) throw new TypeError('Unsupported visualization profile version');
  const { region } = value;
  presetConfiguration(region);
  const recipes = validateDefinitions(value.recipes);
- let configuration = value.configuration == null ? undefined : validateConfiguration({...value.configuration,recipes});
+ let raw=value.configuration;
+ // v1 Layout only generated coordinates. Preserve custom positional mappings
+ // instead of silently replacing them with a new arrangement on import.
+ if(raw&&value.version===1) {
+  const gridMapped=JSON.stringify(raw.position)===JSON.stringify(['column','row','none']);
+  raw={...raw,layout:gridMapped?raw.layout:'mapped',sampling:raw.layout==='hilbert'?'representative':'average'};
+ }
+ let configuration = raw == null ? undefined : validateConfiguration({...raw,recipes});
  const appearance = value.appearance == null ? undefined : validateAppearance(region,value.appearance,recipes);
  if (!Array.isArray(value.shaders) || value.shaders.some(flag=>!['entropy','brightness','character','hex'].includes(flag))
   || value.shaders.includes('character')&&value.shaders.includes('hex')) throw new TypeError('Invalid profile text/color flags');
@@ -21,7 +28,7 @@ export function validateProfile(value) {
  if (!value.rotation || !Number.isFinite(value.rotation.yaw)||!Number.isFinite(value.rotation.pitch)||Math.abs(value.rotation.pitch)>Math.PI/2) throw new TypeError('Invalid profile camera');
  if (!['ascii','ascii-overbar','latin1','cp437'].includes(value.encoding)) throw new TypeError('Invalid profile encoding');
  for (const key of ['blankSpaces','blankNulls','frequencyOpacity']) if (typeof value[key]!=='boolean') throw new TypeError(`Invalid profile ${key}`);
- return structuredClone({version:1,region,recipes,configuration,appearance,shaders:[...new Set(value.shaders)],
+ return structuredClone({version:2,region,recipes,configuration,appearance,shaders:[...new Set(value.shaders)],
   coordinateSystem:value.coordinateSystem,axes:value.axes,rotation:value.rotation,encoding:value.encoding,
   blankSpaces:value.blankSpaces,blankNulls:value.blankNulls,frequencyOpacity:value.frequencyOpacity});
 }

@@ -51,10 +51,10 @@ const source=new Source([signal]);
 const job={kind:'view',source,offset:16,length:64,columns:64,rows:48,width:64,height:48,scale:1,region:'linear',
  configuration:{...presetConfiguration('linear'),recipes:{next}},sampleLayout:{columns:8,rows:8},shaders:[]};
 const appearance={...defaultAppearance('linear'),hue:'none',lightness:'none'};
-const noReads={...job,configuration:{...job.configuration,position:[hilbertCoordinate(0),hilbertCoordinate(1),'none']}};
+const noReads={...job,configuration:{...job.configuration,layout:'mapped',position:[hilbertCoordinate(0),hilbertCoordinate(1),'none']}};
 await executeRender(new RenderCanvas(),{...noReads,appearance});assert.equal(reads,0,'Coordinate recipe read the source');
 const mixed={...job,appearance:{...appearance,hue:{op:'entropy',offset:{op:'offset'},window:64},lightness:reference('next')},
- configuration:{...job.configuration,position:[hilbertCoordinate(0),hilbertCoordinate(1),'none']}};
+ configuration:{...job.configuration,layout:'mapped',position:[hilbertCoordinate(0),hilbertCoordinate(1),'none']}};
 const helpers={entropyShading,hilbertCells,byteCharacter},cache={};
 const visit=await pointFactors(mixed,mixed.appearance,cache,()=>true,helpers);
 assert(cache.recipeEntropy.values.has(64));assert(!cache.factorEntropy&&!cache.factorSpectrum&&!cache.factorCounts,'Recipe requested unrelated providers');

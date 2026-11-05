@@ -17,7 +17,7 @@ Important job fields:
 | `offset`, `length` | Byte interval relative to that job's source, normally the root Blob. |
 | `region` | Historical preset identifier; still chooses native paths and compatibility defaults. |
 | `configuration` | When present, selects the general point/recipe renderer. |
-| `sampleLayout` | Native sample columns/rows, independent of adaptive raster quality. |
+| `sampleLayout` | Sample-budget dimensions and aspect hint, independent of placement grid and adaptive raster quality. |
 | `columns`, `rows` | Native logical dimensions for some presets; actual raster dimensions for general points and native 3D. |
 | `width`, `height`, `scale` | View CSS dimensions and DPR; bar width/height already identify its overview raster. |
 | `pointScale` | DPR × quality scale where applicable, preserving particle size in CSS pixels. |
@@ -149,6 +149,9 @@ A reduction that fails to improve timing is rolled back and locked for that
 interaction. This is important when histogram work, an FFT, or point preparation
 is the bottleneck: shrinking the canvas cannot fix it. Feedback from a stale
 source, mapping, viewport, or quality scale is ignored.
+
+Grid-sized 3D marks derive their footprint from placement-cell dimensions and
+perspective; point-sized marks retain their existing perspective particle-size convention.
 
 `pointScale` changes alongside the raster so particles keep their CSS size, and
 `sampleLayout` stays native so the selection does not change. Perspective size is

@@ -2,10 +2,12 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
+import { factorCount, factorIndices } from '../factor-catalog.js';
 import { compileRecipes, constant, hilbertCoordinate, hilbert3DCoordinate } from '../recipes.js';
 import { emitRecipeShader } from '../recipe-shaders.js';
 const fixtures=[];
 const cases={
+ gridFactors:{x:'column',y:'row',z:'slice',w:constant(1)},
  autoHilbert:{x:hilbertCoordinate(0),y:hilbertCoordinate(1),z:'value',w:constant(1)},
  hilbert3D:{x:hilbert3DCoordinate(0),y:hilbert3DCoordinate(1),z:hilbert3DCoordinate(2),w:constant(1)},
  hilbert3DScalar:{x:hilbert3DCoordinate(0,'position',3),y:hilbert3DCoordinate(1,'position',3),z:hilbert3DCoordinate(2,'position',3),w:constant(1)},
@@ -30,14 +32,15 @@ ${bindings}
 out vec4 color;
 void main(){
  float offset=gl_FragCoord.x-0.5;
- float factors[15];for(int i=0;i<15;i++)factors[i]=0.0;
+ float factors[${factorCount}];for(int i=0;i<${factorCount};i++)factors[i]=0.0;
  factors[0]=offset/64.0;factors[2]=offset/64.0;
+ factors[${factorIndices.column}]=mod(offset,4.0)/4.0;factors[${factorIndices.row}]=mod(floor(offset/4.0),4.0)/4.0;factors[${factorIndices.slice}]=floor(offset/16.0)/4.0;
  RecipeResult result=evaluateRecipes(factors,int(offset)+${offsetBase},${selectionLength},vec2(8.0,8.0),int(offset),64);
  color=vec4(result.x,result.y,result.z,result.w);
 }`;
  const evaluate=program.createEvaluator(),factors=new Float64Array(program.factorCount),expected=[];
  for(let i=0;i<64;i++){
-  factors[0]=i/64;factors[2]=i/64;
+  factors[0]=i/64;factors[2]=i/64;factors[factorIndices.column]=(i%4)/4;factors[factorIndices.row]=(Math.floor(i/4)%4)/4;factors[factorIndices.slice]=Math.floor(i/16)/4;
   evaluate(factors,{offset:i+offsetBase,length:selectionLength,pointIndex:i,pointCount:64,grid:[8,8],byte:index=>large?index&255:index<64?index:0,entropy:index=>index/64,
    spectrum:(kind,position)=>{const index=Math.min(32,Math.floor(position*33));return kind==='frequency'?2*index/64:kind==='phase'?index/32:1-index/32;}});
   for(const key of ['x','y','z','w'])expected.push(Math.round(factors[program.bindings[key]]*255));

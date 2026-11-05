@@ -204,3 +204,40 @@ const appearanceSnapshot=profileView.appearance;appearanceSnapshot.lightness='no
 const shadersSnapshot=profileView.shaders;shadersSnapshot.push('hex');
 if(JSON.stringify(profileView.exportProfile())!==json)throw Error('Public getter exposed mutable state');
 console.log('Profile checks pass: durable JSON, population preservation, atomic rejection, owned configuration/appearance/flags.');
+
+// Layout controls arrange points, and grid strides preserve the selected range.
+const arranged=new DataScroll(source,101);arranged.view.isConnected=true;await arranged.view.render();
+const selected=[arranged.view.offset,arranged.view.length];
+arranged.contextItems().find(item=>item.label==='Layout').action('linear3d');await arranged.view.render();
+if(arranged.view.pointConfiguration.space!=='cube'||arranged.view.pointConfiguration.layout!=='linear3d')throw Error('3D layout did not enable a cube');
+if(String([arranged.view.offset,arranged.view.length])!==String(selected))throw Error('Arrangement changed selected bytes');
+let gridMenu=arranged.contextItems().find(item=>item.label==='Grid');
+gridMenu.items.find(item=>item.label==='Columns').action(4);
+gridMenu=arranged.contextItems().find(item=>item.label==='Grid');gridMenu.items.find(item=>item.label==='Rows per Slice').action(3);
+await arranged.view.render();
+if(arranged.view.navigationColumns!==4||arranged.view.renderer.cache.preparedPoints.grid.rows!==3)throw Error('Grid stride was not applied');
+if(String([arranged.view.offset,arranged.view.length])!==String(selected))throw Error('Grid stride changed selected bytes');
+const beforeStride=arranged.offset;
+arranged.view.events.keydown({key:'ArrowDown',preventDefault(){}});await arranged.view.render();
+if(arranged.offset!==beforeStride+4)throw Error('3D row navigation ignored the row stride');
+const zFactor=arranged.contextItems().find(item=>item.label==='Position').items[2].items[0];
+if(zFactor.detail!=='slice')throw Error('3D layout did not expose Slice as Z');
+zFactor.action('value');await arranged.view.render();
+if(arranged.view.pointConfiguration.layout!=='mapped'||arranged.view.pointConfiguration.position[2]!=='value')throw Error('Manual axis edit did not select mapped coordinates');
+arranged.view.applyPreset('trigraph');await arranged.view.render();
+const savedPosition=arranged.view.pointConfiguration.position;
+arranged.view.applyLayout('hilbert3d');await arranged.view.render();
+arranged.view.applyLayout('mapped');await arranged.view.render();
+if(String(arranged.view.pointConfiguration.position)!==String(savedPosition))throw Error('Arrangement discarded stored mapped axes');
+console.log('Layout controls pass: explicit arrangements, Slice mapping, strides, row navigation, selected-range preservation, manual edit/restore.');
+
+arranged.view.applyPreset('linear');await arranged.view.render();
+arranged.view.pointConfiguration={...arranged.view.pointConfiguration,sampleLimit:7};await arranged.view.render();
+const sampledRange=[arranged.view.offset,arranged.view.length],sampleCount=arranged.view.renderer.cache.preparedPoints.size;
+const sampledColors=arranged.view.renderer.cache.preparedPoints.colors.slice(0,sampleCount*4);
+for(const layout of ['linear','hilbert','linear3d','hilbert3d']){
+ arranged.view.applyLayout(layout);await arranged.view.render();
+ const prepared=arranged.view.renderer.cache.preparedPoints;
+ if(prepared.size!==sampleCount||String(prepared.colors.slice(0,prepared.size*4))!==String(sampledColors))throw Error('Layout changed point sampling or analysis');
+ if(String([arranged.view.offset,arranged.view.length])!==String(sampledRange))throw Error('Layout changed the sampled byte interval');
+}

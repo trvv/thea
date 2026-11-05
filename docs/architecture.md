@@ -43,8 +43,9 @@ flowchart TD
 
 View/bar `seek` events and bar `window-change` events are listened to directly by
 `DataScroll`; they are not a public, bubbling global event bus. `window-change`
-includes `{offset, length, edge}`. A view `layout-change` requests a new selection
-reconciliation before rendering. Rendering errors use a bubbling, composed
+includes `{offset, length, edge}`. A view `layout-change` requests selection reconciliation before rendering; an
+explicit configuration change includes the committed length so arrangement/stride
+edits preserve the selected byte interval. Rendering errors use a bubbling, composed
 `data-error` event so they can cross shadow roots. Fetch errors currently go to
 `console.error` in the bootstrap loader.
 
@@ -105,7 +106,9 @@ view.pointConfiguration = {
   sampleLimit: 262144, // null explicitly requests all samples
   footprint: 'point',
   backend: 'cpu', // or 'webgl', with capability/context-loss fallback
-  layout: 'linear',
+  layout: 'mapped', // manual position recipes; linear/linear3d/hilbert/hilbert3d arrange points
+  grid: {columns: 0, rows: 0}, // zero selects automatic dimensions
+  sampling: 'average',
   space: 'cube',
   position: ['value', 'byte2', 'entropy'],
   inverted: [false, false, false],
@@ -116,6 +119,11 @@ view.appearance = {
   opacity: 'pairCount', size: 'none', shape: 'circle'
 };
 ```
+
+Layout selects either stored position mappings (`mapped`) or generated
+Column/Row[/Slice] channels. Arrangements preserve the stored mappings for later
+restoration; a menu axis edit snapshots the effective channels and switches to
+Mapped Coordinates.
 
 There are always three stored position mappings. A 2D space hides the third and
 its dependency is not evaluated. Repeated mappings and constants are allowed;
@@ -134,6 +142,7 @@ axis, and shader getters return owned snapshots.
 | Module | Why it exists |
 | --- | --- |
 | `main.js`, `bootstrap.js` | Reusable DOM components and separate demo loader. |
+| `arrangements.js` | Effective layout mappings and population-indexed 2D/3D grid coordinates. |
 | `populations.js`, `profiles.js` | Point populations/sample budgets and versioned profile JSON. |
 | `render-identity.js` | Shared preparation/presentation/quality setting identity. |
 | `histograms.js`, `spectrum.js` | Statistical preparation shared by native painters and general providers. |

@@ -42,6 +42,7 @@ raw read makes most nonzero bytes saturate, rather than expanding the color rang
 const curve = { op: 'hilbert', input: 'position', order: 0 };
 view.pointConfiguration = {
   ...view.pointConfiguration,
+  layout: 'mapped',
   position: [
     { op: 'component', input: curve, component: 0 },
     { op: 'component', input: curve, component: 1 },
@@ -54,7 +55,7 @@ The two expressions share one Hilbert vector operation after compilation, even i
 serialization produced two distinct JavaScript objects. They can feed position,
 hue, opacity, or another scalar operation. Order 0 chooses a power-of-two side
 from selected length; orders 1–15 choose side `2 ** order`. Coordinates are
-normalized cell centers. `linear` instead uses the current sample grid. Neither
+normalized cell centers. `linear` instead uses the current point grid’s column/row dimensions. Neither
 expression requires the global Layout setting to be the same traversal.
 
 `f32`, exact CPU `index`, `vec2`, and `vec3` are implemented. A display
@@ -68,6 +69,7 @@ constructors are not implemented.
 import { hilbert3DCoordinate } from './recipes.js';
 view.pointConfiguration = {
   ...view.pointConfiguration,
+  layout: 'mapped',
   space: 'cube',
   footprint: 'point',
   position: [0, 1, 2].map(axis => hilbert3DCoordinate(axis))
@@ -101,7 +103,8 @@ tuple discovery still needs to inspect the selected bytes.
 
 This is an explicit coordinate expression, independent of display space and
 global Layout. It does not reorder the input to FFT, entropy, or occurrence
-providers. Existing 2D Hilbert expressions and Layout retain their conventions.
+providers. Existing explicit 2D Hilbert expressions retain their conventions. The global
+Layout selector can independently arrange all populations in 2D or 3D.
 
 
 ## Built-in sources
@@ -114,7 +117,7 @@ position and appearance channels:
 | `value` | Byte value / 255; sequential downsampling may average an interval. |
 | `previous`, `byte2`, `byte3` | Byte at sample offset −1, +1, +2, divided by 255; unavailable neighbors are zero. |
 | `position` | Sample byte offset / `max(1, selectedLength - 1)`. |
-| `column`, `row` | Generated sample-cell center, affected by global Linear/Hilbert layout. |
+| `column`, `row`, `slice` | Normalized cell centers in the current point grid; linear grids use row/slice strides and Hilbert grids use their curve coordinates. |
 | `entropy` | Quantized Shannon entropy in a rolling 32-byte neighborhood. |
 | `byteCount`, `pairCount`, `tripleCount` | Occurrence count of the sample's byte/sliding pair/sliding triple over the selection, mapped through `1 - exp(-0.25 * log1p(count))`. |
 | `frequency` | One-sided bin frequency relative to Nyquist; no transform is required for indices alone. |
@@ -125,7 +128,8 @@ position and appearance channels:
 preset: pairs for Digraph, triples for Trigraph, byte occurrences otherwise. New
 recipes should use an explicit count name to avoid preset-dependent meaning.
 
-Canonical slots are stable and shared with emitted shaders. Compact native preset
+Canonical slots are stable and shared with emitted shaders. Slice is appended at
+slot 15, making 16 inputs; earlier slots retain their indices. Compact native preset
 factor arrays are a different layout: native byte2/phase occupy slot 1/0, for
 example, whereas canonical byte2/phase occupy 6/9. `compileAppearance` explicitly
 bridges these modes. Never pass a compact native tuple to the general evaluator.
@@ -189,7 +193,8 @@ not match a raw per-point spectrum mapping exactly.
 
 ## Compilation and execution
 
-`recipeRoots` starts at visible position channels and active appearance channels.
+`recipeRoots` starts at effective layout position channels and active appearance
+channels. Stored manual mappings are inactive unless layout is `mapped`.
 A 2D space does not reach its stored Z expression. `compileRecipes` expands named
 references, validates types, interns identical operations, and orders nodes after
 their inputs. The resulting runtime program contains:

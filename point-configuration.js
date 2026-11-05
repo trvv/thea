@@ -3,6 +3,7 @@
  * restrict which analyses may be mixed on each point population.
  * @module point-configuration
  */
+import { layoutOptions } from './arrangements.js';
 import { validateRecipe, validateDefinitions } from './recipes.js';
 import { factorIndices, factorOptions } from './factors.js';
 import { populations, defaultSampleLimit } from './populations.js';
@@ -23,7 +24,7 @@ export function configurationFactors() { return factorOptions; }
 export function presetConfiguration(region) {
  if(!['linear','hilbert','digraph','dft','trigraph'].includes(region))throw new TypeError('Unknown preset');
  return {population:region==='digraph'?'pairs':region==='trigraph'?'triples':region==='dft'?'bins':'bytes',
-  backend:'cpu',footprint:region==='linear'||region==='hilbert'?'grid':'point',sampleLimit:defaultSampleLimit,layout:region==='hilbert'?'hilbert':'linear', space:region==='trigraph'?'cube':'square',
+  backend:'cpu',footprint:region==='linear'||region==='hilbert'?'grid':'point',sampleLimit:defaultSampleLimit,sampling:region==='hilbert'?'representative':'average',grid:{columns:0,rows:0},layout:region==='hilbert'?'hilbert':region==='linear'?'linear':'mapped', space:region==='trigraph'?'cube':'square',
   position:region==='linear'||region==='hilbert'?['column','row','none']:region==='dft'?['phase','frequency','none']:['value','byte2',region==='trigraph'?'byte3':'none'],
   inverted:region==='dft'?[false,true,false]:[false,false,false]};
 }
@@ -35,6 +36,11 @@ export function presetConfiguration(region) {
 export function validateConfiguration(configuration) {
  const {layout,space,position,inverted}=configuration;
  const recipes=validateDefinitions(configuration.recipes);
+ const sampling=configuration.sampling??'average';
+ if(!['average','representative'].includes(sampling))throw new TypeError('Unknown sampling policy');
+ if(configuration.grid!=null&&(typeof configuration.grid!=='object'||Array.isArray(configuration.grid)))throw new TypeError('Invalid grid dimensions');
+ const grid={columns:configuration.grid?.columns??0,rows:configuration.grid?.rows??0};
+ if(Object.values(grid).some(value=>!Number.isInteger(value)||value<0||value>65536))throw new TypeError('Grid dimensions must be integers from 0 (automatic) to 65536');
  const population=configuration.population??'bytes';
  const backend=configuration.backend??'cpu';
  if(!['cpu','webgl'].includes(backend))throw new TypeError('Unknown point backend');
@@ -43,11 +49,11 @@ export function validateConfiguration(configuration) {
  if(!populations.includes(population))throw new TypeError('Unknown point population');
  if(!['grid','point'].includes(footprint))throw new TypeError('Unknown point footprint');
  if(sampleLimit!==null&&(!Number.isSafeInteger(sampleLimit)||sampleLimit<1||sampleLimit>16777216))throw new TypeError('Sample limit must be 1–16777216 or null');
- if(!Object.hasOwn(spaces,space)||!['linear','hilbert'].includes(layout))throw new TypeError('Unknown point configuration');
+ if(!Object.hasOwn(spaces,space)||!layoutOptions.some(option=>option.value===layout))throw new TypeError('Unknown point configuration');
   if(!Array.isArray(position)||position.length!==3)throw new TypeError('Expected three position channels');
  const mapped=position.map(value=>value==='none'?'none':validateRecipe(value,recipes));
  if(!Array.isArray(inverted)||inverted.length!==3||inverted.some(value=>typeof value!=='boolean'))throw new TypeError('Invalid position direction');
- return {backend,population,footprint,sampleLimit,layout,space,position:mapped,inverted:[...inverted],recipes};
+ return {backend,population,footprint,sampleLimit,sampling,grid,layout,space,position:mapped,inverted:[...inverted],recipes};
 }
 // Resolve factor choices once per configuration, outside the point loop.
 /**

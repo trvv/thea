@@ -4,6 +4,7 @@
  * @module point-factors
  * @see docs/recipes.md
  */
+import { pointGrid, gridCoordinates } from './arrangements.js';
 import { compileRecipes, recipeRoots } from './recipes.js';
 import { factorCount, factorIndices as slots } from './factors.js';
 import { occurrenceFactor } from './appearance.js';
@@ -95,20 +96,15 @@ export async function pointFactors(job, appearance, cache, current, helpers, com
  if (!current()) return null;
  const { columns, rows } = job.sampleLayout;
  const offsets = populationOffsets(job, bytes, cache);
- const available = offsets ? offsets.length : population === 'bins' ? bins : columns * rows;
+ const available = offsets ? offsets.length : population === 'bins' ? bins : Math.min(job.length,columns * rows);
  const limit = config.sampleLimit === null ? Infinity : config.sampleLimit ?? defaultSampleLimit;
  const count = Math.min(available, limit);
- const layout = used.has('column') || used.has('row');
- let cells;
- if (layout && config.layout === 'hilbert') {
-  if (cache.pointHilbertSide !== columns) {
-   cache.pointHilbertSide = columns; cache.pointHilbertCells = helpers.hilbertCells(columns);
-  }
-  cells = cache.pointHilbertCells;
- }
+ const layout = used.has('column') || used.has('row') || used.has('slice');
+ const pointCount=population==='bytes'?job.length:available;
+ const grid=pointGrid(config,pointCount,job.sampleLayout),coordinates=new Float64Array(3);
  const text = job.shaders.includes('character') || job.shaders.includes('hex');
  const values = new Float64Array(Math.max(factorCount,program.factorCount));
- const context={offset:0,length:job.length,pointIndex:0,pointCount:population==='bytes'?job.length:available,grid:[columns,rows],
+ const context={offset:0,length:job.length,pointIndex:0,pointCount,grid:[grid.columns,grid.rows,grid.slices],
   byte(index){index=Math.floor(index);return index>=0&&index<job.length?bytes[index]:0;},
   entropy(index,size){index=Math.floor(index);return index>=0&&index<job.length?cache.recipeEntropy.values.get(size)[index]:0;},
   spectrum(kind,position){
@@ -117,24 +113,25 @@ export async function pointFactors(job, appearance, cache, current, helpers, com
    return kind==='frequency'?2*bin/Math.max(1,job.length):kind==='phase'?phases[bin]:amplitudes[bin];
   }
  };
- return visit => {
+ const visit = emit => {
   for (let i = 0; i < count; i++) {
    const index = Math.floor(i * available / count);
-   const cellIndex = Math.min(columns * rows - 1, Math.floor(i * columns * rows / count));
    const sample = offsets ? offsets[index] : population === 'bins' ? Math.floor(index * job.length / bins)
-    : config.layout === 'hilbert' || job.length > available || count < available ? Math.floor(i * job.length / count) : i;
+    : Math.floor(i * job.length / count);
    if (sample >= job.length) continue;
    let value = bytes?.[sample] ?? 0, metric = metrics?.[sample] ?? 0;
-   if (population === 'bytes' && !text && config.layout !== 'hilbert' && job.length > count && (used.has('value') || entropy)) {
+   if (population === 'bytes' && !text && config.sampling !== 'representative' && job.length > count && (used.has('value') || entropy)) {
     const end = Math.floor((i + 1) * job.length / count); value = metric = 0;
     for (let j = sample; j < end; j++) { value += bytes?.[j] ?? 0; metric += metrics?.[j] ?? 0; }
     value /= end - sample; metric /= end - sample;
    }
    values[slots.value] = value / 255; values[slots.entropy] = metric / 255;
    values[slots.position] = sample / Math.max(1, job.length - 1);
-   const cell = cells ? cells[cellIndex] : cellIndex;
-   values[slots.column] = (cell % columns + 0.5) / columns;
-   values[slots.row] = (Math.floor(cell / columns) + 0.5) / rows;
+   const pointIndex=population==='bytes'?sample:index;
+   if(layout) {
+    gridCoordinates(pointIndex,grid,config.layout,coordinates);
+    values[slots.column]=coordinates[0];values[slots.row]=coordinates[1];values[slots.slice]=coordinates[2];
+   }
    if (used.has('byte2')) values[slots.byte2] = (bytes[sample + 1] ?? 0) / 255;
    if (used.has('byte3')) values[slots.byte3] = (bytes[sample + 2] ?? 0) / 255;
    if (used.has('previous')) values[slots.previous] = (bytes[sample - 1] ?? 0) / 255;
@@ -149,9 +146,11 @@ export async function pointFactors(job, appearance, cache, current, helpers, com
    if (amplitude) values[slots.amplitude] = amplitudes[bin];
    const label = !text ? undefined : job.shaders.includes('hex') ? bytes[sample].toString(16).padStart(2, '0').toUpperCase()
     : helpers.byteCharacter(bytes[sample], job.encoding, job.blankSpaces, job.blankNulls);
-   context.offset=sample;context.pointIndex=population==='bytes'?sample:index;visit(values, label, context);
+   context.offset=sample;context.pointIndex=pointIndex;emit(values, label, context);
   }
  };
+ visit.grid=grid;
+ return visit;
 }
 
 // Normalized local entropy for configurable windows. The 32-byte built-in keeps

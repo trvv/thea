@@ -38,7 +38,7 @@ for(const sampleLimit of [4096,65536]){
  const pointCanvas=new RenderCanvas(),pointCache={};
  const job={kind:'view',source,sourceId:1,offset:0,length:2**20,columns:512,rows:384,width:512,height:384,scale:1,pointScale:1,
   region:'linear',shaders:[],sampleLayout:{columns:1024,rows:1024},
-  configuration:{...presetConfiguration('linear'),space:'cube',footprint:'point',sampleLimit,position:['value','byte2','byte3']},
+  configuration:{...presetConfiguration('linear'),space:'cube',footprint:'point',sampleLimit,layout:'mapped',position:['value','byte2','byte3']},
   appearance:{...defaultAppearance('linear'),hue:'value',lightness:'byte2',opacity:'pairCount'}};
  let started=performance.now();await executeRender(pointCanvas,job,pointCache);const cold=performance.now()-started;
  const camera=[],scroll=[];

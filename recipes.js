@@ -4,6 +4,7 @@
  * @module recipes
  * @see docs/recipes.md
  */
+import { positionMappings } from './arrangements.js';
 import { hilbert3D, hilbert3DMaxOrder } from './hilbert.js';
 import { spaces } from './spaces.js';
 import { appearanceChannels, factorIndices, factorCount } from './factor-catalog.js';
@@ -47,8 +48,8 @@ const cache = new Map(), requests = new Map();
  */
 export function recipeRoots(configuration, appearance) {
  const dimensions = spaces[configuration.space].length;
- const roots = {};
- for (let i = 0; i < dimensions; i++) if (configuration.position[i] !== 'none') roots[`p${i}`] = configuration.position[i];
+ const roots = {},position=positionMappings(configuration);
+ for (let i = 0; i < dimensions; i++) if (position[i] !== 'none') roots[`p${i}`] = position[i];
  for (const channel of appearanceChannels) if (appearance[channel] !== 'none') roots[channel] = appearance[channel];
  return roots;
 }
