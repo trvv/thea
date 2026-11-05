@@ -21,14 +21,14 @@ async function collect(job=base,appearance=plain,cache={}) {
 const idle={};await collect(base,plain,idle);
 assert.equal(reads,0,'Layout-only points read the binary');
 assert(!idle.factorSpectrum&&!idle.factorCounts&&!idle.factorEntropy);
-const hiddenZ={...base,configuration:{...base.configuration,layout:'mapped',position:['column','row','phase']}};
+const hiddenZ={...base,configuration:{...base.configuration,position:['column','row','phase']}};
 assert(!requiredFactors(hiddenZ.configuration,plain).has('phase'));
 await collect(hiddenZ);assert.equal(reads,0,'Invisible axis requested a transform');
-const frequency={...base,configuration:{...base.configuration,layout:'mapped',position:['frequency','row','none']}};
+const frequency={...base,configuration:{...base.configuration,position:['frequency','row','none']}};
 const frequencies=await collect(frequency);
 assert.equal(reads,0,'Frequency indices should not require FFT/data');
 assert.equal(frequencies.at(-1).values[slots.frequency],1);
-const neighbors={...base,configuration:{...base.configuration,layout:'mapped',position:['value','byte2','none']}};
+const neighbors={...base,configuration:{...base.configuration,position:['value','byte2','none']}};
 const neighborPoints=await collect(neighbors,{...plain,hue:'byte3',size:'previous'});
 assert.equal(neighborPoints[0].values[slots.value],data[4]/255);
 assert.equal(neighborPoints[0].values[slots.byte2],data[5]/255);
@@ -57,13 +57,13 @@ assert.equal(counted[0].values[slots.byteCount],occurrenceFactor(8));
 let triple=0;for(let i=0;i<selected.length-2;i++)if(selected[i]===3&&selected[i+1]===5&&selected[i+2]===3)triple++;
 assert.equal(counted[0].values[slots.tripleCount],occurrenceFactor(triple));
 await collect(base,{...plain,hue:'entropy'},cache);assert.equal(entropyCalls,1,'Entropy repeated for same window');
-await collect({...base,configuration:{...base.configuration,layout:'mapped',position:['value','byte2','none']}},plain,cache);
+await collect({...base,configuration:{...base.configuration,position:['value','byte2','none']}},plain,cache);
 assert.equal(hilbertCalls,0,'Unused Hilbert coordinates were generated');
 const fresh={};await collect({...base,offset:8},phaseStyle,cache);await collect({...base,offset:8},phaseStyle,fresh);
 assert.deepEqual(cache.factorSpectrum.real,fresh.factorSpectrum.real,'Spectrum cache survived the wrong window');
 assert(renderCost({...base,appearance:phaseStyle})>renderCost({...base,appearance:plain}),'Cost prediction omits FFT');
 for(const space of ['square','circle','cube','cylinder','sphere']){
- const job={...base,configuration:{...base.configuration,space,layout:'mapped',position:['value','byte2','entropy']},appearance:{...plain,hue:'phase',lightness:'amplitude',opacity:'pairCount',size:'byte3'}};
+ const job={...base,configuration:{...base.configuration,space,position:['value','byte2','entropy']},appearance:{...plain,hue:'phase',lightness:'amplitude',opacity:'pairCount',size:'byte3'}};
  const canvas=new RenderCanvas();await executeRender(canvas,job);
  assert(canvas.pixels.some((v,i)=>i%4!==3&&v>0),'Mixed factors produced no visible points');
 }

@@ -7,8 +7,8 @@ focused on those concrete responsibilities.
 ## Implemented foundations
 
 - Point populations independent of mixed analysis providers.
-- Explicit mapped/linear/Hilbert arrangements in 2D/3D, grid strides and Slice,
-  sampling policies/limits, footprints, and CPU/WebGL backend choice.
+- Explicit coordinate mappings and Hilbert presets, per-axis ranges/step,
+  Scale/Truncate, independent Fit, sampling limits, and CPU/WebGL backend choice.
 - Serializable scalar/index/vector expressions with shared typed DAGs, including
   explicit 2D/3D Hilbert coordinates and exact population ordinals.
 - Lazy providers, incremental byte/pair/triple counts, and shared spectrum caches.

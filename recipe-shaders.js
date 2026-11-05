@@ -107,9 +107,12 @@ return (${vector3}(axes) + ${vector3}(0.5)) / ${scalar}(${side});`));
    case 'hilbert': {
     const variable = (type,name,value) => wgsl ? `var ${name}: ${type} = ${value};` : `${type} ${name} = ${value};`;
     const swap=wgsl?'let swap = x; x = y; y = swap;':'int swap = x; x = y; y = swap;';
-    helpers.set('hilbert',fn(vector,'recipeHilbert',[[scalar,'position'],[integer,'side']],`${variable(integer,'t',`min(side * side - 1, ${integer}(floor(clamp(position, 0.0, 1.0) * ${scalar}(side * side))))`)}\n${variable(integer,'x','0')}\n${variable(integer,'y','0')}\nfor (${variable(integer,'scale','1')} scale < side; scale *= 2) {\n${declaration(integer,'rx','(t / 2) & 1')}\n${declaration(integer,'ry','(t ^ rx) & 1')}\nif (ry == 0) { if (rx == 1) { x = scale - 1 - x; y = scale - 1 - y; } ${swap} }\nx += scale * rx; y += scale * ry; t /= 4;\n}\nreturn (${vector}(${scalar}(x), ${scalar}(y)) + ${vector}(0.5)) / ${scalar}(side);`));
-    const side=node.order?String(2**node.order):`${integer}(exp2(min(15.0, ceil(log2(sqrt(max(1.0, ${scalar}(selectionLength))))))))`;
-    expression=`recipeHilbert(${a}, ${side})`;break;
+    helpers.set('hilbert',fn(vector,'recipeHilbert',[[integer,'index'],[integer,'side']],`${variable(integer,'t','index')}\n${variable(integer,'x','0')}\n${variable(integer,'y','0')}\nfor (${variable(integer,'scale','1')} scale < side; scale *= 2) {\n${declaration(integer,'rx','(t / 2) & 1')}\n${declaration(integer,'ry','(t ^ rx) & 1')}\nif (ry == 0) { if (rx == 1) { x = scale - 1 - x; y = scale - 1 - y; } ${swap} }\nx += scale * rx; y += scale * ry; t /= 4;\n}\nreturn (${vector}(${scalar}(x), ${scalar}(y)) + ${vector}(0.5)) / ${scalar}(side);`));
+    const exact=program.nodes[node.args[0]].type==='index';
+    const count=exact?'pointCount':'selectionLength';
+    const side=node.order?String(2**node.order):`${integer}(exp2(min(15.0, ceil(log2(sqrt(max(1.0, ${scalar}(${count}))))))))`;
+    const index=exact?`clamp(r${node.args[0]}, 0, (${side}) * (${side}) - 1)`:`min((${side}) * (${side}) - 1, ${integer}(floor(clamp(${a}, 0.0, 1.0) * ${scalar}((${side}) * (${side})))))`;
+    expression=`recipeHilbert(${index}, ${side})`;break;
    }
    default:throw new TypeError('Unsupported shader operation');
   }

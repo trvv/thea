@@ -4,7 +4,6 @@
  * @module recipes
  * @see docs/recipes.md
  */
-import { positionMappings } from './arrangements.js';
 import { hilbert3D, hilbert3DMaxOrder } from './hilbert.js';
 import { spaces } from './spaces.js';
 import { appearanceChannels, factorIndices, factorCount } from './factor-catalog.js';
@@ -48,7 +47,7 @@ const cache = new Map(), requests = new Map();
  */
 export function recipeRoots(configuration, appearance) {
  const dimensions = spaces[configuration.space].length;
- const roots = {},position=positionMappings(configuration);
+ const roots = {},position=configuration.position;
  for (let i = 0; i < dimensions; i++) if (position[i] !== 'none') roots[`p${i}`] = position[i];
  for (const channel of appearanceChannels) if (appearance[channel] !== 'none') roots[channel] = appearance[channel];
  return roots;
@@ -208,8 +207,10 @@ export function compileRecipes(roots, definitions = {}) {
       hilbert3D(index, order, values, target);
      };
      case 'hilbert': return (_, context) => {
-      const side = 2 ** (node.order || Math.min(15, Math.ceil(Math.log2(Math.sqrt(Math.max(1, context.length))))));
-      let remaining = Math.min(side * side - 1, Math.floor(clamp(values[a]) * side * side)), x = 0, y = 0;
+      const exact=nodes[node.args[0]].type==='index';
+      const count=exact?(context.pointCount??context.length):context.length;
+      const side = 2 ** (node.order || Math.min(15, Math.ceil(Math.log2(Math.sqrt(Math.max(1, count))))));
+      let remaining = exact?Math.max(0,Math.min(side*side-1,values[a])):Math.min(side * side - 1, Math.floor(clamp(values[a]) * side * side)), x = 0, y = 0;
       for (let scale = 1; scale < side; scale *= 2) {
        const rx = Math.floor(remaining / 2) & 1, ry = (remaining ^ rx) & 1;
        if (!ry) { if (rx) { x = scale - 1 - x; y = scale - 1 - y; } [x,y] = [y,x]; }

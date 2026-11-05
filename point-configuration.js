@@ -3,8 +3,8 @@
  * restrict which analyses may be mixed on each point population.
  * @module point-configuration
  */
-import { layoutOptions } from './arrangements.js';
-import { validateRecipe, validateDefinitions } from './recipes.js';
+import { validateDimensions, dimensionCoordinate } from './dimensions.js';
+import { validateRecipe, validateDefinitions, hilbertCoordinate } from './recipes.js';
 import { factorIndices, factorOptions } from './factors.js';
 import { populations, defaultSampleLimit } from './populations.js';
 
@@ -24,8 +24,8 @@ export function configurationFactors() { return factorOptions; }
 export function presetConfiguration(region) {
  if(!['linear','hilbert','digraph','dft','trigraph'].includes(region))throw new TypeError('Unknown preset');
  return {population:region==='digraph'?'pairs':region==='trigraph'?'triples':region==='dft'?'bins':'bytes',
-  backend:'cpu',footprint:region==='linear'||region==='hilbert'?'grid':'point',sampleLimit:defaultSampleLimit,sampling:region==='hilbert'?'representative':'average',grid:{columns:0,rows:0},layout:region==='hilbert'?'hilbert':region==='linear'?'linear':'mapped', space:region==='trigraph'?'cube':'square',
-  position:region==='linear'||region==='hilbert'?['column','row','none']:region==='dft'?['phase','frequency','none']:['value','byte2',region==='trigraph'?'byte3':'none'],
+  backend:'cpu',footprint:region==='linear'||region==='hilbert'?'grid':'point',sampleLimit:defaultSampleLimit,sampling:region==='hilbert'?'representative':'average',dimensions:validateDimensions(), space:region==='trigraph'?'cube':'square',
+  position:region==='hilbert'?[hilbertCoordinate(0,{op:'pointIndex'}),hilbertCoordinate(1,{op:'pointIndex'}),'none']:region==='linear'?['column','row','slice']:region==='dft'?['phase','frequency','none']:['value','byte2',region==='trigraph'?'byte3':'none'],
   inverted:region==='dft'?[false,true,false]:[false,false,false]};
 }
 
@@ -34,13 +34,11 @@ export function presetConfiguration(region) {
  * three mappings even when a 2D space temporarily hides Z.
  */
 export function validateConfiguration(configuration) {
- const {layout,space,position,inverted}=configuration;
+ const {space,position,inverted}=configuration;
  const recipes=validateDefinitions(configuration.recipes);
  const sampling=configuration.sampling??'average';
  if(!['average','representative'].includes(sampling))throw new TypeError('Unknown sampling policy');
- if(configuration.grid!=null&&(typeof configuration.grid!=='object'||Array.isArray(configuration.grid)))throw new TypeError('Invalid grid dimensions');
- const grid={columns:configuration.grid?.columns??0,rows:configuration.grid?.rows??0};
- if(Object.values(grid).some(value=>!Number.isInteger(value)||value<0||value>65536))throw new TypeError('Grid dimensions must be integers from 0 (automatic) to 65536');
+ const dimensions=validateDimensions(configuration.dimensions);
  const population=configuration.population??'bytes';
  const backend=configuration.backend??'cpu';
  if(!['cpu','webgl'].includes(backend))throw new TypeError('Unknown point backend');
@@ -49,23 +47,26 @@ export function validateConfiguration(configuration) {
  if(!populations.includes(population))throw new TypeError('Unknown point population');
  if(!['grid','point'].includes(footprint))throw new TypeError('Unknown point footprint');
  if(sampleLimit!==null&&(!Number.isSafeInteger(sampleLimit)||sampleLimit<1||sampleLimit>16777216))throw new TypeError('Sample limit must be 1–16777216 or null');
- if(!Object.hasOwn(spaces,space)||!layoutOptions.some(option=>option.value===layout))throw new TypeError('Unknown point configuration');
+ if(!Object.hasOwn(spaces,space))throw new TypeError('Unknown point configuration');
   if(!Array.isArray(position)||position.length!==3)throw new TypeError('Expected three position channels');
  const mapped=position.map(value=>value==='none'?'none':validateRecipe(value,recipes));
  if(!Array.isArray(inverted)||inverted.length!==3||inverted.some(value=>typeof value!=='boolean'))throw new TypeError('Invalid position direction');
- return {backend,population,footprint,sampleLimit,sampling,grid,layout,space,position:mapped,inverted:[...inverted],recipes};
+ return {backend,population,footprint,sampleLimit,sampling,dimensions,space,position:mapped,inverted:[...inverted],recipes};
 }
 // Resolve factor choices once per configuration, outside the point loop.
 /**
  * Resolve scalar slots once and transform them in a normalized space. Internal numeric slots come
  * from recipe compilation; legacy string slots use the canonical catalog.
  */
-export function compilePosition(configuration) {
+export function compilePosition(configuration, dimensions) {
  const indices=configuration.position.map(factor=>factor==='none'?-1:typeof factor==='number'?factor:factorIndices[factor]);
  const {space,inverted}=configuration;
  return (values,out)=>{
   let a=indices[0]<0?0.5:values[indices[0]],b=indices[1]<0?0.5:values[indices[1]],c=indices[2]<0?0.5:values[indices[2]];
   if(inverted[0])a=1-a;if(inverted[1])b=1-b;if(inverted[2])c=1-c;
+  if(dimensions){a=dimensionCoordinate(a,dimensions.width);b=dimensionCoordinate(b,dimensions.height);if(spaces[space].length===3)c=dimensionCoordinate(c,dimensions.depth);}
+  if(spaces[space].length===2)c=0.5;
+  if(![a,b,c].every(Number.isFinite))return null;
   if(space==='circle'){out[0]=a*Math.cos(b*Math.PI*2);out[1]=-a*Math.sin(b*Math.PI*2);out[2]=0;}
   else if(space==='cylinder'){out[0]=a*Math.cos(b*Math.PI*2);out[1]=c*2-1;out[2]=a*Math.sin(b*Math.PI*2);}
   else if(space==='sphere'){out[0]=a*Math.sin(c*Math.PI)*Math.cos(b*Math.PI*2);out[1]=a*Math.cos(c*Math.PI);out[2]=a*Math.sin(c*Math.PI)*Math.sin(b*Math.PI*2);}

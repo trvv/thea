@@ -9,9 +9,9 @@ const canvas = new OffscreenCanvas(1, 1);
 const cache = {};
 self.onmessage = async ({ data: { id, job } }) => {
 	try {
-		const { duration, work } = await executeRender(canvas, job, cache);
+		const { duration, work, dimensions } = await executeRender(canvas, job, cache);
 		const bitmap = canvas.transferToImageBitmap();
-		self.postMessage({ id, bitmap, duration, work }, [bitmap]);
+		self.postMessage({ id, bitmap, duration, work, dimensions }, [bitmap]);
 	} catch (error) {
 		self.postMessage({ id, error: error.message });
 	}

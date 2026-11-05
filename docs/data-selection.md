@@ -78,52 +78,31 @@ when layout or grid dimensions change.
 
 Linear downsampling can average a byte interval into one cell. Text uses an
 actual representative byte so it never renders a glyph for a fractional average.
-Native Hilbert traversal maps sample index to a cell in a power-of-two square. When the
-square has more cells than bytes, sampling repeats some bytes to fill it. Repeated
-colors therefore do not establish that the source itself was duplicated.
+The app’s Hilbert preset maps exact population indices into a power-of-two
+square through coordinate expressions. Extra curve cells stay empty. The older
+low-level native Hilbert painter can repeat samples when filling a padded square;
+that compatibility helper is not the app preset's coordinate model.
 
 The overview bar is another separate aggregation: each pixel averages its exact
 byte interval. At more pixels than bytes, empty intervals repeat the previous
 average. The overview image is not a literal one-byte-per-pixel dump.
 
-## Layout and strides
+## Dimensions and strides
 
-Layout is an explicit arrangement: Mapped Coordinates uses stored factor recipes;
-Linear 2D/3D and Hilbert 2D/3D generate point positions from population indices.
-The same arrangement works with bytes, distinct tuples, and frequency bins. A 3D
-layout chosen through the menu switches a 2D space to a cube. Existing 3D spaces
-remain selected; users may independently map grid channels into radial spaces.
+Position mappings always determine coordinates. Column/Row/Slice are generated
+from per-axis ranges and steps, and explicit Hilbert expressions transform point
+indices. There is no global Layout override. See [dimensions](dimensions.md) for
+Scale/Truncate, per-axis Fit (on by default), natural units, and range examples.
 
-For a linear 3D grid with `C` columns and `R` rows per slice:
+For width count `C` and height count `R`, generated coordinates advance along
+width every point, height every `C` points, and depth every `C * R` points.
+Scale uses the chosen ranges to form this grid; Truncate retains natural-grid
+strides and selects a window. The two-dimensional path ignores depth in geometry.
 
-```text
-column = index % C
-row    = floor(index / C) % R
-slice  = floor(index / (C * R))
-```
-
-The row stride is `C`; the slice stride is `C * R`. The number of slices is
-`ceil(pointCount / (C * R))`. Channels are normalized cell centers. Grid → Columns
-and Rows per Slice set these dimensions; 0 means automatic, and Reset restores
-both to automatic. Automatic 3D dimensions form a roughly cubic volume. The last
-row or slice can be partial; no selected bytes or points are discarded to fill it.
-
-Column, Row, and Slice can also be used independently in mapped position or
-appearance expressions. Mapped layouts generate a 3D linear grid in a 3D space,
-or when rows per slice is explicitly set. Otherwise Slice is the sole plane's
-center, 0.5. Hilbert arrangements choose their own power-of-two dimensions and do
-not use the linear-grid stride overrides.
-
-Sample limits do not renumber population indices or reflow the full grid. Layout
-changes do not switch the byte sampling policy or reorder the input to FFT,
-entropy, or occurrence providers. The sampling policy is an independent profile
-field (`average` or `representative`); text always uses representative bytes.
-
-Editing a position factor in the menu selects Mapped Coordinates. Switching back
-to Mapped Coordinates without editing restores the stored manual mappings.
-Explicit `Hilbert(Position).X/Y` and `Hilbert3D(Point Index).X/Y/Z` expressions
-remain available for channel-specific transforms. Use `layout: 'mapped'` when
-setting such position recipes programmatically.
+Ranges, grid capacity, and the sample budget do not narrow the committed byte
+selection. Statistics still use the full selected interval. Truncation only
+filters prepared marks; it does not change histogram/FFT input. Sampling is
+independent (`average` or `representative`), and text uses representative bytes.
 
 ## Point populations and mixed analyses
 

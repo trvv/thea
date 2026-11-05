@@ -4,7 +4,7 @@
  * @module point-factors
  * @see docs/recipes.md
  */
-import { pointGrid, gridCoordinates } from './arrangements.js';
+import { pointGrid, gridCoordinates } from './dimensions.js';
 import { compileRecipes, recipeRoots } from './recipes.js';
 import { factorCount, factorIndices as slots } from './factors.js';
 import { occurrenceFactor } from './appearance.js';
@@ -96,12 +96,12 @@ export async function pointFactors(job, appearance, cache, current, helpers, com
  if (!current()) return null;
  const { columns, rows } = job.sampleLayout;
  const offsets = populationOffsets(job, bytes, cache);
- const available = offsets ? offsets.length : population === 'bins' ? bins : Math.min(job.length,columns * rows);
- const limit = config.sampleLimit === null ? Infinity : config.sampleLimit ?? defaultSampleLimit;
- const count = Math.min(available, limit);
- const layout = used.has('column') || used.has('row') || used.has('slice');
- const pointCount=population==='bytes'?job.length:available;
+ const available = offsets ? offsets.length : population === 'bins' ? bins : job.length;
+ const pointCount=available;
  const grid=pointGrid(config,pointCount,job.sampleLayout),coordinates=new Float64Array(3);
+ const limit = config.sampleLimit === null ? Infinity : config.sampleLimit ?? defaultSampleLimit;
+ const count = Math.min(available,limit,columns*rows,grid.columns*grid.rows*grid.slices);
+ const layout = used.has('column') || used.has('row') || used.has('slice');
  const text = job.shaders.includes('character') || job.shaders.includes('hex');
  const values = new Float64Array(Math.max(factorCount,program.factorCount));
  const context={offset:0,length:job.length,pointIndex:0,pointCount,grid:[grid.columns,grid.rows,grid.slices],
@@ -129,7 +129,8 @@ export async function pointFactors(job, appearance, cache, current, helpers, com
    values[slots.position] = sample / Math.max(1, job.length - 1);
    const pointIndex=population==='bytes'?sample:index;
    if(layout) {
-    gridCoordinates(pointIndex,grid,config.layout,coordinates);
+    const cellIndex=available>grid.columns*grid.rows*grid.slices?Math.floor(i*grid.columns*grid.rows*grid.slices/count):pointIndex;
+    gridCoordinates(cellIndex,grid,coordinates);
     values[slots.column]=coordinates[0];values[slots.row]=coordinates[1];values[slots.slice]=coordinates[2];
    }
    if (used.has('byte2')) values[slots.byte2] = (bytes[sample + 1] ?? 0) / 255;

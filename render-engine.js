@@ -92,8 +92,8 @@ export class RenderEngine {
 	 * Measure completion from job start, excluding pending-queue wait, and defer feedback to avoid
 	 * re-entering presentation.
 	 */
-	reportFrame(request) {
-		const frame = { job: request.job, duration: performance.now() - request.started };
+	reportFrame(request, metrics) {
+		const frame = { job: request.job, duration: performance.now() - request.started, dimensions: metrics?.dimensions };
 		queueMicrotask(() => this.onFrame?.(frame));
 	}
 
@@ -153,7 +153,7 @@ export class RenderEngine {
 			if (result) {
 				this.measure(request.job, result.duration, result.work);
 				this.presented = Math.max(this.presented, request.id);
-				this.reportFrame(request);
+				this.reportFrame(request, result);
 			}
 			request.resolve(Boolean(result));
 		} catch (error) { request.reject(error); }
@@ -186,7 +186,7 @@ export class RenderEngine {
 	 * Present only compatible frames and close every transferred bitmap, including stale ones, before
 	 * starting the latest pending job.
 	 */
-	finish({ id, bitmap, duration, work, error }) {
+	finish({ id, bitmap, duration, work, dimensions, error }) {
 		if (error) { this.failed(); return; }
 		const request = this.active;
 		if (!request || request.id !== id) { bitmap?.close(); return; }
@@ -201,7 +201,7 @@ export class RenderEngine {
 				context.clearRect(0, 0, bitmap.width, bitmap.height);
 				context.drawImage(bitmap, 0, 0);
 				this.presented = id;
-				this.reportFrame(request);
+				this.reportFrame(request, { dimensions });
 			}
 			request.resolve(present);
 		} catch (error) { request.reject(error); }

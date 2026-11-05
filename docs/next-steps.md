@@ -4,11 +4,11 @@ These are proposals following the pipeline improvements in `77148df`, not a list
 of features already implemented. The [pipeline contracts](pipeline.md) describe
 current behavior; the [roadmap](roadmap.md) gives the broader direction.
 
-Implemented since this proposal: Layout is now an explicit mapped/linear/Hilbert
-arrangement in 2D/3D, Column/Row/Slice support grid strides, and profile version 2
-includes these settings with version 1 migration. See [pipeline contracts](pipeline.md)
-for the current behavior. The remaining proposals below retain their original
-priority rationale.
+Implemented since this proposal: the global Layout layer has been removed.
+Presets declare coordinate mappings; each dimension has ranges/steps, Scale or
+Truncate, and independent Fit (on by default). Profile version 3 migrates the
+previous arrangement settings. See [dimensions](dimensions.md) for the current
+model. The proposals below retain their original priority rationale.
 
 The guiding constraint is composability: point population determines which marks
 exist, while each analysis keeps its own scope and sampling relationship. Byte,

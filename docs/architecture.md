@@ -88,7 +88,8 @@ renderers. There are two deliberate paths:
 Reading `view.pointConfiguration` synthesizes preset intent without switching
 paths. Assigning it switches to the general path. Assigning an appearance
 expression or a source unsupported by the native preset also promotes the view.
-The native paths retain useful specialized caches. Promotion preserves the preset
+The native paths retain useful specialized caches. The app’s Hilbert preset
+uses explicit coordinate recipes through the general pipeline. Promotion preserves the preset
 point population (pairs, triples, bins, or bytes), but aggregation-to-pixel color and
 edge behavior can still differ from a native painter.
 See [selection semantics](data-selection.md#presets-and-general-points-are-not-the-same-sample-domain).
@@ -106,8 +107,11 @@ view.pointConfiguration = {
   sampleLimit: 262144, // null explicitly requests all samples
   footprint: 'point',
   backend: 'cpu', // or 'webgl', with capability/context-loss fallback
-  layout: 'mapped', // manual position recipes; linear/linear3d/hilbert/hilbert3d arrange points
-  grid: {columns: 0, rows: 0}, // zero selects automatic dimensions
+  dimensions: {
+    width: {start: 0, end: 16, step: 1, mode: 'scale', fit: true},
+    height: {start: 0, end: 8, step: 1, mode: 'scale', fit: true},
+    depth: {start: 0, end: 4, step: 1, mode: 'scale', fit: true}
+  }
   sampling: 'average',
   space: 'cube',
   position: ['value', 'byte2', 'entropy'],
@@ -120,10 +124,9 @@ view.appearance = {
 };
 ```
 
-Layout selects either stored position mappings (`mapped`) or generated
-Column/Row[/Slice] channels. Arrangements preserve the stored mappings for later
-restoration; a menu axis edit snapshots the effective channels and switches to
-Mapped Coordinates.
+Position recipes always determine coordinates. Each dimension then applies its
+Scale/Truncate mode and Fit setting before space conversion. No arrangement mode
+overrides or stores a second set of position mappings.
 
 There are always three stored position mappings. A 2D space hides the third and
 its dependency is not evaluated. Repeated mappings and constants are allowed;
@@ -142,7 +145,7 @@ axis, and shader getters return owned snapshots.
 | Module | Why it exists |
 | --- | --- |
 | `main.js`, `bootstrap.js` | Reusable DOM components and separate demo loader. |
-| `arrangements.js` | Effective layout mappings and population-indexed 2D/3D grid coordinates. |
+| `dimensions.js` | Per-axis ranges, natural defaults, grid cells, Scale/Truncate, and Fit. |
 | `populations.js`, `profiles.js` | Point populations/sample budgets and versioned profile JSON. |
 | `render-identity.js` | Shared preparation/presentation/quality setting identity. |
 | `histograms.js`, `spectrum.js` | Statistical preparation shared by native painters and general providers. |

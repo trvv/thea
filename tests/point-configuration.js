@@ -17,10 +17,10 @@ for(const space of Object.keys(spaces)){
  if(space==='circle')assert(Math.abs(Math.hypot(xyz[0],xyz[1])-0.25)<1e-12);
  if(space==='sphere')assert(Math.abs(Math.hypot(...xyz)-0.25)<1e-12);
 }
-const repeated={...presetConfiguration('trigraph'),layout:'mapped',position:['count','count','none']};
+const repeated={...presetConfiguration('trigraph'),position:['count','count','none']};
 assert.deepEqual(validateConfiguration(repeated).position,repeated.position,'Factors may be assigned more than once');
-assert.deepEqual(validateConfiguration({...repeated,layout:'mapped',position:['entropy','phase','byte3']}).position,['entropy','phase','byte3']);
-assert.throws(()=>validateConfiguration({...repeated,layout:'mapped',position:['unknown','byte2','byte3']}));
+assert.deepEqual(validateConfiguration({...repeated,position:['entropy','phase','byte3']}).position,['entropy','phase','byte3']);
+assert.throws(()=>validateConfiguration({...repeated,position:['unknown','byte2','byte3']}));
 assert.throws(()=>validateConfiguration({...repeated,space:'unknown'}));
 for(const region of ['linear','hilbert','digraph','trigraph','dft'])for(const space of Object.keys(spaces)){
  const configuration={...presetConfiguration(region),space};
@@ -39,7 +39,7 @@ for(const region of ['linear','hilbert','digraph','trigraph','dft'])for(const sp
  const moved={...job,offset:32};
  await executeRender(canvas,moved,cache);await executeRender(fresh,moved);
  assert.deepEqual(canvas.pixels,fresh.pixels,`${region}/${space} sliding cache differs`);
- const different={...configuration,layout:'mapped',position:[available.at(-1),available[1],'none']};
+ const different={...configuration,position:[available.at(-1),available[1],'none']};
  await executeRender(canvas,{...job,configuration:different},cache);
  assert.notDeepEqual(canvas.pixels,first,`${region}/${space} positions ignored`);
 }

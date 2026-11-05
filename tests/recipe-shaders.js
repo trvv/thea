@@ -7,6 +7,7 @@ import { compileRecipes, constant, hilbertCoordinate, hilbert3DCoordinate } from
 import { emitRecipeShader } from '../recipe-shaders.js';
 const fixtures=[];
 const cases={
+ exactHilbert2D:{x:hilbertCoordinate(0,{op:'pointIndex'}),y:hilbertCoordinate(1,{op:'pointIndex'}),z:constant(0),w:constant(1)},
  gridFactors:{x:'column',y:'row',z:'slice',w:constant(1)},
  autoHilbert:{x:hilbertCoordinate(0),y:hilbertCoordinate(1),z:'value',w:constant(1)},
  hilbert3D:{x:hilbert3DCoordinate(0),y:hilbert3DCoordinate(1),z:hilbert3DCoordinate(2),w:constant(1)},

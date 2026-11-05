@@ -25,7 +25,7 @@ Tests are executable Bun scripts using assertions, not a `bun test` discovery
 suite. Run from the repository root:
 
 ```sh
-for test in recipes recipe-shaders hilbert arrangements pipeline point-factors point-configuration appearance \
+for test in recipes recipe-shaders hilbert dimensions pipeline point-factors point-configuration appearance \
   data-scroll context-menu render-engine render-thread-smoke trigraph \
   trigraph-opacity coordinates adaptive-resolution scroll-performance digraph fourier
 do
@@ -72,7 +72,7 @@ permission to launch processes and bind a local port in restricted environments.
 | `trigraph`, `trigraph-opacity` | Sliding tuple boundaries, exact incremental/fresh equivalence, owner repair, soft edges, projection, white opacity updates. |
 | `coordinates`, `point-configuration` | Coordinate conventions, repeated mappings, all spaces, sample/camera/raster cache boundaries. |
 | `point-factors` | Laziness, exact neighbors, entropy/histogram/FFT reuse, hidden axes, selection boundaries, empty/short inputs. |
-| `arrangements` | Column/Row/Slice strides, layout placement across populations, unchanged sampling, 3D mark sizing, and profile migration. |
+| `dimensions` | Ranges/cell counts, Scale/Truncate, independent Fit, Cartesian/radial domains, coordinate presets, and profile migration. |
 | `hilbert` | True 3D Hilbert orientation, exhaustive small-cube uniqueness/adjacency, exact large indices, vec3 sharing, menu deduplication, and population semantics. |
 | `recipes` | Typed DAGs, sharing, named references, cycle/type limits, menu edits, configurable entropy, serialization, shader emission. |
 | `recipe-shaders` | Representative generated GLSL compiled, linked, executed, and compared against CPU results; WGSL structural generation checks. |
@@ -147,7 +147,7 @@ bytes silently, or shrinking source selections along with the raster.
 | Navigation and the bar disagree | Root-relative view offsets versus parent-local bar offsets. |
 | Selection drifts during resize | Lost `anchorEnd`, snapping from committed rather than requested length, or raster dimensions used as sample columns. |
 | Repeated Hilbert cells | Square-fill sampling can repeat representative bytes; inspect sampling before blaming source duplication. |
-| A manual position recipe seems inactive | Programmatic manual mappings require `layout: "mapped"`; menu axis edits select it automatically. |
+| Changing a range leaves a point cloud in place | Scale with Fit on cancels geometrically; use Truncate for a domain window or turn Fit off to change occupied extent. |
 | Raw preset-like output looks different | Native tuple/bin aggregation and raw byte-offset points are different sample domains. |
 | Expression mostly saturates | Raw `byte` gives 0–255; built-ins are normalized; final outputs clamp to 0–1. |
 | Neighbor access is inaccurate far into a large selection | Keep address arithmetic in index operations; visual float32 operations can still lose precision. Shader indices are signed 32-bit. |

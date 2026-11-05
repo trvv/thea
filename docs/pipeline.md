@@ -21,7 +21,6 @@ own normalized lookup input.
 view.pointConfiguration = {
   ...view.pointConfiguration,
   population: 'triples',
-  layout: 'mapped',
   position: ['value', 'byte2', 'byte3'],
   sampleLimit: 262144, // null explicitly requests all samples
   footprint: 'point', // 'grid' uses placement-cell dimensions, including perspective in 3D
@@ -47,40 +46,20 @@ are subsampled in population order. Byte values/entropy can average intervals;
 text and the representative sampling policy use actual bytes. Footprint is explicit so
 expression spelling cannot change mark size.
 
-## Layout and slicing
+## Dimensions
 
-```js
-view.applyLayout('linear3d'); // activates a cube if the current space is 2D
-view.pointConfiguration = {
-  ...view.pointConfiguration,
-  grid: {columns: 16, rows: 8}
-};
-```
-
-This advances columns every point, rows every 16 points, and slices every 128
-points. Dimensions of 0 select automatic sizing. The generated Slice factor can
-also control color, opacity, size, or a manually mapped position channel.
-
-Layout has five choices: `mapped`, `linear`, `linear3d`, `hilbert`, and `hilbert3d`.
-Arranged layouts supply effective positional channels without erasing stored
-manual mappings. Editing an axis in the menu switches to `mapped`; programmatic
-position recipes must also select `layout: 'mapped'`. Layout/stride changes keep
-the current population, sampling policy, and committed selected byte interval.
-They do not reorder provider input or change which statistical analysis runs.
-
-The grid is defined over unsampled population indices, so a sampling limit does
-not reflow it. Hilbert layouts generate power-of-two squares/cubes; linear layouts
-use the grid overrides, with partial final rows/slices retained. See
-[selection and sampling](data-selection.md#layout-and-strides) for coordinate and
-stride formulas.
+There is no Layout selector. Position recipes directly supply each coordinate;
+per-axis ranges, Scale/Truncate, and Fit control its domain and presentation.
+Width/Height/Depth or the space's radial channel names each expose Start/End/Step,
+Range Mode, Fit, and Reset Range. Every dimension defaults to Scale and Fit on.
+See [dimensions](dimensions.md) for semantics, cell counts, and configuration.
 
 ## Explicit 3D Hilbert traversal
 
 `hilbert3DCoordinate(axis)` supplies X/Y/Z projections from an exact Point Index.
 The default automatic order follows the full population count; the sample limit
 only chooses which indices are evaluated. A `hilbert3d` expression returns a shared
-vec3 and can feed any compatible scalar channel. It is independent of global
-Layout and the chosen display space. See [recipes](recipes.md#three-dimensional-hilbert-coordinates)
+vec3 and can feed any compatible scalar channel. It is independent of other position mappings and the chosen display space. See [recipes](recipes.md#three-dimensional-hilbert-coordinates)
 for normalized versus integer inputs, order limits, and a complete configuration.
 
 ## Profiles
@@ -93,15 +72,13 @@ view.importProfile(localStorage.getItem('thea-profile'));
 ```
 
 The host chooses storage and names. `profiles.js` also exports `serializeProfile`
-and `parseProfile`. Version 2 includes layout, grid strides, population, sample
+and `parseProfile`. Version 3 includes dimension ranges/flags, population, sample
 policy, geometry, appearance, definitions, text/compatibility settings, camera, and backend. Source
 URLs and selected ranges are session state and excluded. Imports validate before
-replacing state. Version 1 profiles migrate to version 2: custom axis mappings
-select Mapped Coordinates, while canonical Column/Row mappings retain their
-linear/Hilbert arrangement. Legacy Hilbert sampling retains the representative
-policy. General placement/sampling conventions have changed; migration preserves
-settings intent rather than guaranteeing identical legacy raster pixels. Exported
-profiles and public settings are owned snapshots.
+replacing state. Versions 1 and 2 are migrated: former arrangements become
+explicit position recipes and grid counts become ranges. Exported profiles and
+public settings are owned snapshots. Migration preserves intent, with legacy
+raster differences documented in [dimensions](dimensions.md#hilbert-and-profiles).
 
 ## Execution boundaries
 

@@ -85,7 +85,7 @@ editor.items.find(item=>item.label==='Order').action(4);assert.equal(edited.inpu
 let reads=0;class Source extends Blob{slice(...args){reads++;return super.slice(...args);}}
 const source=new Source([Uint8Array.from({length:512},(_,i)=>i%7)]);
 const base={kind:'view',source,offset:0,length:64,region:'linear',shaders:[],columns:64,rows:48,width:64,height:48,scale:1,pointScale:1,
- sampleLayout:{columns:8,rows:8},configuration:{...presetConfiguration('linear'),space:'cube',footprint:'point',layout:'mapped',position:Object.values(roots)}};
+ sampleLayout:{columns:8,rows:8},configuration:{...presetConfiguration('linear'),space:'cube',footprint:'point',position:Object.values(roots)}};
 const appearance={...defaultAppearance('linear'),hue:'none',lightness:'none'},helpers={entropyShading,hilbertCells,byteCharacter};
 for(const population of ['bytes','bins','pairs','triples']){
  const job={...base,configuration:{...base.configuration,population}};

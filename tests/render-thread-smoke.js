@@ -63,7 +63,7 @@ try {
 		assert.deepEqual(canvas.pixels,expected.pixels,`${region}/${space} worker mismatch`);
 	}
 	for (const space of Object.keys(spaces)) {
-		const configuration={...presetConfiguration('linear'),space,layout:'mapped',position:['value','byte2','entropy']};
+		const configuration={...presetConfiguration('linear'),space,position:['value','byte2','entropy']};
 		const appearance={...defaultAppearance('linear'),hue:'phase',lightness:'amplitude',opacity:'pairCount',size:'byte3'};
 		const spec={...job,configuration,appearance,length:512,columns:64,rows:48,sampleLayout:{columns:32,rows:16}};
 		assert.equal(await engine.render(spec),true); await executeRender(expected,spec);
@@ -72,23 +72,24 @@ try {
 	const neighbor={op:'normalize',min:0,max:255,input:{op:'byte',offset:{op:'add',a:{op:'offset'},b:{op:'constant',value:1}}}};
 	for(const space of Object.keys(spaces)) {
 		const coordinate=component=>({op:'component',component,input:{op:'hilbert',input:'position',order:5}});
-		const configuration={...presetConfiguration('linear'),space,layout:'mapped',position:[coordinate(0),coordinate(1),'position'],recipes:{neighbor}};
+		const configuration={...presetConfiguration('linear'),space,position:[coordinate(0),coordinate(1),'position'],recipes:{neighbor}};
 		const appearance={...defaultAppearance('linear'),hue:{op:'entropy',offset:{op:'offset'},window:64},lightness:{op:'ref',name:'neighbor'},opacity:{op:'invert',input:{op:'ref',name:'neighbor'}}};
 		const spec={...job,configuration,appearance,length:1024,columns:64,rows:48,sampleLayout:{columns:32,rows:32}};
 		assert.equal(await engine.render(spec),true);await executeRender(expected,spec);
 		assert.deepEqual(canvas.pixels,expected.pixels,`Recipe ${space} worker mismatch`);
 	}
  for(const population of ['bytes','bins','triples']) {
-  const configuration={...presetConfiguration('linear'),space:'cube',footprint:'point',population,layout:'mapped',position:[0,1,2].map(axis=>hilbert3DCoordinate(axis))};
+  const configuration={...presetConfiguration('linear'),space:'cube',footprint:'point',population,position:[0,1,2].map(axis=>hilbert3DCoordinate(axis))};
   const spec={...job,region:'linear',configuration,length:512,columns:64,rows:48,sampleLayout:{columns:32,rows:16},appearance:{...defaultAppearance('linear'),hue:'phase'}};
   assert.equal(await engine.render(spec),true);await executeRender(expected,spec);
   assert.deepEqual(canvas.pixels,expected.pixels,`3D Hilbert ${population} worker mismatch`);
  }
- for(const population of ['bytes','bins','triples'])for(const layout of ['linear3d','hilbert3d']) {
-  const configuration={...presetConfiguration('trigraph'),population,layout,footprint:'grid',grid:{columns:4,rows:3}};
-  const spec={...job,region:'trigraph',configuration,length:64,columns:64,rows:48,sampleLayout:{columns:8,rows:8},appearance:{...defaultAppearance('linear'),hue:'slice'}};
+ for(const population of ['bytes','bins','triples'])for(const mode of ['scale','truncate']) {
+  const configuration={...presetConfiguration('linear'),space:'cube',population,position:['column','row','slice'],footprint:'grid',
+   dimensions:{width:{start:0,end:4,step:1,fit:true,mode},height:{start:0,end:3,step:1,fit:true,mode},depth:{start:0,end:6,step:1,fit:true,mode}}};
+  const spec={...job,region:'linear',configuration,length:64,columns:64,rows:48,sampleLayout:{columns:8,rows:8},appearance:{...defaultAppearance('linear'),hue:'slice'}};
   assert.equal(await engine.render(spec),true);await executeRender(expected,spec);
-  assert.deepEqual(canvas.pixels,expected.pixels,`${population}/${layout} slice worker mismatch`);
+  assert.deepEqual(canvas.pixels,expected.pixels,`${population}/${mode} range worker mismatch`);
  }
 	const prime = { ...job, region: 'dft', length: 65537, columns: 513, rows: 129 };
 	assert.equal(await engine.render(prime), true);

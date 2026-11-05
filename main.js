@@ -5,7 +5,7 @@
  * @see docs/architecture.md
  * @see docs/data-selection.md
  */
-import { layoutOptions, positionMappings, pointGrid } from './arrangements.js';
+import { dimensionNames, defaultDimension, pointGrid } from './dimensions.js';
 import { validateProfile, parseProfile } from './profiles.js';
 import { settingsKey } from './render-identity.js';
 import { limitedSampleLayout, populations } from './populations.js';
@@ -377,7 +377,12 @@ export class DataScrollView extends ByteCanvas {
 		super();
 		this.rotation = { yaw: -0.6, pitch: 0.45 };
 		this.resolution = new AdaptiveResolution();
-		this.renderer.onFrame = ({ job, duration }) => {
+		this.renderer.onFrame = ({ job, duration, dimensions }) => {
+			if (dimensions && job.source === this.source && job.offset === this.offset && job.length === this.length
+				&& settingsKey(job) === settingsKey({ ...job, ...this.renderSettings(), sampleLayout: this.resolvedSampleLayout })) {
+				this.dimensionFrame = { source: job.source, offset: job.offset, length: job.length,
+					key: JSON.stringify(job.configuration), values: dimensions };
+			}
 			if (!this.spatial || !job.interacting
 				|| job.source !== this.source || job.width !== this.clientWidth || job.height !== this.clientHeight || job.scale !== (globalThis.devicePixelRatio || 1)
 				|| settingsKey(job) !== settingsKey({...job,...this.renderSettings(),sampleLayout:this.resolvedSampleLayout})) return;
@@ -525,6 +530,7 @@ export class DataScrollView extends ByteCanvas {
 	set pointConfiguration(value) {
 		const configuration = validateConfiguration({...value,recipes:value.recipes??this._recipes});
 		validateAppearance(this.region,this.effectiveAppearance,configuration.recipes);
+  pointGrid(configuration,this.length||1,this.resolvedSampleLayout);
 		this._recipes=configuration.recipes;
 		this._pointConfiguration = configuration;
 		this.resetResolution(); this.cancelRotationRender(); this.rotationDrag = null;
@@ -539,13 +545,6 @@ export class DataScrollView extends ByteCanvas {
 		if (this.version === version) this.render();
 	}
 
-	/** Arrangement changes preserve stored manual mappings and point population. */
-	applyLayout(layout) {
-		if (!layoutOptions.some(option => option.value === layout)) throw new TypeError('Unknown layout');
-		const configuration = this.pointConfiguration;
-		this.pointConfiguration = { ...configuration, layout,
-			space: layout.endsWith('3d') && spaces[configuration.space].length === 2 ? 'cube' : configuration.space };
-	}
 
 	/**
 	 * Validate the entire definition set to catch indirect cycles; unused definitions should not force
@@ -564,13 +563,21 @@ export class DataScrollView extends ByteCanvas {
 	 */
 	get resolvedSampleLayout() {
   const layout = this.sampleLayout(this.windowLayout ? this.requestedLength : this.length || 1, this.windowLayout?.limit ?? this.source?.size ?? 1);
-  return this._pointConfiguration ? limitedSampleLayout(layout, this._pointConfiguration) : layout;
+  return this.usesPoints ? limitedSampleLayout(layout, this.pointConfiguration) : layout;
  }
 	/**
 	 * Byte row steps follow the placement grid; other populations navigate the source sample grid.
 	 */
+	get dimensionRanges() {
+		const configuration = this.pointConfiguration, frame = this.dimensionFrame;
+		if (frame?.source === this.source && frame.offset === this.offset && frame.length === this.length
+			&& frame.key === JSON.stringify(configuration)) return structuredClone(frame.values);
+		const count = configuration.population === 'bins' ? Math.floor((this.length || 0) / 2) + 1 : this.length || 1;
+		return pointGrid(configuration, count, this.resolvedSampleLayout).dimensions;
+	}
+
 	get navigationGrid() {
-		const configuration = this._pointConfiguration;
+		const configuration = this.usesPoints ? this.pointConfiguration : undefined;
 		return configuration?.population === 'bytes'
 			? pointGrid(configuration, this.length, this.resolvedSampleLayout) : this.resolvedSampleLayout;
 	}
@@ -581,6 +588,7 @@ export class DataScrollView extends ByteCanvas {
 	 * Determine rotation and quality behavior from the chosen space, not from the historical trigraph
 	 * preset name.
 	 */
+	get usesPoints() { return Boolean(this._pointConfiguration) || this.region === 'hilbert'; }
 	get spatial() { return spaces[this.pointConfiguration.space].length === 3; }
 	/**
 	 * Reset a complete visualization profile while retaining named recipes; it is different from the
@@ -735,7 +743,7 @@ export class DataScrollView extends ByteCanvas {
 	 */
 	layout(requestedLength, size = this.source?.size ?? requestedLength) {
 		const sample = this.sampleLayout(requestedLength, size);
-		if (!this._pointConfiguration) return sample;
+		if (!this.usesPoints) return sample;
 		const scale = globalThis.devicePixelRatio || 1;
 		return { columns: Math.max(1, Math.round(this.clientWidth * scale)), rows: Math.max(1, Math.round(this.clientHeight * scale)), length: sample.length };
 	}
@@ -746,21 +754,18 @@ export class DataScrollView extends ByteCanvas {
 	 */
 	sampleLayout(requestedLength, size = this.source?.size ?? requestedLength) {
 		const length = Math.min(size, Math.max(1, Math.round(requestedLength)));
-		if (!this._pointConfiguration && this.region === 'trigraph') {
+		if (!this.usesPoints && this.region === 'trigraph') {
 			const scale = globalThis.devicePixelRatio || 1;
 			return { columns: Math.max(1, Math.round(this.clientWidth * scale)), rows: Math.max(1, Math.round(this.clientHeight * scale)), length };
 		}
-		if (!this._pointConfiguration && this.region === 'dft') return { columns: 513, rows: Math.max(1, Math.min(1024, Math.round(this.clientHeight * (globalThis.devicePixelRatio || 1)))), length };
-		if (!this._pointConfiguration && this.region === 'digraph') return { columns: 256, rows: 256, length };
-		if (!this._pointConfiguration && this.region === 'hilbert') {
-			const side = 2 ** Math.ceil(Math.log2(Math.sqrt(Math.max(1, length))));
-			return { columns: side, rows: side, length };
-		}
+		if (!this.usesPoints && this.region === 'dft') return { columns: 513, rows: Math.max(1, Math.min(1024, Math.round(this.clientHeight * (globalThis.devicePixelRatio || 1)))), length };
+		if (!this.usesPoints && this.region === 'digraph') return { columns: 256, rows: 256, length };
+
 		const aspect = this.shaders.includes('hex') ? 1.2 : this.shaders.includes('character') ? 0.6 : 1;
 		const ratio = Math.max(1, this.clientWidth) / (Math.max(1, this.clientHeight) * aspect);
 		const columns = clamp(Math.round(Math.sqrt(length * ratio)), 1, Math.max(1, length));
-		const rows = this._pointConfiguration ? Math.max(1,Math.ceil(length/columns)) : clamp(this.wholeBuffer ? Math.floor(length / columns) : Math.round(length / columns), 1, Math.max(1, Math.floor(size / columns)));
-		return { columns, rows, ...(this._pointConfiguration?{aspect:ratio}:{}), length: this._pointConfiguration || this.wholeBuffer ? length : size ? columns * rows : 0 };
+		const rows = this.usesPoints ? Math.max(1,Math.ceil(length/columns)) : clamp(this.wholeBuffer ? Math.floor(length / columns) : Math.round(length / columns), 1, Math.max(1, Math.floor(size / columns)));
+		return { columns, rows, ...(this.usesPoints?{aspect:ratio}:{}), length: this.usesPoints || this.wholeBuffer ? length : size ? columns * rows : 0 };
 	}
 
 	/**
@@ -781,7 +786,7 @@ export class DataScrollView extends ByteCanvas {
 
 	/** Return an owned, versioned profile; source/ranges belong to the host session. */
 	exportProfile() {
-		return validateProfile({ version: 2, ...this.renderSettings(), recipes: this._recipes || {}, rotation: this.rotation });
+		return validateProfile({ version: 3, ...this.renderSettings(), recipes: this._recipes || {}, rotation: this.rotation });
 	}
 
 	/** Validate everything before replacing state; an invalid import is atomic. */
@@ -808,7 +813,7 @@ export class DataScrollView extends ByteCanvas {
 	}
 
 	renderSettings() {
-		return { configuration: this._pointConfiguration, region: this.region, shaders: this.shaders, appearance: this.appearance,
+		return { configuration: this._pointConfiguration || (this.region==='hilbert'?this.pointConfiguration:undefined), region: this.region, shaders: this.shaders, appearance: this.appearance,
 			frequencyOpacity: this.frequencyOpacity, coordinateSystem: this.coordinateSystem, axes: this.axes,
 			encoding: this.encoding, blankSpaces: this.blankSpaces, blankNulls: this.blankNulls };
 	}
@@ -1149,7 +1154,7 @@ export class DataScroll extends HTMLElement {
 	 */
 	contextItems() {
 		const view = this.view, config = view.pointConfiguration;
-		const positionMappingsForView=positionMappings(config);
+		const ranges=view.dimensionRanges;
 		const definitions=config.recipes||{};
 		const save = expression => {
 			const name=globalThis.prompt?.('Factor name');
@@ -1159,6 +1164,19 @@ export class DataScroll extends HTMLElement {
 		const change = patch => { view.pointConfiguration = { ...view.pointConfiguration, ...patch }; this.refreshMenu(); };
 		const choose = (label, value, options, action) => ({ label, value, options, action });
 		const options = values => values.map(value => ({ value, label: value[0].toUpperCase() + value.slice(1) }));
+		const dimensionItems = index => {
+			const name = dimensionNames[index], range = config.dimensions[name], resolved = ranges[name];
+			const update = patch => change({ dimensions: { ...config.dimensions, [name]: { ...range, ...patch } } });
+			return [
+				...['start', 'end', 'step'].map(field => ({
+					label: field[0].toUpperCase() + field.slice(1) + (resolved.unit ? ' (°)' : ''),
+					input: 'number', step: 'any', value: resolved[field], action: value => update({ [field]: value })
+				})),
+				choose('Range Mode', range.mode, [{ value: 'scale', label: 'Scale' }, { value: 'truncate', label: 'Truncate' }], mode => update({ mode })),
+				{ label: 'Fit', kind: 'checkbox', checked: range.fit, action: () => update({ fit: !range.fit }) },
+				{ label: 'Reset Range', action: () => update(defaultDimension()) }
+			];
+		};
 		const text = view.shaders.includes('hex') ? 'hex' : view.shaders.includes('character') ? 'character' : 'none';
 		return [
 			{ label: 'Bars', input: 'number', min: 0, value: this.barCount, action: value => { this.barCount = value; } },
@@ -1171,19 +1189,12 @@ export class DataScroll extends HTMLElement {
 				{ label: 'Sample Limit', input: 'number', min: 1, max: 16777216, value: config.sampleLimit ?? 262144, action: sampleLimit => change({ sampleLimit }) },
 				choose('Backend', config.backend, [{value:'cpu',label:'CPU'},{value:'webgl',label:'WebGL'}], backend => change({ backend })),
 				choose('Footprint', config.footprint, options(['grid','point']), footprint => change({ footprint })),
-			choose('Layout', config.layout, layoutOptions, layout => { view.applyLayout(layout); this.refreshMenu(); }),
-			...(['mapped', 'linear', 'linear3d'].includes(config.layout) ? [{ label: 'Grid', items: [
-				{ label: 'Columns', input: 'number', min: 0, max: 65536, value: config.grid.columns,
-					action: columns => change({ grid: { ...config.grid, columns } }) },
-				...(config.layout === 'linear' ? [] : [{ label: 'Rows per Slice', input: 'number', min: 0, max: 65536, value: config.grid.rows,
-					action: rows => change({ grid: { ...config.grid, rows } }) }]),
-				{ label: 'Reset', action: () => change({ grid: { columns: 0, rows: 0 } }) }
-			] }] : []),
 			choose('Space', config.space, options(Object.keys(spaces)), space => change({ space })),
 			{ label: 'Position', items: spaces[config.space].map((label, index) => ({ label, items: [
-				edit('Factor', positionMappingsForView[index], factor => {
-					const position = [...positionMappingsForView]; position[index] = factor; change({ layout:'mapped',position });
+				edit('Factor', config.position[index], factor => {
+					const position = [...config.position]; position[index] = factor; change({ position });
 				}),
+				...dimensionItems(index),
 				{ label: 'Invert', kind: 'checkbox', checked: config.inverted[index], action: () => {
 					const inverted = [...config.inverted]; inverted[index] = !inverted[index]; change({ inverted });
 				} }
