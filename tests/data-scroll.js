@@ -184,3 +184,23 @@ if(scroll.view.length!==1031||scroll.view.offset!==0)throw Error('New source not
 scroll.source=new Blob();
 if(scroll.view.length!==0||scroll.levels.some(level=>level.length!==0||level.offset!==0))throw Error('Empty source failed');
 console.log('Nested bar checks pass: default count, visual order, narrowing scopes, exact source bytes, movement, resizing, anchored edge, clamping, add/remove, shared menu, zero-bar full buffer, resize, invalid counts, empty source.');
+
+// Profiles survive JSON and validate atomically; public settings are owned snapshots.
+const profileView=scroll.view;
+profileView.applyPreset('trigraph');
+profileView.appearance={...profileView.effectiveAppearance,lightness:{op:'factor',name:'tripleCount'}};
+if(profileView.pointConfiguration.population!=='triples')throw Error('Recipe promotion discarded tuple population');
+profileView.pointConfiguration={...profileView.pointConfiguration,sampleLimit:17};
+profileView.setFactor('Neighbor',{op:'byte',offset:{op:'offset'}});
+const profile=profileView.exportProfile(),json=JSON.stringify(profile);
+profileView.applyPreset('dft');profileView.importProfile(json);
+if(JSON.stringify(profileView.exportProfile())!==json)throw Error('Profile JSON round trip differs');
+for(const patch of [{version:99},{rotation:{yaw:NaN,pitch:0}},{configuration:{...profile.configuration,sampleLimit:0}},{recipes:{bad:{op:'ref',name:'bad'}}},{axes:[0,0,0]}]){
+ let rejected=false;try{profileView.importProfile({...profile,...patch});}catch{rejected=true;}
+ if(!rejected||JSON.stringify(profileView.exportProfile())!==json)throw Error('Invalid profile was accepted or mutated state');
+}
+const snapshot=profileView.pointConfiguration;snapshot.recipes.Neighbor={op:'constant',value:0};snapshot.position[0]='none';
+const appearanceSnapshot=profileView.appearance;appearanceSnapshot.lightness='none';
+const shadersSnapshot=profileView.shaders;shadersSnapshot.push('hex');
+if(JSON.stringify(profileView.exportProfile())!==json)throw Error('Public getter exposed mutable state');
+console.log('Profile checks pass: durable JSON, population preservation, atomic rejection, owned configuration/appearance/flags.');

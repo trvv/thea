@@ -4,6 +4,7 @@
  * @module render-engine
  * @see docs/rendering.md
  */
+import { settingsKey, preparationKey, presentationKey } from './render-identity.js';
 import { executeRender, renderCost } from './rendering.js';
 
 /**
@@ -106,13 +107,11 @@ export class RenderEngine {
 		const latest = this.latest;
 		// During scrolling, present completed frames in order instead of waiting
 		// indefinitely for a request with no newer pointer event behind it.
-		if (request.job.progressive && latest?.progressive && request.job.kind === 'view' && latest.kind === 'view'
-			&& ['appearanceKey', 'sourceId', 'region', 'columns', 'rows', 'encoding', 'blankSpaces', 'blankNulls', 'frequencyOpacity', 'coordinateSystem', 'pointScale'].every(key => request.job[key] === latest[key])
-			&& request.job.shaders.join() === latest.shaders.join() && request.job.axes?.join() === latest.axes?.join()) return true;
-		// Camera-only updates also work for standalone renderer clients.
-		return request.job.region === 'trigraph' && latest?.region === 'trigraph'
-			&& ['appearanceKey', 'sourceId', 'offset', 'length', 'columns', 'rows', 'frequencyOpacity', 'coordinateSystem', 'pointScale'].every(key => request.job[key] === latest[key])
-			&& request.job.axes?.join() === latest.axes?.join();
+		const compatible = latest && request.job.appearanceKey === latest.appearanceKey
+			&& (request.job.presentationKey ?? presentationKey(request.job)) === (latest.presentationKey ?? presentationKey(latest));
+		if (compatible && request.job.progressive && latest.progressive && request.job.kind === 'view') return true;
+		return compatible && request.job.region === 'trigraph' && latest.region === 'trigraph'
+			&& request.job.offset === latest.offset && request.job.length === latest.length;
 	}
 
 	/**
@@ -122,7 +121,13 @@ export class RenderEngine {
 	 */
 	render(job) {
 		if (!this.sourceIds.has(job.source)) this.sourceIds.set(job.source, ++this.sourceSerial);
-		job = { ...job, appearanceKey: JSON.stringify([job.configuration, job.sampleLayout, job.appearance]), sourceId: this.sourceIds.get(job.source) };
+		// Own mutable settings so callers cannot change a local job after dispatch;
+		// Blob itself is immutable and keeps its identity for providers.
+		const { source, ...settings } = job;
+		job = { ...structuredClone(settings), source, sourceId: this.sourceIds.get(source) };
+		job.appearanceKey = settingsKey(job);
+		job.preparationKey = preparationKey(job);
+		job.presentationKey = presentationKey(job);
 		const id = ++this.version;
 		this.latest = job;
 		// One running worker job and one replaceable pending job per canvas.
@@ -235,6 +240,7 @@ export class RenderEngine {
 		this.active?.resolve(false);
 		this.pending?.resolve(false);
 		this.active = this.pending = null;
+		this.cache.pointGPU?.dispose?.();
 		this.cache = {};
 		this.offloaded.clear();
 	}

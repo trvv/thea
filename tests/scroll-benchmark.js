@@ -29,3 +29,34 @@ for(let frame=0;frame<9;frame++){
  if(frame>1)largeTimes.push(performance.now()-started);
 }
 largeTimes.sort((a,b)=>a-b);console.log('trigraph 1 MiB / 1024x768 steady scroll median ms:',largeTimes[3].toFixed(2));
+
+// General points: separate cold preparation, camera-only reuse, and scrolling.
+// Report retained mark/scratch buffers rather than unstable process-wide GC totals.
+const {presetConfiguration}=await import('../point-configuration.js');
+const {defaultAppearance}=await import('../appearance.js');
+for(const sampleLimit of [4096,65536]){
+ const pointCanvas=new RenderCanvas(),pointCache={};
+ const job={kind:'view',source,sourceId:1,offset:0,length:2**20,columns:512,rows:384,width:512,height:384,scale:1,pointScale:1,
+  region:'linear',shaders:[],sampleLayout:{columns:1024,rows:1024},
+  configuration:{...presetConfiguration('linear'),space:'cube',footprint:'point',sampleLimit,position:['value','byte2','byte3']},
+  appearance:{...defaultAppearance('linear'),hue:'value',lightness:'byte2',opacity:'pairCount'}};
+ let started=performance.now();await executeRender(pointCanvas,job,pointCache);const cold=performance.now()-started;
+ const camera=[],scroll=[];
+ for(let frame=0;frame<7;frame++){
+  started=performance.now();await executeRender(pointCanvas,{...job,rotation:{yaw:frame*0.05,pitch:0.45}},pointCache);
+  if(frame>1)camera.push(performance.now()-started);
+ }
+ for(let frame=0;frame<7;frame++){
+  started=performance.now();await executeRender(pointCanvas,{...job,offset:frame*1024},pointCache);
+  if(frame>1)scroll.push(performance.now()-started);
+ }
+ camera.sort((a,b)=>a-b);scroll.sort((a,b)=>a-b);
+ const points=pointCache.preparedPoints,raster=pointCache.pointRaster;
+ const storage=points.positions.byteLength+points.colors.byteLength+points.sizes.byteLength+raster.projected.byteLength+raster.order.byteLength+raster.image.data.byteLength;
+ console.log(`general ${sampleLimit} points: cold ${cold.toFixed(2)} ms, camera ${camera[2].toFixed(2)} ms, scroll ${scroll[2].toFixed(2)} ms, mark/raster buffers ${(storage/2**20).toFixed(2)} MiB`);
+}
+
+const hugeSource=new Blob([new Uint8Array(8*2**20)]),hugeCache={};
+const coldOverview=await executeRender(new RenderCanvas(),{kind:'bar',source:hugeSource,width:1,height:1},hugeCache);
+const coarseOverview=await executeRender(new RenderCanvas(),{kind:'bar',source:hugeSource,width:2,height:1},hugeCache);
+console.log('8 MiB overview: cold work',coldOverview.work,'resized coarse work',coarseOverview.work);

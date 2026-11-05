@@ -4,12 +4,13 @@
  * @module recipes
  * @see docs/recipes.md
  */
+import { spaces } from './spaces.js';
 import { appearanceChannels, factorIndices, factorCount } from './factor-catalog.js';
 
 /**
  * These are the portable pieces of a compiled program. Provider sets and runtime
  * factories describe execution but are not part of the saved expression schema.
- * @typedef {'f32'|'vec2'} RecipeType
+ * @typedef {'f32'|'index'|'vec2'} RecipeType
  * @typedef {object} RecipeNode
  * @property {number} id Topological position in the program's node array.
  * @property {string} op Validated operation name; never executable source text.
@@ -41,7 +42,7 @@ const cache = new Map(), requests = new Map();
  * window statistics.
  */
 export function recipeRoots(configuration, appearance) {
- const dimensions = ['cube', 'sphere', 'cylinder'].includes(configuration.space) ? 3 : 2;
+ const dimensions = spaces[configuration.space].length;
  const roots = {};
  for (let i = 0; i < dimensions; i++) if (configuration.position[i] !== 'none') roots[`p${i}`] = configuration.position[i];
  for (const channel of appearanceChannels) if (appearance[channel] !== 'none') roots[channel] = appearance[channel];
@@ -51,7 +52,7 @@ export function recipeRoots(configuration, appearance) {
 // This is the portable IR. It contains data and typed operations, never user code.
 // Interning identical nodes gives both backends a shared, topologically ordered DAG.
 /**
- * Validate and intern expressions into a topologically ordered f32/vec2 DAG. Cache by expression
+ * Validate and intern expressions into a topologically ordered scalar/index/vector DAG. Cache by expression
  * data so fresh structured clones reuse plans without depending on object identity.
  * @returns {object} Typed nodes, outputs, provider requirements, synthetic factor bindings, and an
  *   evaluator factory. The runtime factory is not serializable recipe state.
@@ -62,7 +63,7 @@ export function compileRecipes(roots, definitions = {}) {
  const nodes = [], interned = new Map(), active = new Set(), references = new Set();
  const required = new Set(), providers = { byte: false, entropy: new Set(), spectrum: new Set() };
  let visits = 0;
- const scalar = node => { if (node.type !== 'f32') throw new TypeError('Expected a scalar recipe'); return node; };
+ const scalar = node => { if (!['f32','index'].includes(node.type)) throw new TypeError('Expected a scalar recipe'); return node; };
  const number = value => {
   if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > 1e6) throw new TypeError('Expected a finite recipe parameter between -1000000 and 1000000');
   return value;
@@ -92,9 +93,11 @@ export function compileRecipes(roots, definitions = {}) {
     if (!Object.hasOwn(factorIndices, expression.name)) throw new TypeError('Unknown factor');
     params.name = expression.name; required.add(params.name); break;
    case 'constant': params.value = number(expression.value); break;
-   case 'offset': case 'length': break;
+   case 'offset': case 'length': type = 'index'; break;
    case 'add': case 'subtract': case 'multiply': case 'divide':
-    args = [scalar(child('a')), scalar(child('b'))]; break;
+    args = [scalar(child('a')), scalar(child('b'))];
+    if (op !== 'divide' && args.some(node => node.type === 'index') && args.every(node => node.type === 'index' || node.op === 'constant' && Number.isInteger(node.value))) type = 'index';
+    break;
    case 'invert': case 'abs': case 'floor': case 'fract':
     args = [scalar(child('input'))]; break;
    case 'power':
@@ -153,7 +156,7 @@ export function compileRecipes(roots, definitions = {}) {
    * but their per-point values must never alias.
    */
   createEvaluator() {
-   const values = new Float32Array(nodes.length * 2);
+   const values = new Float64Array(nodes.length * 2);
    // Instructions close over resolved slots; no parsing or graph traversal occurs per point.
    const instructions = nodes.map(node => {
     const target = node.id * 2, a = node.args[0] * 2, b = node.args[1] * 2;
@@ -195,7 +198,16 @@ export function compileRecipes(roots, definitions = {}) {
     }
    });
    return (factors, context) => {
-    for (const instruction of instructions) instruction(factors, context);
+    for (let i = 0; i < instructions.length; i++) {
+     instructions[i](factors, context);
+     const slot = i * 2;
+     // Byte indices retain JS safe-integer precision; visual arithmetic keeps
+     // the float32 rounding contract used by shader backends.
+     if (nodes[i].type !== 'index') {
+      values[slot] = Math.fround(values[slot]);
+      if (nodes[i].type === 'vec2') values[slot + 1] = Math.fround(values[slot + 1]);
+     } else if (!Number.isSafeInteger(values[slot])) throw new RangeError('Recipe index exceeds the safe integer range');
+    }
     for (const [name, id] of outputEntries) {
      const value = values[id * 2]; factors[bindings[name]] = Number.isFinite(value) ? clamp(value) : 0;
     }

@@ -109,10 +109,10 @@ export function fourierSpectrum(samples) {
  * Render only the one-sided spectrum for real byte signals. Combine amplitudes landing in the same
  * pixel before log scaling, and suppress meaningless phase noise near zero.
  */
-export function fourierImage(samples, width, height) {
+export function fourierImage(samples, width, height, spectrum = fourierSpectrum(samples)) {
 	const values = new Float64Array(width * height);
 	const length = samples.length;
-	const { real, imaginary } = fourierSpectrum(samples);
+	const { real, imaginary } = spectrum;
 	const amplitudes = new Float64Array(length ? Math.floor(length / 2) + 1 : 0);
 	let peak = 0;
 	for (let k = 0; k < amplitudes.length; k++) {

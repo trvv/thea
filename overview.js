@@ -20,12 +20,17 @@ const MAX_PAGES = 64;
 export async function overviewValues(job, cache, current = () => true) {
 	const sameSource = cache.overview && (job.sourceId === undefined
 		? cache.overview.source === job.source : cache.overview.sourceId === job.sourceId);
-	if (!sameSource) cache.overview = { source: job.source, sourceId: job.sourceId, pages: new Map() };
-	const pages = cache.overview.pages;
+	if (!sameSource) cache.overview = { source: job.source, sourceId: job.sourceId, pages: new Map(), totals: new Map() };
+	const { pages, totals } = cache.overview;
 	const count = job.width * job.height;
 	const values = new Uint8Array(count);
-	const length = job.length ?? job.source.size;
+	const sourceSize = job.source.size;
+	const length = job.length ?? sourceSize;
+	const wholePages = length >= count * PAGE_SIZE;
 	const base = job.offset || 0;
+	const frameKey = `${base}/${length}/${count}`;
+	if (!current()) return null;
+	if (cache.overview.frame?.key === frameKey) return { values: cache.overview.frame.values, duration: 0, bytesRead: 0 };
 	let pageIndex = -1, prefix, previous = 0, bytesRead = 0, duration = 0;
 	let started = performance.now();
 	for (let pixel = 0; pixel < count; pixel++) {
@@ -34,6 +39,16 @@ export async function overviewValues(job, cache, current = () => true) {
 		let sum = 0;
 		for (let offset = base + start; offset < base + end;) {
 			const page = Math.floor(offset / PAGE_SIZE);
+			// Whole pages need one retained scalar, not a detailed prefix page. This
+			// avoids sequential scans thrashing the bounded prefix LRU on large scopes.
+			if (wholePages && offset === page * PAGE_SIZE && totals.has(page)) {
+				const pageEnd = Math.min(sourceSize, (page + 1) * PAGE_SIZE);
+				if (pageEnd <= base + end) {
+					sum += totals.get(page);
+					offset = pageEnd;
+					continue;
+				}
+			}
 			if (page !== pageIndex) {
 				prefix = pages.get(page);
 				if (!prefix) {
@@ -44,6 +59,7 @@ export async function overviewValues(job, cache, current = () => true) {
 					started = performance.now();
 					prefix = new Uint32Array(bytes.length + 1);
 					for (let i = 0; i < bytes.length; i++) prefix[i + 1] = prefix[i] + bytes[i];
+					totals.set(page, prefix[bytes.length]);
 					bytesRead += bytes.length;
 				}
 				pages.delete(page);
@@ -61,5 +77,7 @@ export async function overviewValues(job, cache, current = () => true) {
 		values[pixel] = previous;
 	}
 	duration += performance.now() - started;
-	return current() ? { values, duration, bytesRead } : null;
+	if (!current()) return null;
+	cache.overview.frame = { key: frameKey, values };
+	return { values, duration, bytesRead };
 }

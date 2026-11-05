@@ -4,6 +4,9 @@
  * @module rendering
  * @see docs/rendering.md
  */
+import { compileRecipes, recipeRoots } from './recipes.js';
+import { defaultSampleLimit } from './populations.js';
+import { spaces } from './point-configuration.js';
 import { requiredFactors } from './factors.js';
 import { renderPoints } from './point-renderer.js';
 import { compileAppearance, defaultAppearance, paintAppearanceGrid, occurrenceFactor } from './appearance.js';
@@ -11,6 +14,8 @@ import { applyImageCoordinates } from './coordinates.js';
 import { overviewValues } from './overview.js';
 import { trigraphCounts, trigraphImage, paintTrigraphAppearance } from './trigraph.js';
 import { fourierCost, fourierImage } from './fourier.js';
+import { matchingSpectrum, prepareSpectrum } from './spectrum.js';
+import { windowCounts } from './histograms.js';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -282,8 +287,18 @@ export function paintDigraph(canvas, counts) {
  */
 export function renderCost(job) {
 	if (job.configuration) {
-		const used = requiredFactors(job.configuration, job.appearance || defaultAppearance(job.region, job.shaders, job.frequencyOpacity), job.shaders);
-		return job.length * (used.has('entropy') ? 18 : 12) + job.columns * job.rows * 16
+		const configuration = job.configuration;
+		const appearance = job.appearance || defaultAppearance(job.region, job.shaders, job.frequencyOpacity);
+		const used = requiredFactors(configuration, appearance, job.shaders);
+		const program = compileRecipes(recipeRoots(configuration, appearance), configuration.recipes);
+		const population = configuration.population || 'bytes';
+		const available = population === 'bins' ? Math.floor(job.length / 2) + 1 : population === 'pairs' ? Math.min(65536, job.length) : population === 'triples' ? job.length : Math.min(job.length, job.sampleLayout.columns * job.sampleLayout.rows);
+		const samples = Math.min(available, configuration.sampleLimit === null ? Infinity : configuration.sampleLimit ?? defaultSampleLimit);
+		const statistics = ['entropy', 'byteCount', 'pairCount', 'tripleCount', 'count'].some(name => used.has(name));
+		const bytes = statistics || population === 'pairs' || population === 'triples' || ['value','byte1','byte2','byte3','previous'].some(name => used.has(name));
+		return (bytes ? job.length * (used.has('entropy') ? 18 : 2) : 0)
+			+ samples * (24 + program.nodes.length * 3 + (spaces[configuration.space].length === 3 ? Math.log2(Math.max(1, samples)) * 2 : 0))
+			+ job.columns * job.rows * (configuration.backend === 'webgl' ? 4 : 16)
 			+ (used.has('phase') || used.has('amplitude') ? fourierCost(job.length) : 0);
 	}
 	if (job.kind === 'bar') return (job.length ?? job.source.size) + job.width * job.height * 8;
@@ -328,10 +343,14 @@ export async function executeRender(canvas, job, cache = {}, current = () => tru
 		duration = histogram.duration + performance.now() - started;
 		work = (histogram.bytesRead * 3) + histogram.counts.size * 30 + job.columns * job.rows * 8;
 	} else if (job.region === 'dft') {
-		const bytes = new Uint8Array(await job.source.slice(job.offset, job.offset + job.length).arrayBuffer());
-		if (!current()) return null;
 		const started = performance.now();
-		const values = fourierImage(bytes, job.columns, job.rows);
+		let spectrum = matchingSpectrum(job, cache);
+		if (!spectrum) {
+			const bytes = new Uint8Array(await job.source.slice(job.offset, job.offset + job.length).arrayBuffer());
+			if (!current()) return null;
+			spectrum = prepareSpectrum(job, cache, bytes);
+		}
+		const values = fourierImage({ length: job.length }, job.columns, job.rows, spectrum);
 		if (job.appearance) paintAppearanceGrid(canvas, job.columns, job.rows, job, emit => {
 			const factors = new Float64Array(4);
 			for (let i = 0; i < values.length; i++) if (values[i]) {
@@ -342,22 +361,13 @@ export async function executeRender(canvas, job, cache = {}, current = () => tru
 		}); else paintBytes(canvas, values, job.columns, job.rows);
 		duration = performance.now() - started;
 	} else if (job.region === 'digraph') {
-		const counts = new Float64Array(256 * 256);
-		let previous;
-		for (let offset = job.offset; offset < job.offset + job.length;) {
-			const end = Math.min(offset + 65536, job.offset + job.length);
-			const bytes = new Uint8Array(await job.source.slice(offset, end).arrayBuffer());
-			if (!current()) return null;
-			if (!bytes.length) throw new Error('Byte source ended before its declared size.');
-			const started = performance.now();
-			for (const byte of bytes) {
-				if (previous !== undefined) counts[byte * 256 + previous]++;
-				previous = byte;
-			}
-			duration += performance.now() - started;
-			offset += bytes.length;
-		}
-		if (!current()) return null;
+		const histogram = await windowCounts(job, cache, 2, current);
+		if (!histogram || !current()) return null;
+		// Histogram keys store first byte in the high bits; native image rows store
+		// the second byte. Transpose only at this compatibility boundary.
+		const counts = new Float64Array(65536);
+		for (let key = 0; key < counts.length; key++) counts[(key & 255) * 256 + (key >>> 8)] = histogram.counts[key];
+		duration = histogram.duration;
 		const started = performance.now();
 		if (job.appearance) paintAppearanceGrid(canvas, 256, 256, job, emit => {
 			const factors = new Float64Array(4);

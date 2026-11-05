@@ -50,19 +50,16 @@ reconciliation before rendering. Rendering errors use a bubbling, composed
 
 ## Entry point and source loading
 
-`index.html` imports `main.js`. That module registers the custom elements as an
-import side effect and adds a `DOMContentLoaded` listener. The listener mounts a
-full-screen `DataScroll` and installs the fragment loader. A new fragment aborts
+`index.html` imports `bootstrap.js`, which imports the components, mounts a
+full-screen `DataScroll`, and installs the fragment loader. A new fragment aborts
 the previous fetch; a failed replacement leaves the previous Blob visible.
 
-This matters when embedding: importing `main.js` before DOMContentLoaded also
-opts into its automatic demo mount. Importing it after that event registers the
-elements but does not replay the event. There is not yet a side-effect-free
-component entry point. Pure rendering/recipe modules can be imported without a
-DOM; importing `main.js` in tests requires the DOM stubs to exist first.
+Importing `main.js` registers components and never mounts the demo, regardless of
+DOMContentLoaded timing. The bootstrap handles both early and late imports.
+Pure recipe/rendering modules can be imported without a DOM; importing `main.js`
+in tests still requires DOM stubs.
 
-For a custom host that first imports `main.js` after DOMContentLoaded, a minimal
-programmatic instance is:
+A minimal programmatic instance is:
 
 ```js
 const { DataScroll } = await import('./main.js');
@@ -90,8 +87,9 @@ renderers. There are two deliberate paths:
 Reading `view.pointConfiguration` synthesizes preset intent without switching
 paths. Assigning it switches to the general path. Assigning an appearance
 expression or a source unsupported by the native preset also promotes the view.
-The native paths are retained because they have useful specialized caches; raw
-mapping edits do not promise pixel-identical behavior to every native preset.
+The native paths retain useful specialized caches. Promotion preserves the preset
+point population (pairs, triples, bins, or bytes), but aggregation-to-pixel color and
+edge behavior can still differ from a native painter.
 See [selection semantics](data-selection.md#presets-and-general-points-are-not-the-same-sample-domain).
 
 `applyPreset(name)` resets appearance overrides, legacy coordinates/axes, shader
@@ -103,6 +101,10 @@ Current raw configuration shape:
 
 ```js
 view.pointConfiguration = {
+  population: 'bytes',
+  sampleLimit: 262144, // null explicitly requests all samples
+  footprint: 'point',
+  backend: 'cpu', // or 'webgl', with capability/context-loss fallback
   layout: 'linear',
   space: 'cube',
   position: ['value', 'byte2', 'entropy'],
@@ -124,13 +126,17 @@ quality, regardless of its historical `region`.
 Defaults are supplied lazily: an absent appearance override preserves native
 preset behavior. Use `effectiveAppearance` to get concrete channel values when
 changing one channel. All channel assignments are validated before replacement;
-use setters and `setFactor`, rather than mutating returned objects in place.
+use setters and `setFactor`, rather than mutating returned objects in place. Public configuration, appearance,
+axis, and shader getters return owned snapshots.
 
 ## Module map
 
 | Module | Why it exists |
 | --- | --- |
-| `main.js` | DOM ownership, controls, selection reconciliation, loader. |
+| `main.js`, `bootstrap.js` | Reusable DOM components and separate demo loader. |
+| `populations.js`, `profiles.js` | Point populations/sample budgets and versioned profile JSON. |
+| `render-identity.js` | Shared preparation/presentation/quality setting identity. |
+| `histograms.js`, `spectrum.js` | Statistical preparation shared by native painters and general providers. |
 | `render-engine.js`, `render-worker.js` | Scheduling, transfer protocol, presentation order, thread-local cache lifetime. |
 | `rendering.js` | One dispatcher shared by both threads and the optimized grid/digraph painters. |
 | `overview.js` | Exact overview averaging without rereading every nested scope. |
@@ -140,9 +146,9 @@ use setters and `setFactor`, rather than mutating returned objects in place.
 | `factor-catalog.js`, `factors.js` | Stable factor-slot ABI and reachability/cost planning. |
 | `recipes.js` | Validation, named references, shared typed IR, CPU evaluator compilation. |
 | `point-factors.js` | Lazy source/window providers and sampled byte-offset contexts. |
-| `point-configuration.js` | Space definitions, preset intent, mapping validation, normalized geometry transform. |
+| `spaces.js`, `point-configuration.js` | Shared positional channels, preset intent, mapping validation, geometry transform. |
 | `appearance.js` | Default channel mappings, HSL conversion, native palettes, point appearance compilation. |
-| `point-renderer.js` | General point preparation, camera projection, sorting, software compositing. |
+| `point-renderer.js`, `point-webgl.js` | General preparation/projection/sorting and CPU or WebGL rasterization. |
 | `recipe-menu.js` | DOM-independent descriptors for expression edits. |
 | `recipe-shaders.js` | GLSL/WGSL function-library generation from validated IR. |
 | `adaptive-resolution.js` | Measured interaction-quality feedback independent of source selection. |

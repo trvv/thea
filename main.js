@@ -5,6 +5,9 @@
  * @see docs/architecture.md
  * @see docs/data-selection.md
  */
+import { validateProfile, parseProfile } from './profiles.js';
+import { settingsKey } from './render-identity.js';
+import { limitedSampleLayout, populations } from './populations.js';
 import { recipeMenu } from './recipe-menu.js';
 import { validateDefinitions, reference } from './recipes.js';
 import { needsPointFactors } from './factors.js';
@@ -376,7 +379,7 @@ export class DataScrollView extends ByteCanvas {
 		this.renderer.onFrame = ({ job, duration }) => {
 			if (!this.spatial || !job.interacting
 				|| job.source !== this.source || job.width !== this.clientWidth || job.height !== this.clientHeight || job.scale !== (globalThis.devicePixelRatio || 1)
-				|| JSON.stringify(job.configuration) !== JSON.stringify(this._pointConfiguration) || JSON.stringify(job.appearance) !== JSON.stringify(this.appearance) || job.frequencyOpacity !== this.frequencyOpacity || job.coordinateSystem !== this.coordinateSystem || job.axes.join() !== this.axes.join()) return;
+				|| settingsKey(job) !== settingsKey({...job,...this.renderSettings(),sampleLayout:this.resolvedSampleLayout})) return;
 			if (this.resolution.record(duration, job.resolutionScale)) this.scheduleRotationRender();
 		};
 		this.addEventListener('pointerdown', event => {
@@ -486,7 +489,7 @@ export class DataScrollView extends ByteCanvas {
 	 * Return compatibility flags with entropy and brightness enabled by default; character and hex are
 	 * mutually exclusive overlays.
 	 */
-	get shaders() { return this._shaders || ['entropy', 'brightness']; }
+	get shaders() { return [...(this._shaders || ['entropy', 'brightness'])]; }
 
 	/**
 	 * Preserve character/hex exclusivity, clear stale color overrides when legacy shaders change, and
@@ -512,7 +515,7 @@ export class DataScrollView extends ByteCanvas {
 	 * Expose preset intent lazily so reading configuration alone does not abandon the optimized preset
 	 * renderer.
 	 */
-	get pointConfiguration() { return this._pointConfiguration || {...presetConfiguration(this.region),recipes:this._recipes||{}}; }
+	get pointConfiguration() { return structuredClone(this._pointConfiguration || {...presetConfiguration(this.region),recipes:this._recipes||{}}); }
 	/**
 	 * Validate geometry, named definitions, and current appearance together before entering the
 	 * general renderer; reset interaction state only after validation succeeds.
@@ -542,7 +545,10 @@ export class DataScrollView extends ByteCanvas {
 	 * Use requested length, not the already-snapped result: recomputing from the result can select a
 	 * different grid and cause rounding oscillation.
 	 */
-	get resolvedSampleLayout() { return this.sampleLayout(this.windowLayout ? this.requestedLength : this.length || 1, this.windowLayout?.limit ?? this.source?.size ?? 1); }
+	get resolvedSampleLayout() {
+  const layout = this.sampleLayout(this.windowLayout ? this.requestedLength : this.length || 1, this.windowLayout?.limit ?? this.source?.size ?? 1);
+  return this._pointConfiguration ? limitedSampleLayout(layout, this._pointConfiguration) : layout;
+ }
 	/**
 	 * Keyboard/wheel row steps follow the sample grid, never the adaptive canvas width.
 	 */
@@ -568,7 +574,7 @@ export class DataScrollView extends ByteCanvas {
 	/**
 	 * An absent override preserves preset behavior and its optimized path.
 	 */
-	get appearance() { return this._appearances?.[this.region]; }
+	get appearance() { return structuredClone(this._appearances?.[this.region]); }
 	/**
 	 * Validate against the current named factors, then promote expressions or unsupported sources to
 	 * the general path before rendering.
@@ -653,7 +659,7 @@ export class DataScrollView extends ByteCanvas {
 	 * Compatibility axis permutations belong to each preset; they are distinct from general scalar
 	 * position recipes.
 	 */
-	get axes() { return this._axisMappings?.[this.region] || (this.region === 'trigraph' ? [0, 1, 2] : [0, 1]); }
+	get axes() { return [...(this._axisMappings?.[this.region] || (this.region === 'trigraph' ? [0, 1, 2] : [0, 1]))]; }
 	/**
 	 * Require a permutation for legacy image/tuple remapping. General recipes intentionally permit
 	 * repeated factors and constants.
@@ -748,6 +754,40 @@ export class DataScrollView extends ByteCanvas {
 		if (sourceChanged || moved || resized) this.render();
 	}
 
+	/** Return an owned, versioned profile; source/ranges belong to the host session. */
+	exportProfile() {
+		return validateProfile({ version: 1, ...this.renderSettings(), recipes: this._recipes || {}, rotation: this.rotation });
+	}
+
+	/** Validate everything before replacing state; an invalid import is atomic. */
+	importProfile(value) {
+		const profile = typeof value === 'string' ? parseProfile(value) : validateProfile(value);
+		this._region = profile.region;
+		this._recipes = profile.recipes;
+		this._pointConfiguration = profile.configuration;
+		this._appearances = { [profile.region]: profile.appearance };
+		this._shaders = profile.shaders;
+		this._frequencyOpacity = profile.frequencyOpacity;
+		this._coordinateSystems = { [profile.region]: profile.coordinateSystem };
+		this._axisMappings = { [profile.region]: profile.axes };
+		this._encoding = profile.encoding;
+		this._blankSpaces = profile.blankSpaces;
+		this._blankNulls = profile.blankNulls;
+		this.rotation = profile.rotation;
+		this.resetResolution();
+		this.cancelRotationRender();
+		this.rotationDrag = null;
+		this.style.touchAction = this.spatial ? 'none' : '';
+		this.style.cursor = this.spatial ? 'grab' : '';
+		this.render();
+	}
+
+	renderSettings() {
+		return { configuration: this._pointConfiguration, region: this.region, shaders: this.shaders, appearance: this.appearance,
+			frequencyOpacity: this.frequencyOpacity, coordinateSystem: this.coordinateSystem, axes: this.axes,
+			encoding: this.encoding, blankSpaces: this.blankSpaces, blankNulls: this.blankNulls };
+	}
+
 	/**
 	 * Negotiate layout changes with DataScroll before dispatching a job. Keep sampleLayout native
 	 * while scaling only raster dimensions and particle footprints during motion.
@@ -755,7 +795,6 @@ export class DataScrollView extends ByteCanvas {
 	async render() {
 		const version = this.version = (this.version || 0) + 1;
 		if (!this.source || !this.isConnected) return;
-		const shaders = this.shaders;
 		const layout = this.windowLayout ? this.layout(this.requestedLength, this.windowLayout.limit) : this.layout(this.length);
 		if (this.windowLayout && ['columns', 'rows', 'length'].some(key => layout[key] !== this.windowLayout[key])) {
 			this.dispatchEvent(new CustomEvent('layout-change'));
@@ -768,10 +807,8 @@ export class DataScrollView extends ByteCanvas {
 				kind: 'view', progressive: true, source: this.source, offset: this.offset, length: this.length,
 				columns: Math.max(1, Math.round(columns * resolutionScale)), rows: Math.max(1, Math.round(rows * resolutionScale)),
 				resolutionScale, pointScale: (this.spatial || this._pointConfiguration) ? (globalThis.devicePixelRatio || 1) * resolutionScale : 1, interacting: this.spatial && this.resolution.moving,
-				configuration: this._pointConfiguration, sampleLayout: this.resolvedSampleLayout,
-				region: this.region, shaders, appearance: this.appearance, rotation: this.rotation, frequencyOpacity: this.frequencyOpacity, coordinateSystem: this.coordinateSystem, axes: this.axes,
-				width: this.clientWidth, height: this.clientHeight, scale: globalThis.devicePixelRatio || 1,
-				encoding: this.encoding, blankSpaces: this.blankSpaces, blankNulls: this.blankNulls
+				...this.renderSettings(), sampleLayout: this.resolvedSampleLayout, rotation: this.rotation,
+				width: this.clientWidth, height: this.clientHeight, scale: globalThis.devicePixelRatio || 1
 			});
 			if (rendered && version === this.version) Object.assign(this, { columns, rows });
 		} catch (error) { if (version === this.version) this.failure(error); }
@@ -1101,7 +1138,11 @@ export class DataScroll extends HTMLElement {
 				checked: !view._pointConfiguration && view.region === region,
 				action: () => { view.applyPreset(region); this.refreshMenu(); }
 			})) },
-			choose('Layout', config.layout, options(['linear', 'hilbert']), layout => change({ layout })),
+			choose('Population', config.population, options(populations), population => change({ population })),
+				{ label: 'Sample Limit', input: 'number', min: 1, max: 16777216, value: config.sampleLimit ?? 262144, action: sampleLimit => change({ sampleLimit }) },
+				choose('Backend', config.backend, [{value:'cpu',label:'CPU'},{value:'webgl',label:'WebGL'}], backend => change({ backend })),
+				choose('Footprint', config.footprint, options(['grid','point']), footprint => change({ footprint })),
+				choose('Layout', config.layout, options(['linear', 'hilbert']), layout => change({ layout })),
 			choose('Space', config.space, options(Object.keys(spaces)), space => change({ space })),
 			{ label: 'Position', items: spaces[config.space].map((label, index) => ({ label, items: [
 				edit('Factor', config.position[index], factor => {
@@ -1271,34 +1312,3 @@ customElements.define('context-menu', ContextMenu);
 customElements.define('data-scroll-view', DataScrollView);
 customElements.define('data-scroll-bar', DataScrollBar);
 customElements.define('data-scroll', DataScroll);
-
-/**
- * Load the fragment URL through HTTP and keep the previous source on failed fetches. Initial import
- * registers elements; only DOMContentLoaded mounts the default full-screen instance.
- */
-function onDOMContentLoaded() {
-	const scroll = new DataScroll();
-	document.body.append(scroll);
-	let pending;
-	/**
-	 * Abort superseded fetches before replacing the root Blob, so a slow response cannot overwrite a
-	 * newer fragment selection.
-	 */
-	async function load() {
-		pending?.abort();
-		const request = pending = new AbortController();
-		try {
-			const path = location.hash.slice(1) || './examples/cat';
-			const response = await fetch(new URL(path, document.baseURI), { signal: request.signal });
-			if (!response.ok) throw new Error(`HTTP ${response.status}`);
-			const source = await response.blob();
-			if (!request.signal.aborted) scroll.source = source;
-		} catch (error) {
-			if (!request.signal.aborted) console.error('Unable to load binary data:', error);
-		}
-	}
-	window.addEventListener('hashchange', load);
-	return load();
-}
-
-document.addEventListener('DOMContentLoaded', onDOMContentLoaded);

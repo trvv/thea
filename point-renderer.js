@@ -1,5 +1,5 @@
 /**
- * General CPU point path. Prepared geometry and colors survive camera/quality changes;
+ * General point path with CPU providers and CPU/WebGL rasterization. Prepared geometry and colors survive camera/quality changes;
  * rasterization still runs for each presented frame.
  * @module point-renderer
  */
@@ -8,6 +8,8 @@ import { appearanceChannels } from './factor-catalog.js';
 import { compileAppearance, defaultAppearance } from './appearance.js';
 import { compilePosition, spaces } from './point-configuration.js';
 import { projectedPointSize } from './trigraph.js';
+import { paintWebGL } from './point-webgl.js';
+import { preparationKey } from './render-identity.js';
 import { pointFactors } from './point-factors.js';
 
 // Requested providers yield normalized factors for position and appearance. Prepared points survive camera changes in either renderer thread.
@@ -21,7 +23,7 @@ import { pointFactors } from './point-factors.js';
 export async function renderPoints(canvas, job, cache, current, helpers) {
  const config=job.configuration, region=job.region;
  const appearance=job.appearance||defaultAppearance(region,job.shaders,job.frequencyOpacity);
- const signature=JSON.stringify([job.sourceId,job.offset,job.length,job.sampleLayout,config,appearance,job.shaders,job.encoding,job.blankSpaces,job.blankNulls]);
+ const signature=job.preparationKey ?? preparationKey(job);
  let prepared=cache.preparedPoints;
  const started=performance.now();
  if(!prepared||prepared.source!==(job.sourceId??job.source)||prepared.signature!==signature){
@@ -52,14 +54,20 @@ export async function renderPoints(canvas, job, cache, current, helpers) {
  if(!current())return null;
  const {columns:width,rows:height}=job;
  if(canvas.width!==width)canvas.width=width;if(canvas.height!==height)canvas.height=height;
- const context=canvas.getContext('2d'),image=context.createImageData(width,height),pixels=image.data;
- for(let i=3;i<pixels.length;i+=4)pixels[i]=255;
+ const context=canvas.getContext('2d');
+ let scratch=cache.pointRaster;
+ if(!scratch)scratch=cache.pointRaster={};
+ if(scratch.width!==width||scratch.height!==height){scratch.width=width;scratch.height=height;scratch.image=null;}
  const spatial=spaces[config.space].length===3;
  const {yaw,pitch}=job.rotation||{yaw:-0.6,pitch:0.45};
  const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
- const projected=new Float32Array(prepared.size*4);
+ if(!scratch.projected||scratch.projected.length<prepared.size*4) {
+  scratch.projected=new Float32Array(prepared.size*4);
+  scratch.order=new Uint32Array(prepared.size);
+ }
+ const projected=scratch.projected;
  const focal=Math.max(0,Math.min(width-1,height-1))*0.8;
- const grid=config.position.some(factor=>factor==='column'||factor==='row');
+ const grid=config.footprint ? config.footprint==='grid' : config.position.some(factor=>factor==='column'||factor==='row'||factor?.op==='factor'&&['column','row'].includes(factor.name));
  const cellWidth=grid?width/job.sampleLayout.columns:Math.max(1,job.pointScale||1)*1.5;
  const cellHeight=grid?height/job.sampleLayout.rows:cellWidth;
  for(let i=0;i<prepared.size;i++){
@@ -75,24 +83,32 @@ export async function renderPoints(canvas, job, cache, current, helpers) {
    projected[q+3]=prepared.sizes[i];
   }
  }
- const order=spatial?Array.from({length:prepared.size},(_,i)=>i).sort((a,b)=>projected[a*4+2]-projected[b*4+2]):null;
- for(let n=0;n<prepared.size;n++){
-  const i=order?order[n]:n,q=i*4,x=projected[q],y=projected[q+1];
-  const halfX=spatial?projected[q+3]:cellWidth*projected[q+3]/2,halfY=spatial?halfX:cellHeight*projected[q+3]/2;
-  const alpha=prepared.colors[q+3]/255;if(!alpha)continue;
-  const left=Math.max(0,Math.floor(x-halfX)),right=Math.min(width-1,Math.ceil(x+halfX));
-  const top=Math.max(0,Math.floor(y-halfY)),bottom=Math.min(height-1,Math.ceil(y+halfY));
-  for(let py=top;py<=bottom;py++)for(let px=left;px<=right;px++){
-   let coverage=0;
-   for(const dy of [0.25,0.75])for(const dx of [0.25,0.75]){
-    const nx=(px+dx-x)/halfX,ny=(py+dy-y)/halfY;
-    if(prepared.shape==='circle'?nx*nx+ny*ny<=1:Math.abs(nx)<=1&&Math.abs(ny)<=1)coverage++;
+ const order=spatial?scratch.order.subarray(0,prepared.size):null;
+ if(order){for(let i=0;i<order.length;i++)order[i]=i;order.sort((a,b)=>projected[a*4+2]-projected[b*4+2]);}
+ const accelerated=config.backend==='webgl'&&paintWebGL(cache,context,prepared,projected,order,{width,height,spatial,cellWidth,cellHeight});
+ cache.pointBackend=accelerated?'webgl':'cpu';
+ if(!accelerated){
+  const image=scratch.image ||= context.createImageData(width,height),pixels=image.data;
+  pixels.fill(0);for(let i=3;i<pixels.length;i+=4)pixels[i]=255;
+  for(let n=0;n<prepared.size;n++){
+   const i=order?order[n]:n,q=i*4,x=projected[q],y=projected[q+1];
+   const halfX=spatial?projected[q+3]:cellWidth*projected[q+3]/2,halfY=spatial?halfX:cellHeight*projected[q+3]/2;
+   const alpha=prepared.colors[q+3]/255;if(!alpha)continue;
+   if(!(halfX>0&&halfY>0))continue;
+   const left=Math.max(0,Math.floor(x-halfX)),right=Math.min(width-1,Math.ceil(x+halfX));
+   const top=Math.max(0,Math.floor(y-halfY)),bottom=Math.min(height-1,Math.ceil(y+halfY));
+   for(let py=top;py<=bottom;py++)for(let px=left;px<=right;px++){
+    let coverage=0;
+    for(let probe=0;probe<4;probe++){
+     const nx=(px+(probe&1?0.75:0.25)-x)/halfX,ny=(py+(probe&2?0.75:0.25)-y)/halfY;
+     if(prepared.shape==='circle'?nx*nx+ny*ny<=1:Math.abs(nx)<=1&&Math.abs(ny)<=1)coverage++;
+    }
+    const a=alpha*coverage/4,p=(py*width+px)*4;
+    for(let c=0;c<3;c++)pixels[p+c]=Math.round(prepared.colors[q+c]*a+pixels[p+c]*(1-a));
    }
-   const a=alpha*coverage/4,p=(py*width+px)*4;
-   for(let c=0;c<3;c++)pixels[p+c]=Math.round(prepared.colors[q+c]*a+pixels[p+c]*(1-a));
   }
+  context.putImageData(image,0,0);
  }
- context.putImageData(image,0,0);
  if(prepared.text){
   context.textAlign='center';context.textBaseline='middle';
   for(let n=0;n<prepared.size;n++){

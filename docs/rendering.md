@@ -60,7 +60,9 @@ whether the finished bitmap is still useful:
 - Do not show an old source, mapping, encoding, dimensions, or incompatible
   sampling specification just because its computation finished last.
 
-`appearanceKey` includes raw configuration, sample layout, and appearance. When
+`render-identity.js` owns the setting lists used by preparation, presentation,
+and quality feedback. `appearanceKey` includes configuration, sample layout,
+appearance, text, and compatibility settings. When
 adding a render-affecting setting, audit stale-frame checks as well as drawing
 code. Native camera-only compatibility has an additional presentation allowance.
 
@@ -81,6 +83,8 @@ Learned calibration rates remain on the engine instance.
 | --- | --- |
 | Bar overview pages | Root-source prefix sums; page LRU survives scope changes, changes identity with the source. |
 | Native grid palettes | Integer byte/entropy → packed color; fractional averages bypass the integer palette. |
+| Byte/pair/triple histograms | Shared native/general incremental selected-window counts; changes are staged before commit. |
+| Spectrum coefficients | Shared native/general exact-selection cache, reused across display/mapping changes. |
 | Native trigraph histogram | Root source and selected interval; overlap can update entering/leaving triple starts. |
 | Native projected tuple slots | Histogram Map/revision and camera/space/axes/size; consecutive revisions permit small repairs. |
 | Native visibility raster | Screen dimensions and projected geometry; dirty tiles repair changed coverage. |
@@ -97,7 +101,9 @@ also bypasses validation and render scheduling; use immutable replacement.
 ### Overview pages
 
 Each page covers 65,536 bytes and stores a Uint32 prefix sum. At 255 per byte the
-sum still fits in 32 bits. The LRU retains 64 pages, roughly 16 MiB per bar. Each
+sum still fits in 32 bits. The LRU retains 64 pages, roughly 16 MiB per bar. A sparse page-total Map survives prefix eviction; whole
+pages use those totals without rebuilding prefixes. The last completed overview
+raster is also reused for identical ranges and pixel counts. Each
 pixel averages its exact byte interval; this makes navigating nested scopes
 consistent rather than changing the sampling approximation as the window moves.
 
@@ -152,13 +158,23 @@ size/depth buckets that make particles pop near the camera.
 ## Cost and memory pitfalls
 
 Offloading preserves UI responsiveness; it does not remove computation. General
-colored 3D rendering still sorts points and rasterizes on the CPU. Camera changes
+colored 3D rendering still sorts points on the CPU. CPU rasterization is the default;
+`configuration.backend: "webgl"` uploads sorted marks for instanced quad drawing.
+It retains the four-probe coverage rule and falls back on unavailable WebGL2,
+viewport limits, errors, or context loss. Providers, recipes, projection, sorting,
+and text still run on CPU. Browser tests compare both mark shapes across all
+spaces within three 8-bit color steps, with a tighter mean-error bound. Camera changes
 reuse prepared points but need new projection/sorting/compositing. Adaptive scale
 cannot reduce fixed per-point work.
 
+General points default to a 262,144-point sample budget. This bounds prepared
+mark/sort storage, not exact provider arrays or tuple-discovery metadata. Projection,
+order, and software image buffers are reused between frames.
+
 FFT buffers can greatly exceed selected bytes: Bluestein uses power-of-two
 convolution buffers for non-power-of-two selections, and returned Float64 views
-can retain larger backing buffers. Phase/amplitude arrays and normalization are
+can retain larger backing buffers. The shared spectrum cache copies only the one-sided coefficients so those padded
+working buffers can be released. Phase/amplitude arrays and normalization are
 additional work only when requested.
 
 Overview LRUs are per bar. Entropy arrays are per requested window size. Triple

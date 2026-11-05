@@ -54,8 +54,8 @@ from selected length; orders 1–15 choose side `2 ** order`. Coordinates are
 normalized cell centers. `linear` instead uses the current sample grid. Neither
 expression requires the global Layout setting to be the same traversal.
 
-Only `f32` and `vec2` are currently implemented. A display channel and a saved named
-factor must end in a scalar. A vector can be shared inside multiple scalar
+`f32`, exact CPU `index`, and `vec2` are currently implemented. A display channel and a saved named
+factor must end in a scalar (including an index). A vector can be shared inside multiple scalar
 expressions, but saving an unprojected vector as a named definition is rejected.
 There are no general vector constructors or 3D Hilbert operations yet.
 
@@ -152,7 +152,7 @@ their inputs. The resulting runtime program contains:
 - `bindings`: channel name → appended scalar slot after the canonical inputs;
 - `required`: reachable built-in sources;
 - `providers`: raw-byte, entropy-window, and spectrum-component requirements;
-- `createEvaluator()`: an instruction list with private Float32 scratch storage.
+- `createEvaluator()`: an instruction list with private scratch storage with explicit float32 visual rounding and exact indices.
 
 IR node data is portable; the evaluator factory and scratch arrays are derived
 runtime state, not saved recipe JSON. Plans can be shared; evaluator scratch cannot
@@ -173,13 +173,19 @@ their providers do not run until reachable. Direct and indirect cycles are error
 
 ### Precision is part of the contract
 
-Recipe intermediate scalars and vectors use float32 storage. They need not match
-JavaScript double-precision arithmetic exactly. In particular, integers above
-`2 ** 24` are not all representable: a custom `offset → add → byte` pipeline can
-lose individual-byte precision for large selection-relative offsets. Built-in
-neighbor lookup uses the original JavaScript sample index instead. Future integer
-index types or paging are needed before claiming exact arbitrary-size GPU reads.
-Current generated provider indices also use signed 32-bit integers.
+Visual scalar/vector intermediates round to float32 after each instruction.
+`offset` and `length` instead produce `index` values. Addition, subtraction, and
+multiplication involving indices and integer constants preserve that type. CPU
+index arithmetic uses JavaScript safe integers and throws on overflow rather than
+silently addressing another byte. Other operations convert to visual scalar
+arithmetic; built-in normalized factors remain float32 in the expression graph.
+
+The generated GLSL/WGSL evaluator takes integer point offsets and selection lengths.
+Byte/entropy provider wrappers consume integer offsets. Its `maxIndex` is
+2,147,483,647: hosts must bound all index arithmetic to signed 32-bit range or use
+CPU fallback/paging. This is a narrower range than CPU safe integers. A GLES
+execution fixture checks neighboring-byte access above `2 ** 24`.
+
 
 ## Appearance and space conversion
 
@@ -226,7 +232,7 @@ and turn normalized spectral positions into bin indices. Frequency-only sampling
 needs no provider binding. GLSL includes forward declarations; WGSL expects the
 provider implementations in the same linked source module.
 
-The GPU backend must still provide storage bindings, source-factor values,
+A backend executing these functions must still provide storage bindings, source-factor values,
 camera/space transforms, appearance-to-color conversion, particle/text drawing,
 blending, output targets, lifecycle handling, and capability/failure fallback.
 FFT/histogram/entropy preparation still runs on the CPU/worker. Those arrays can
@@ -237,4 +243,5 @@ Generated GLSL is compiled and executed against a surfaceless GLES context in
 `tests/recipe-shaders.js`, comparing representative results within one 8-bit color
 step. That validates examples, not every graph or browser integration. WGSL is
 structurally checked but has not been validated on a WebGPU device in this
-workspace. There is no integrated WebGL or WebGPU renderer today.
+workspace. The opt-in WebGL point rasterizer uses prepared CPU results; it does not execute
+these emitted recipe functions. WebGPU drawing and provider compute are not integrated.

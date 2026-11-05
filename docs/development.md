@@ -25,7 +25,7 @@ Tests are executable Bun scripts using assertions, not a `bun test` discovery
 suite. Run from the repository root:
 
 ```sh
-for test in recipes recipe-shaders point-factors point-configuration appearance \
+for test in recipes recipe-shaders pipeline point-factors point-configuration appearance \
   data-scroll context-menu render-engine render-thread-smoke trigraph \
   trigraph-opacity coordinates adaptive-resolution scroll-performance digraph fourier
 do
@@ -47,6 +47,19 @@ fixtures. `tests/scroll-benchmark.js` is a separate, non-gating CPU benchmark:
 bun tests/scroll-benchmark.js
 ```
 
+The real-browser integration suite needs Chromium (no npm dependency). It serves
+its own temporary local fixture and launches headless Chromium:
+
+```sh
+bun tests/browser-smoke.js
+# Set CHROMIUM_PATH if the executable is not /usr/bin/chromium-browser.
+```
+
+It checks real workers/ImageBitmaps, CPU/WebGL coverage and context-loss fallback,
+DPR/text sizing, population preservation, source replacement, profile round trips,
+native popover keyboard/focus behavior, and worker cleanup. Browser startup requires
+permission to launch processes and bind a local port in restricted environments.
+
 ### What the tests establish
 
 | Tests | Main regressions guarded against |
@@ -66,7 +79,7 @@ bun tests/scroll-benchmark.js
 
 DOM/canvas doubles do not validate browser fonts, text compositing, real native
 popover geometry, or all CSS behavior. `fillRect`/`fillText` in the canvas double
-record commands rather than reproducing a browser rasterizer. The real worker
+record commands rather than reproducing a browser rasterizer. The Bun worker
 smoke test substitutes that canvas double for OffscreenCanvas, so it does not
 prove browser ImageBitmap behavior or GPU presentation.
 
@@ -106,9 +119,8 @@ shader source inputs together. Native compact factor arrays are separate.
 ### Add a space or change projection
 
 Update space channels, validation/geometry, menu labels, and 2D/3D interaction
-classification. The 3D-space names currently appear in `main.js`, `recipes.js`,
-`point-configuration.js`, and `factors.js`/planning logic; inspect all consumers
-rather than assuming a single registry controls every behavior. Preserve axis
+classification. `spaces.js` supplies channel counts to recipes, controls, and
+geometry; add the corresponding transform in `point-configuration.js`. Preserve axis
 conventions, angular seams, normalized bounds, and continuous perspective size.
 If changing native tuple projection too, audit `coordinates.js`, wireframes,
 spatial-bin reach, and the dirty visibility tests.
@@ -136,7 +148,7 @@ bytes silently, or shrinking source selections along with the raster.
 | Hilbert seems inactive | Global layout affects column/row; other mappings need explicit Hilbert coordinate expressions. |
 | Raw preset-like output looks different | Native tuple/bin aggregation and raw byte-offset points are different sample domains. |
 | Expression mostly saturates | Raw `byte` gives 0–255; built-ins are normalized; final outputs clamp to 0–1. |
-| Neighbor access is inaccurate far into a large selection | Float32 offset intermediates cannot represent every integer above `2 ** 24`. |
+| Neighbor access is inaccurate far into a large selection | Keep address arithmetic in index operations; visual float32 operations can still lose precision. Shader indices are signed 32-bit. |
 | Rare trigraph corruption after scrolling | Cancelled histogram mutation, missed revision, dense-slot owner repair, or insufficient spatial-bin reach. |
 | More workers do not speed scrolling | Data reads, cache duplication, fixed per-point preparation, sorting, or transfer/presentation can dominate. |
 | Reduced resolution stays equally slow | The bottleneck may be source/statistical/point work; see adaptive rollback. |

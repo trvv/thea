@@ -89,32 +89,35 @@ factors. Explicit recipe expressions `Hilbert(Position).X/Y` or
 position or appearance channel. Their 2D vectors can also feed the axes of a 3D
 space; there is no 3D Hilbert traversal implementation today.
 
-## Presets and general points are not the same sample domain
+## Point populations and mixed analyses
 
-The optimized paths predate the universal factor system:
+Native presets select byte samples, aggregated pairs/triples, or spectrum bins.
+Their synthesized configuration preserves that population when an expression,
+text overlay, or geometry edit promotes the view to general points.
 
-| Path | What a displayed mark represents |
-| --- | --- |
-| Native linear/Hilbert | A representative byte or an averaged interval in a grid. |
-| Native Digraph | An aggregated sliding adjacent-byte pair; both bytes overlap with neighboring pairs. |
-| Native Trigraph | An aggregated sliding triple, with one packed 24-bit key per distinct tuple. |
-| Native DFT | One or more one-sided spectrum bins accumulated into a phase/frequency pixel before log scaling. |
-| General point renderer | A sampled byte offset carrying whichever primitive or derived factors the active mappings request. |
+`configuration.population` specifies what generates points; it does not restrict
+which factors may be mixed. Tuple points use the first occurrence of their tuple
+inside the selection for byte-offset analyses. Bin points use their exact bin for
+built-in spectral factors and a corresponding byte offset for other analyses.
+Explicit `spectrum(input)` recipes always use their own normalized input.
 
-This distinction is intentional compatibility, not full convergence. A raw
-Trigraph-like configuration can position many byte-offset samples at identical
-coordinates; it does not automatically deduplicate them into one tuple particle.
-Occurrence factors can still be computed over all selected bytes. Mapping those
-counts into opacity while also drawing repeated samples is not identical to the
-native tuple-aggregation opacity algorithm.
+A byte point can therefore combine FFT, entropy, neighbors, and occurrence
+statistics, and a tuple point can do the same. Changing population is an explicit
+configuration/menu action, separate from choosing factors.
 
-Likewise, a generic DFT factor attaches a spectrum value to a byte-offset sample.
-The built-in uses `floor(sample * binCount / selectedLength)` for one-sided bin
-selection. An explicit `spectrum` recipe instead samples at its normalized input,
-which may itself be inverted, scaled, or derived from another factor. These are
-sampling relationships, not claims that a frequency coefficient belongs to that
-specific byte in the time-domain signal.
+General point sampling defaults to a limit of 262,144. Byte points span the entire
+selected interval; linear value/entropy cells average their sampled intervals,
+while Hilbert and text use representative bytes. Tuple/bin populations are
+uniformly subsampled in population order when they exceed the limit. Tuple order
+is first occurrence, not sorted tuple key order. `sampleLimit: null` explicitly
+requests all points. Native preset painters retain their specialized algorithms.
 
-Switching from an optimized preset to raw geometry can therefore change density,
-brightness normalization, and sampling even when the broad shape looks similar.
-Preserve that distinction in tests and make any future unification explicit.
+The committed byte range, navigation row steps, statistical provider scopes, and
+adaptive raster size remain independent. Exact histograms and FFTs still analyze
+the entire selection. Limiting points therefore bounds prepared mark storage and
+sorting, not provider memory or the initial cost of discovering distinct tuples.
+
+Native DFT accumulates bins into pixels before log scaling. Native opaque triple
+rendering retains independent coverage/depth owners. General points use point
+colors and back-to-front blending. Population preservation does not promise
+pixel-identical color scaling or edge behavior across these painters.

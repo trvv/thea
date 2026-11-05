@@ -5,14 +5,16 @@
  * @see docs/recipes.md
  */
 import { compileRecipes, recipeRoots } from './recipes.js';
-import { factorCount, factorIndices as slots, requiredFactors } from './factors.js';
+import { factorCount, factorIndices as slots } from './factors.js';
 import { occurrenceFactor } from './appearance.js';
-import { fourierSpectrum } from './fourier.js';
+import { prepareSpectrum, spectrumComponents } from './spectrum.js';
+import { windowCounts } from './histograms.js';
+import { populationOffsets, defaultSampleLimit } from './populations.js';
 
 // Providers are selected from the active channels, including only visible axes.
 // Each cache holds one window; camera/style changes reuse the selected data.
 /**
- * Prepare only reachable providers, then expose a visitor over sampled byte offsets. A recipe
+ * Prepare only reachable providers, then expose a visitor over population points with selection-relative byte offsets. A recipe
  * context uses selection-relative offsets; halo reads for entropy remain file-relative.
  * @param {object} cache One mutable cache owner per canvas/thread; stable sourceId survives Blob
  *   cloning.
@@ -29,6 +31,8 @@ export async function pointFactors(job, appearance, cache, current, helpers, com
  const used=new Set(program.required);
  if(job.shaders.includes('character')||job.shaders.includes('hex'))used.add('value');
  const source = job.sourceId ?? job.source, key = `${job.offset}/${job.length}`;
+ const population = config.population || 'bytes';
+ const tuples = population === 'pairs' || population === 'triples';
  const entropy = used.has('entropy');
  const windows=new Set(program.providers.entropy);if(entropy)windows.add(32);
  const padding=Math.max(0,...[...windows].map(size=>Math.floor(size/2)));
@@ -38,9 +42,9 @@ export async function pointFactors(job, appearance, cache, current, helpers, com
  const pairCounts = used.has('pairCount') || (legacyCount && job.region === 'digraph');
  const tripleCounts = used.has('tripleCount') || (legacyCount && job.region === 'trigraph');
  const phase = used.has('phase')||program.providers.spectrum.has('phase'), amplitude = used.has('amplitude')||program.providers.spectrum.has('amplitude');
- const needBytes = program.providers.byte || windows.size>0 || phase || amplitude || byteCounts || pairCounts || tripleCounts
+ const needBytes = tuples || program.providers.byte || windows.size>0 || phase || amplitude || byteCounts || pairCounts || tripleCounts
   || ['value','byte1','byte2','byte3','previous'].some(factor => used.has(factor));
- let bytes, metrics, spectrum, amplitudes, phases, peak = 0;
+ let bytes, metrics, spectrum, amplitudes, phases;
  let counts;
  const matches = entry => entry?.source === source && entry.key === key;
  if (needBytes) {
@@ -76,44 +80,24 @@ export async function pointFactors(job, appearance, cache, current, helpers, com
  if (byteCounts || pairCounts || tripleCounts) {
   if (!matches(cache.factorCounts)) cache.factorCounts = { source, key };
   counts = cache.factorCounts;
-  const needByte = byteCounts && !counts.byte, needPair = pairCounts && !counts.pair, needTriple = tripleCounts && !counts.triple;
-  if (needByte) counts.byte = new Float64Array(256);
-  if (needPair) counts.pair = new Float64Array(65536);
-  if (needTriple) counts.triple = new Map();
-  if (needByte || needPair || needTriple) for (let i = 0; i < bytes.length; i++) {
-   if (needByte) counts.byte[bytes[i]]++;
-   if (needPair && i + 1 < bytes.length) counts.pair[bytes[i] * 256 + bytes[i + 1]]++;
-   if (needTriple && i + 2 < bytes.length) {
-    const tuple = bytes[i] * 65536 + bytes[i + 1] * 256 + bytes[i + 2];
-    counts.triple.set(tuple, (counts.triple.get(tuple) || 0) + 1);
-   }
+  for (const [name, width, needed] of [['byte', 1, byteCounts], ['pair', 2, pairCounts], ['triple', 3, tripleCounts]]) {
+   if (!needed) continue;
+   const histogram = await windowCounts(job, cache, width, current, bytes);
+   if (!histogram || !current()) return null;
+   counts[name] = histogram.counts;
   }
  }
  const bins = job.length ? Math.floor(job.length / 2) + 1 : 0;
  if (phase || amplitude) {
-  if (!matches(cache.factorSpectrum)) cache.factorSpectrum = { source, key, ...fourierSpectrum(bytes) };
-  spectrum = cache.factorSpectrum;
-  if (phase && !spectrum.phases) {
-   spectrum.phases = new Float64Array(bins);
-   for (let k = 0; k < bins; k++) {
-    const re = spectrum.real[k], im = spectrum.imaginary[k], magnitude = Math.hypot(re, im);
-    const angle = Math.abs(im) < magnitude * 1e-12 ? re >= 0 ? 0 : Math.PI : Math.atan2(im, re);
-    spectrum.phases[k] = (angle + Math.PI) / (2 * Math.PI);
-   }
-  }
-  if (amplitude && !spectrum.amplitudes) {
-   spectrum.amplitudes = new Float64Array(bins);
-   for (let k = 0; k < bins; k++) {
-    const value = Math.hypot(spectrum.real[k], spectrum.imaginary[k]) / job.length * (k === 0 || k * 2 === job.length ? 1 : 2);
-    spectrum.amplitudes[k] = value; peak = Math.max(peak, value);
-   }
-   const scale = peak ? 1 / Math.log1p(peak) : 0;
-   for (let k = 0; k < bins; k++) spectrum.amplitudes[k] = spectrum.amplitudes[k] < peak * 1e-10 ? 0 : Math.log1p(spectrum.amplitudes[k]) * scale;
-  }
+  spectrum = spectrumComponents(prepareSpectrum(job, cache, bytes), job.length, phase, amplitude);
   phases = spectrum.phases; amplitudes = spectrum.amplitudes;
  }
  if (!current()) return null;
- const { columns, rows } = job.sampleLayout, count = columns * rows;
+ const { columns, rows } = job.sampleLayout;
+ const offsets = populationOffsets(job, bytes, cache);
+ const available = offsets ? offsets.length : population === 'bins' ? bins : columns * rows;
+ const limit = config.sampleLimit === null ? Infinity : config.sampleLimit ?? defaultSampleLimit;
+ const count = Math.min(available, limit);
  const layout = used.has('column') || used.has('row');
  let cells;
  if (layout && config.layout === 'hilbert') {
@@ -135,17 +119,20 @@ export async function pointFactors(job, appearance, cache, current, helpers, com
  };
  return visit => {
   for (let i = 0; i < count; i++) {
-   const sample = config.layout === 'hilbert' || job.length > count ? Math.floor(i * job.length / count) : i;
+   const index = Math.floor(i * available / count);
+   const cellIndex = Math.min(columns * rows - 1, Math.floor(i * columns * rows / count));
+   const sample = offsets ? offsets[index] : population === 'bins' ? Math.floor(index * job.length / bins)
+    : config.layout === 'hilbert' || job.length > available || count < available ? Math.floor(i * job.length / count) : i;
    if (sample >= job.length) continue;
    let value = bytes?.[sample] ?? 0, metric = metrics?.[sample] ?? 0;
-   if (!text && config.layout !== 'hilbert' && job.length > count && (used.has('value') || entropy)) {
+   if (population === 'bytes' && !text && config.layout !== 'hilbert' && job.length > count && (used.has('value') || entropy)) {
     const end = Math.floor((i + 1) * job.length / count); value = metric = 0;
     for (let j = sample; j < end; j++) { value += bytes?.[j] ?? 0; metric += metrics?.[j] ?? 0; }
     value /= end - sample; metric /= end - sample;
    }
    values[slots.value] = value / 255; values[slots.entropy] = metric / 255;
    values[slots.position] = sample / Math.max(1, job.length - 1);
-   const cell = cells ? cells[i] : i;
+   const cell = cells ? cells[cellIndex] : cellIndex;
    values[slots.column] = (cell % columns + 0.5) / columns;
    values[slots.row] = (Math.floor(cell / columns) + 0.5) / rows;
    if (used.has('byte2')) values[slots.byte2] = (bytes[sample + 1] ?? 0) / 255;
@@ -156,7 +143,7 @@ export async function pointFactors(job, appearance, cache, current, helpers, com
    if (tripleCounts) values[slots.tripleCount] = sample + 2 < job.length ? occurrenceFactor(counts.triple.get(bytes[sample] * 65536 + bytes[sample + 1] * 256 + bytes[sample + 2]) || 0) : 0;
    if (legacyCount) values[slots.count] = values[job.region === 'trigraph' ? slots.tripleCount : job.region === 'digraph' ? slots.pairCount : slots.byteCount];
    // The one-sided spectrum spans the same normalized offset as the byte samples.
-   const bin = Math.min(bins - 1, Math.floor(sample * bins / job.length));
+   const bin = population === 'bins' ? index : Math.min(bins - 1, Math.floor(sample * bins / job.length));
    if (used.has('frequency')) values[slots.frequency] = 2 * bin / Math.max(1, job.length);
    if (phase) values[slots.phase] = phases[bin];
    if (amplitude) values[slots.amplitude] = amplitudes[bin];
