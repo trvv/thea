@@ -197,6 +197,15 @@ try{
    let popup=await clickPoint();
    assert(popup.textContent.includes('Byte 0 @ 0')&&popup.textContent.includes('Source Offset'),'Byte popup lacks value/index');
    assert(popup.textContent.includes('Hue: Local Entropy')&&popup.textContent.includes('Lightness: Byte Value'),'Popup lacks trait associations');
+   assert([...popup.querySelectorAll('details')].every(section=>!section.open),'Inspection sections must start collapsed');
+   assert(popup.textContent.includes('0 (0x00, ASCII NUL)'),'Byte inspection lacks hex/control representation');
+   const origin=popup.querySelector('details');origin.open=true;
+   assert(getComputedStyle(origin.querySelector('th')).textAlign==='left','Inspection field names are not left aligned');
+   const {inspectionContent}=await import('/inspection-content.js');
+   const representations=inspectionContent({point:{population:'bytes',index:0,sourceOffset:0,byteValue:65,tuple:[10,32,127,255]},traits:[],nodes:[],rendering:{}});
+   assert(representations.textContent.includes('65 (0x41, ASCII "A")')&&representations.textContent.includes('0x0A, ASCII LF')
+    &&representations.textContent.includes('0x20, ASCII " "')&&representations.textContent.includes('0x7F, ASCII DEL')
+    &&representations.textContent.includes('0xFF, non-ASCII'),'Byte representations are incorrect');
    assert(popup.getAttribute('role')==='dialog'&&inspectScroll.shadowRoot.activeElement===inspectedView,'Popup focus escaped the view');
    inspectedView.applyPreset('dft');await inspectedView.render();
    assert(!popup.matches(':popover-open'),'Changed view retained an old popup');

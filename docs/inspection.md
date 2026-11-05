@@ -9,6 +9,11 @@ invalidate the popup and pending inspection replies.
 
 ## What is shown
 
+All sections, including the point metadata and calculation trees, start collapsed.
+Actual byte fields and byte arrays show decimal, hex and ASCII representations.
+ASCII control bytes use their standard names; bytes above 127 are marked non-ASCII.
+Averaged numeric values are kept numeric rather than presented as characters.
+
 The point summary identifies the population and exact unsampled ordinal. Byte
 points include their absolute source offset and raw byte. Averaged byte samples
 identify their full half-open source interval, sample count and mean rather than

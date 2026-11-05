@@ -70,11 +70,6 @@ export class PointPopup extends Popup {
   super();
   this.shadowRoot.innerHTML+=`<style>
    :host { max-width: min(640px, calc(100vw - 16px)); }
-   table { border-collapse: collapse; }
-   th { text-align: left; vertical-align: top; }
-   th, td { padding: 2px 4px; }
-   td { overflow-wrap: anywhere; }
-   summary { cursor: pointer; }
   </style>`;
  }
  connectedCallback() {super.connectedCallback();this.setAttribute('role','dialog');this.setAttribute('aria-label','Point information');this.tabIndex=-1;}
