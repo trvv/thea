@@ -105,3 +105,20 @@ const sampled={...base,configuration:{...base.configuration,sampleLimit:8}};
 const indices=[];(await pointFactors(sampled,appearance,{},()=>true,helpers))((values,label,ctx)=>indices.push(ctx.pointIndex));
 assert.deepEqual(indices,[0,8,16,24,32,40,48,56],'Sample limit renumbered exact byte indices');
 console.log('Hilbert checks pass: cube orientation, exhaustive adjacency/uniqueness, exact indices, shared vec3, validation, menus, populations, laziness, camera reuse.');
+
+// The preset is a byte-valued cube traversal, not a tuple histogram.
+const preset=presetConfiguration('hilbert3d');
+assert.equal(preset.population,'bytes');assert.equal(preset.space,'cube');assert.equal(preset.sampling,'representative');
+assert.deepEqual(preset.position.map(mapping=>mapping.component),[0,1,2]);
+assert(preset.position.every(mapping=>mapping.input.op==='hilbert3d'&&mapping.input.input.op==='pointIndex'));
+const shading=defaultAppearance('hilbert3d',['brightness']);
+assert.deepEqual(shading,defaultAppearance('hilbert',['brightness']));
+const presetSource=new Blob([Uint8Array.from({length:64},(_,i)=>i)]),presetCache={};
+await executeRender(new RenderCanvas(),{...base,source:presetSource,length:64,region:'hilbert3d',configuration:preset,shaders:['brightness']},presetCache);
+assert.equal(presetCache.preparedPoints.size,64);
+for(let index=0;index<64;index++){
+ hilbert3D(index,2,xyz);
+ assert.deepEqual([...presetCache.preparedPoints.positions.subarray(index*3,index*3+3)],[...xyz].map(value=>value*2-1));
+ assert.deepEqual([...presetCache.preparedPoints.colors.subarray(index*4,index*4+4)],[index,index,index,255]);
+}
+console.log('Hilbert 3D preset passes: exact cube coordinates and per-byte brightness.');

@@ -508,7 +508,7 @@ export class DataScrollView extends ByteCanvas {
 		if (['entropy', 'brightness'].some(shader => shaders.includes(shader) !== this.shaders.includes(shader))) {
 			if (this._appearances) delete this._appearances[this.region];
 		}
-		const promoted = !this._pointConfiguration && !['linear', 'hilbert'].includes(this.region) && shaders.some(shader => ['character', 'hex'].includes(shader));
+		const promoted = !this._pointConfiguration && !['linear', 'hilbert', 'hilbert3d'].includes(this.region) && shaders.some(shader => ['character', 'hex'].includes(shader));
 		if (promoted) {
 			this._pointConfiguration = validateConfiguration(this.pointConfiguration);
 			this.resetResolution();
@@ -588,7 +588,7 @@ export class DataScrollView extends ByteCanvas {
 	 * Determine rotation and quality behavior from the chosen space, not from the historical trigraph
 	 * preset name.
 	 */
-	get usesPoints() { return Boolean(this._pointConfiguration) || this.region === 'hilbert'; }
+	get usesPoints() { return Boolean(this._pointConfiguration) || ['hilbert','hilbert3d'].includes(this.region); }
 	get spatial() { return spaces[this.pointConfiguration.space].length === 3; }
 	/**
 	 * Reset a complete visualization profile while retaining named recipes; it is different from the
@@ -682,7 +682,7 @@ export class DataScrollView extends ByteCanvas {
 	 * spaces interchangeably.
 	 */
 	set coordinateSystem(value) {
-		const allowed = this.region === 'trigraph' ? ['cartesian', 'cylindrical', 'spherical'] : ['cartesian', 'radial'];
+		const allowed = ['trigraph','hilbert3d'].includes(this.region) ? ['cartesian', 'cylindrical', 'spherical'] : ['cartesian', 'radial'];
 		if (!allowed.includes(value)) throw new TypeError('Unknown coordinate system');
 		(this._coordinateSystems ||= {})[this.region] = value;
 		this.render();
@@ -692,13 +692,13 @@ export class DataScrollView extends ByteCanvas {
 	 * Compatibility axis permutations belong to each preset; they are distinct from general scalar
 	 * position recipes.
 	 */
-	get axes() { return [...(this._axisMappings?.[this.region] || (this.region === 'trigraph' ? [0, 1, 2] : [0, 1]))]; }
+	get axes() { return [...(this._axisMappings?.[this.region] || (['trigraph','hilbert3d'].includes(this.region) ? [0, 1, 2] : [0, 1]))]; }
 	/**
 	 * Require a permutation for legacy image/tuple remapping. General recipes intentionally permit
 	 * repeated factors and constants.
 	 */
 	set axes(value) {
-		const count = this.region === 'trigraph' ? 3 : 2;
+		const count = ['trigraph','hilbert3d'].includes(this.region) ? 3 : 2;
 		if (!Array.isArray(value) || value.length !== count || new Set(value).size !== count
 			|| value.some(axis => !Number.isInteger(axis) || axis < 0 || axis >= count)) throw new TypeError('Expected an axis permutation');
 		(this._axisMappings ||= {})[this.region] = [...value];
@@ -726,14 +726,14 @@ export class DataScrollView extends ByteCanvas {
 	 * applyPreset to reset all defaults.
 	 */
 	set region(region) {
-		if (!['linear', 'hilbert', 'digraph', 'dft', 'trigraph'].includes(region)) throw new TypeError('Unknown region layout');
+		if (!['linear', 'hilbert', 'hilbert3d', 'digraph', 'dft', 'trigraph'].includes(region)) throw new TypeError('Unknown region layout');
 		this._region = region;
 		this._pointConfiguration = undefined;
 		this.resetResolution();
 		this.cancelRotationRender();
 		this.rotationDrag = null;
-		this.style.touchAction = region === 'trigraph' ? 'none' : '';
-		this.style.cursor = region === 'trigraph' ? 'grab' : '';
+		this.style.touchAction = this.spatial ? 'none' : '';
+		this.style.cursor = this.spatial ? 'grab' : '';
 		this.render();
 	}
 
@@ -813,7 +813,7 @@ export class DataScrollView extends ByteCanvas {
 	}
 
 	renderSettings() {
-		return { configuration: this._pointConfiguration || (this.region==='hilbert'?this.pointConfiguration:undefined), region: this.region, shaders: this.shaders, appearance: this.appearance,
+		return { configuration: this._pointConfiguration || (['hilbert','hilbert3d'].includes(this.region)?this.pointConfiguration:undefined), region: this.region, shaders: this.shaders, appearance: this.appearance,
 			frequencyOpacity: this.frequencyOpacity, coordinateSystem: this.coordinateSystem, axes: this.axes,
 			encoding: this.encoding, blankSpaces: this.blankSpaces, blankNulls: this.blankNulls };
 	}
@@ -1180,8 +1180,8 @@ export class DataScroll extends HTMLElement {
 		const text = view.shaders.includes('hex') ? 'hex' : view.shaders.includes('character') ? 'character' : 'none';
 		return [
 			{ label: 'Bars', input: 'number', min: 0, value: this.barCount, action: value => { this.barCount = value; } },
-			{ label: 'Preset', items: ['linear', 'hilbert', 'digraph', 'dft', 'trigraph'].map(region => ({
-				label: { linear: 'Linear', hilbert: 'Hilbert', digraph: 'Digraph', dft: 'DFT', trigraph: 'Trigraph' }[region],
+			{ label: 'Preset', items: ['linear', 'hilbert', 'hilbert3d', 'digraph', 'dft', 'trigraph'].map(region => ({
+				label: { linear: 'Linear', hilbert: 'Hilbert', hilbert3d: 'Hilbert 3D', digraph: 'Digraph', dft: 'DFT', trigraph: 'Trigraph' }[region],
 				checked: !view._pointConfiguration && view.region === region,
 				action: () => { view.applyPreset(region); this.refreshMenu(); }
 			})) },

@@ -36,7 +36,7 @@ there is no HTTP Range reader or incremental streaming source today.
 | --- | --- |
 | Selection | A full-screen view with zero or more nested overview bars; yellow selectors identify each child scope. |
 | Navigation | Wheel and keyboard movement, draggable selector edges, middle-button velocity scrolling/resizing, and 3D rotation. |
-| Presets | Linear, Hilbert, Digraph, DFT, and Trigraph. Most unchanged presets retain specialized CPU paths; Hilbert uses coordinate expressions. |
+| Presets | Linear, Hilbert, Hilbert 3D, Digraph, DFT, and Trigraph. Most unchanged presets retain specialized CPU paths; Hilbert uses coordinate expressions. |
 | Dimensions | Per-axis ranges/step, Scale or Truncate, and independent Fit; defaults are Scale and Fit on. |
 | Spaces | Square, circle, cube, cylinder, sphere; scalar factors map to their positional channels. |
 | Point appearance | Hue, saturation, lightness, opacity, size, and square/circle marks. Character or hex overlays are optional. |

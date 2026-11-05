@@ -235,3 +235,10 @@ const beforeEdit=ranged.view.pointConfiguration.position[0];
 ranged.contextItems().find(item=>item.label==='Position').items[0].items[0].action('value');await ranged.view.render();
 if(ranged.view.pointConfiguration.position[0]!=='value'||beforeEdit.input.op!=='hilbert')throw Error('Axis mapping was overridden');
 console.log('Dimension controls pass: no Layout override, width/height/depth, ranges, independent Fit, selection preservation, explicit Hilbert preset.');
+
+ranged.contextItems().find(item=>item.label==='Preset').items.find(item=>item.label==='Hilbert 3D').action();await ranged.view.render();
+if(ranged.view.region!=='hilbert3d'||!ranged.view.spatial||ranged.view.style.cursor!=='grab')throw Error('Hilbert 3D preset did not activate rotation');
+if(ranged.view.effectiveAppearance.lightness!=='value'||ranged.view.pointConfiguration.population!=='bytes')throw Error('Hilbert 3D preset did not retain byte shading');
+if(ranged.view.renderer.latest.configuration.position[2].input.op!=='hilbert3d')throw Error('Hilbert 3D preset did not reach the renderer');
+const cubeProfile=JSON.stringify(ranged.view.exportProfile());ranged.view.applyPreset('linear');ranged.view.importProfile(cubeProfile);
+if(JSON.stringify(ranged.view.exportProfile())!==cubeProfile||ranged.view.axes.length!==3)throw Error('Hilbert 3D profile round trip differs');

@@ -104,8 +104,9 @@ one neither resets a range nor silently changes other mappings.
 ## Hilbert and profiles
 
 The Hilbert preset maps Width/Height to X/Y projections of a shared Hilbert
-expression with exact Point Index input. The same expressions can feed other
-channels; explicit 3D Hilbert X/Y/Z expressions remain available under Transform.
+expression with exact Point Index input. Hilbert 3D uses the three projections of the cube curve, retaining byte
+brightness/entropy shading and representative sampling. Select it from Preset →
+Hilbert 3D. The same expressions can feed other channels; explicit 3D Hilbert X/Y/Z expressions remain available under Transform.
 The app renders this preset through the general point pipeline. The older native
 Hilbert painter remains available to low-level render clients/tests, not as an
 alternative Layout setting.

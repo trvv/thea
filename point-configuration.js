@@ -4,7 +4,7 @@
  * @module point-configuration
  */
 import { validateDimensions, dimensionCoordinate } from './dimensions.js';
-import { validateRecipe, validateDefinitions, hilbertCoordinate } from './recipes.js';
+import { validateRecipe, validateDefinitions, hilbertCoordinate, hilbert3DCoordinate } from './recipes.js';
 import { factorIndices, factorOptions } from './factors.js';
 import { populations, defaultSampleLimit } from './populations.js';
 
@@ -22,10 +22,10 @@ export function configurationFactors() { return factorOptions; }
  * for unchanged presets.
  */
 export function presetConfiguration(region) {
- if(!['linear','hilbert','digraph','dft','trigraph'].includes(region))throw new TypeError('Unknown preset');
+ if(!['linear','hilbert','hilbert3d','digraph','dft','trigraph'].includes(region))throw new TypeError('Unknown preset');
  return {population:region==='digraph'?'pairs':region==='trigraph'?'triples':region==='dft'?'bins':'bytes',
-  backend:'cpu',footprint:region==='linear'||region==='hilbert'?'grid':'point',sampleLimit:defaultSampleLimit,sampling:region==='hilbert'?'representative':'average',dimensions:validateDimensions(), space:region==='trigraph'?'cube':'square',
-  position:region==='hilbert'?[hilbertCoordinate(0,{op:'pointIndex'}),hilbertCoordinate(1,{op:'pointIndex'}),'none']:region==='linear'?['column','row','slice']:region==='dft'?['phase','frequency','none']:['value','byte2',region==='trigraph'?'byte3':'none'],
+  backend:'cpu',footprint:['linear','hilbert','hilbert3d'].includes(region)?'grid':'point',sampleLimit:defaultSampleLimit,sampling:['hilbert','hilbert3d'].includes(region)?'representative':'average',dimensions:validateDimensions(), space:region==='trigraph'||region==='hilbert3d'?'cube':'square',
+  position:region==='hilbert3d'?[0,1,2].map(axis=>hilbert3DCoordinate(axis)):region==='hilbert'?[hilbertCoordinate(0,{op:'pointIndex'}),hilbertCoordinate(1,{op:'pointIndex'}),'none']:region==='linear'?['column','row','slice']:region==='dft'?['phase','frequency','none']:['value','byte2',region==='trigraph'?'byte3':'none'],
   inverted:region==='dft'?[false,true,false]:[false,false,false]};
 }
 

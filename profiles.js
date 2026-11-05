@@ -38,10 +38,10 @@ export function validateProfile(value) {
  const appearance = value.appearance == null ? undefined : validateAppearance(region,value.appearance,recipes);
  if (!Array.isArray(value.shaders) || value.shaders.some(flag=>!['entropy','brightness','character','hex'].includes(flag))
   || value.shaders.includes('character')&&value.shaders.includes('hex')) throw new TypeError('Invalid profile text/color flags');
- if(!configuration && (appearance && needsPointFactors(region,appearance) || !['linear','hilbert'].includes(region) && value.shaders.some(flag=>flag==='hex'||flag==='character'))) configuration=validateConfiguration({...presetConfiguration(region),recipes});
- const allowed = region==='trigraph'?['cartesian','cylindrical','spherical']:['cartesian','radial'];
+ if(!configuration && (appearance && needsPointFactors(region,appearance) || !['linear','hilbert','hilbert3d'].includes(region) && value.shaders.some(flag=>flag==='hex'||flag==='character'))) configuration=validateConfiguration({...presetConfiguration(region),recipes});
+ const allowed = ['trigraph','hilbert3d'].includes(region)?['cartesian','cylindrical','spherical']:['cartesian','radial'];
  if (!allowed.includes(value.coordinateSystem)) throw new TypeError('Invalid profile coordinates');
- const dimensions=region==='trigraph'?3:2;
+ const dimensions=['trigraph','hilbert3d'].includes(region)?3:2;
  if (!Array.isArray(value.axes)||value.axes.length!==dimensions||new Set(value.axes).size!==dimensions||value.axes.some(axis=>!Number.isInteger(axis)||axis<0||axis>=dimensions)) throw new TypeError('Invalid profile axes');
  if (!value.rotation || !Number.isFinite(value.rotation.yaw)||!Number.isFinite(value.rotation.pitch)||Math.abs(value.rotation.pitch)>Math.PI/2) throw new TypeError('Invalid profile camera');
  if (!['ascii','ascii-overbar','latin1','cp437'].includes(value.encoding)) throw new TypeError('Invalid profile encoding');

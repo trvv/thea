@@ -91,6 +91,9 @@ try {
   assert.equal(await engine.render(spec),true);await executeRender(expected,spec);
   assert.deepEqual(canvas.pixels,expected.pixels,`${population}/${mode} range worker mismatch`);
  }
+ const hilbertPreset={...job,region:'hilbert3d',configuration:presetConfiguration('hilbert3d'),shaders:['brightness'],length:64,columns:64,rows:48,sampleLayout:{columns:8,rows:8}};
+ assert.equal(await engine.render(hilbertPreset),true);await executeRender(expected,hilbertPreset);
+ assert.deepEqual(canvas.pixels,expected.pixels,'Hilbert 3D preset worker mismatch');
 	const prime = { ...job, region: 'dft', length: 65537, columns: 513, rows: 129 };
 	assert.equal(await engine.render(prime), true);
 	await executeRender(expected, prime);

@@ -129,6 +129,13 @@ try{
   assert(view.pointConfiguration.position[2].input.op==='hilbert3d'&&view.pointConfiguration.position[2].component===2,'3D Hilbert menu chose the wrong component');
   const curveProfile=JSON.stringify(view.exportProfile());view.importProfile(curveProfile);
   assert(JSON.stringify(view.exportProfile())===curveProfile,'3D Hilbert profile did not round trip');
+  scroll.refreshMenu();scroll.menu.open(10,10);
+  scroll.menu.controls().find(button=>button.textContent.includes('Preset')).click();
+  scroll.menu.childMenu.controls().find(button=>button.textContent.includes('Hilbert 3D')).click();
+  await view.render();
+  assert(view.region==='hilbert3d'&&view.spatial&&view.pointConfiguration.population==='bytes','Hilbert 3D preset menu failed');
+  assert(view.effectiveAppearance.lightness==='value'&&view.pointConfiguration.position[2].input.op==='hilbert3d','Hilbert 3D preset lost its coordinate or shading mappings');
+  view.pointConfiguration={...view.pointConfiguration,sampleLimit:64};await view.render();
   const range=[view.offset,view.length];
   view.noteMovement();view.resolution.scale=0.5;await view.render();
   assert(view.offset===range[0]&&view.length===range[1],'Quality changed selection');
