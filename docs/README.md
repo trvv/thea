@@ -63,6 +63,8 @@ profile-library UI; reloading without saving still loses settings.
   operation reference, provider requirements, precision, and backend boundaries.
 - [Development and testing](development.md): commands, test limitations,
   extension checklists, and common failure modes.
+- [Detailed next steps](next-steps.md): proposed priorities, implementation options,
+  tradeoffs, and validation criteria for further improvements.
 - [Direction and open decisions](roadmap.md): what the general pipeline is meant
   to become and which design questions remain unresolved.
 

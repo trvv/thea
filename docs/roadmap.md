@@ -18,6 +18,9 @@ focused on those concrete responsibilities.
 
 ## Next useful work
 
+See [detailed next steps](next-steps.md) for suggested sequencing, implementation
+options, tradeoffs, and completion criteria.
+
 ### Move more execution to the GPU when measurements justify it
 
 The rasterizer currently uploads projected marks; providers, expressions, camera
