@@ -40,7 +40,7 @@ async function verify(){
  if(scroll.offset!==base||scroll.view.offset!==base||scroll.view.length!==size)throw Error('Visualizer offset mismatch');
  if(scroll.view.resolvedSampleLayout.columns*scroll.view.resolvedSampleLayout.rows<Math.min(scroll.view.length,scroll.view.pointConfiguration.sampleLimit))throw Error('Sample grid is too small');
 }
-if(scroll.barCount!==1)throw Error('Default count not one');
+if(scroll.barCount!==2)throw Error('Default count not two');
 scroll.seek(5000);await verify();
 scroll.barCount=3;await verify();
 if(scroll.barContainer.children[0]!==scroll.levels[2].bar||scroll.barContainer.children[2]!==scroll.levels[0].bar)throw Error('Bar order reversed');
@@ -70,8 +70,10 @@ if(scroll.barContainer.children.length!==1)throw Error('Removed bars remain in D
 let menu;
 Object.defineProperty(scroll.menu,'items',{set(value){menu=value;}});scroll.menu.open=()=>{};
 scroll.events.contextmenu({preventDefault(){},composedPath:()=>[scroll.bar,scroll]});
-if(menu[0].label!=='Bars'||menu[0].input!=='number'||menu[0].value!==1||menu[0].min!==0||!menu.some(item=>item.label==='Points'))throw Error('Shared menu incorrect');
-menu[0].action(2);await verify();
+const bars=()=>menu.at(-1).items.find(item=>item.label==='Bars');
+if(menu.at(-1).label!=='Advanced'||bars().input!=='number'||bars().value!==1||bars().min!==0||!menu.some(item=>item.label==='Points'))throw Error('Shared menu incorrect');
+if(menu.some(item=>['Bars','Sample Limit','Footprint','Backend'].includes(item.label))||String(menu.at(-1).items.map(item=>item.label))!=='Bars,Sample Limit,Footprint,Backend')throw Error('Advanced controls are misplaced');
+bars().action(2);await verify();
 scroll.view.region='digraph';await verify();
 if(scroll.view.renderer.latest.configuration.population!=='pairs'||scroll.view.length!==scroll.windowSize)throw Error('Digraph layout changed selection');
 scroll.events.contextmenu({preventDefault(){},composedPath:()=>[scroll.view,scroll]});
@@ -99,7 +101,7 @@ if(scroll.view.renderer.cache.trigraph.counts!==cachedCounts)throw Error('Rotati
 scroll.view.events.pointerup({pointerId:1});
 if(scroll.view.rotationDrag||scroll.view.style.cursor!=='grab')throw Error('Rotation did not end');
 scroll.events.contextmenu({preventDefault(){},composedPath:()=>[scroll.view,scroll]});
-if(menu[0].label!=='Bars'||menu[1].label!=='Preset'||menu.some(item=>item.label==='Cell'||item.label==='Character'))throw Error('Trigraph menu ordering/visibility incorrect');
+if(menu.at(-1).label!=='Advanced'||menu[0].label!=='Preset'||menu.some(item=>item.label==='Cell'||item.label==='Character'))throw Error('Trigraph menu ordering/visibility incorrect');
 const opacityOption=menu.find(item=>item.label==='Points').items.find(item=>item.label==='Opacity');
 opacityOption.action('count');await verify();
 if(scroll.view.appearance.opacity!=='count'||scroll.view.renderer.latest.appearance.opacity!=='count')throw Error('Opacity mapping not passed to renderer');
@@ -116,7 +118,7 @@ scroll.view.region='linear';await verify();
 if(animationFrames.size)throw Error('Changing mode retained a scheduled rotation frame');
 delete globalThis.requestAnimationFrame;delete globalThis.cancelAnimationFrame;
 scroll.events.contextmenu({preventDefault(){},composedPath:()=>[scroll.view,scroll]});
-if(menu[1].label!=='Preset'||!menu.some(item=>item.label==='Space')||!menu.some(item=>item.label==='Position')||!menu.some(item=>item.label==='Points')||menu.some(item=>item.label==='Character'))throw Error('Grid menu ordering/visibility incorrect');
+if(menu[0].label!=='Preset'||!menu.some(item=>item.label==='Space')||!menu.some(item=>item.label==='Position')||!menu.some(item=>item.label==='Points')||menu.some(item=>item.label==='Character'))throw Error('Grid menu ordering/visibility incorrect');
 scroll.view.shaders=['character'];
 scroll.events.contextmenu({preventDefault(){},composedPath:()=>[scroll.view,scroll]});
 if(!menu.some(item=>item.label==='Character'))throw Error('Character controls missing when relevant');
@@ -132,8 +134,8 @@ scroll.view.coordinateSystem='cartesian';scroll.view.axes=[0,1];
 scroll.view.shaders=['entropy','brightness'];await verify();
 
 scroll.events.contextmenu({preventDefault(){},composedPath:()=>[scroll.view,scroll]});
-if(!menu.some(item=>item.label==='Points')||!menu.some(item=>item.label==='Bars'))throw Error('View menu missing bar count');
-menu[0].action(0);await verify();
+if(!menu.some(item=>item.label==='Points')||!menu.at(-1).items.some(item=>item.label==='Bars'))throw Error('View menu missing bar count');
+bars().action(0);await verify();
 if(scroll.barContainer.children.length||scroll.view.offset!==0||scroll.view.length!==source.size)throw Error('Zero bars did not show full buffer');
 scroll.seek(1000);await verify();
 if(scroll.view.offset!==0||scroll.view.length!==source.size)throw Error('Navigation narrowed zero-bar view');

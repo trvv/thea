@@ -34,7 +34,7 @@ there is no HTTP Range reader or incremental streaming source today.
 
 | Area | Current behavior |
 | --- | --- |
-| Selection | A full-screen view with zero or more nested overview bars; yellow selectors identify each child scope. |
+| Selection | A full-screen view with two nested overview bars by default (configurable under Advanced → Bars); yellow selectors identify each child scope. |
 | Navigation | Wheel and keyboard movement, draggable selector edges, middle-button velocity scrolling/resizing, and 3D rotation. |
 | Presets | Linear, Hilbert, Hilbert 3D, Digraph, DFT, and Trigraph. All supply ordinary configuration to one shared CPU/WebGL pipeline. |
 | Dimensions | Per-axis ranges/step, Scale or Truncate, and independent Fit; defaults are Scale and Fit on. |

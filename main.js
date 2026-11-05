@@ -1085,7 +1085,7 @@ export class DataScroll extends HTMLElement {
 		this.levels = [];
 		this.windowSize = windowSize;
 		this.offset = 0;
-		this.barCount = 1;
+		this.barCount = 2;
 		this.menu = new ContextMenu();
 		this.shadowRoot.append(this.menu);
 		this.addEventListener('contextmenu', event => {
@@ -1155,16 +1155,12 @@ export class DataScroll extends HTMLElement {
 		};
 		const text = view.shaders.includes('hex') ? 'hex' : view.shaders.includes('character') ? 'character' : 'none';
 		return [
-			{ label: 'Bars', input: 'number', min: 0, value: this.barCount, action: value => { this.barCount = value; } },
 			{ label: 'Preset', items: ['linear', 'hilbert', 'hilbert3d', 'digraph', 'dft', 'trigraph'].map(region => ({
 				label: { linear: 'Linear', hilbert: 'Hilbert', hilbert3d: 'Hilbert 3D', digraph: 'Digraph', dft: 'DFT', trigraph: 'Trigraph' }[region],
 				checked: !view._pointConfiguration && view.region === region,
 				action: () => { view.applyPreset(region); this.refreshMenu(); }
 			})) },
 			choose('Population', config.population, options(populations), population => change({ population })),
-				{ label: 'Sample Limit', input: 'number', min: 1, max: 16777216, value: config.sampleLimit ?? 262144, action: sampleLimit => change({ sampleLimit }) },
-				choose('Backend', config.backend, [{value:'cpu',label:'CPU'},{value:'webgl',label:'WebGL'}], backend => change({ backend })),
-				choose('Footprint', config.footprint, options(['grid','point']), footprint => change({ footprint })),
 			choose('Space', config.space, options(Object.keys(spaces)), space => change({ space })),
 			{ label: 'Position', items: spaces[config.space].map((label, index) => ({ label, items: [
 				edit('Factor', config.position[index], factor => {
@@ -1202,7 +1198,13 @@ export class DataScroll extends HTMLElement {
 			] }] : []),
 			...(view.spatial ? [{ label: 'Camera', items: [{ label: 'Reset Rotation', action: () => {
 				view.rotation = { yaw: -0.6, pitch: 0.45 }; view.render();
-			} }] }] : [])
+			} }] }] : []),
+			{ label: 'Advanced', items: [
+				{ label: 'Bars', input: 'number', min: 0, value: this.barCount, action: value => { this.barCount = value; } },
+				{ label: 'Sample Limit', input: 'number', min: 1, max: 16777216, value: config.sampleLimit ?? 262144, action: sampleLimit => change({ sampleLimit }) },
+				choose('Footprint', config.footprint, options(['grid','point']), footprint => change({ footprint })),
+				choose('Backend', config.backend, [{value:'cpu',label:'CPU'},{value:'webgl',label:'WebGL'}], backend => change({ backend }))
+			] }
 		];
 	}
 
