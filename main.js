@@ -21,6 +21,7 @@ import { chooseFile, downloadJSON } from "./browser-files.js";
 import * as referenceModels from "./reference-models.js";
 import * as bookmarks from "./bookmarks.js";
 import { validateSourceMetadata } from "./source-metadata.js";
+import { validateDensity } from "./density.js";
 import { assertProviderBudget } from "./provider-budget.js";
 import { dimensionNames, defaultDimension, pointGrid } from "./dimensions.js";
 import { validateProfile, parseProfile } from "./profiles.js";
@@ -739,6 +740,7 @@ export class DataScrollView extends ByteCanvas {
       const current = () =>
         version === this.inspectionVersion &&
         this.isConnected &&
+        this.source === job.source &&
         this.renderer.presentedJob === job;
       const actions = pattern
         ? {
@@ -2499,6 +2501,84 @@ export class DataScroll extends HTMLElement {
       {
         label: "Points",
         items: [
+          {
+            label: "Accumulation",
+            items: [
+              {
+                label: "Enabled",
+                checked: !!view.effectiveAppearance.density,
+                action: () => {
+                  view.appearance = {
+                    ...view.effectiveAppearance,
+                    density: view.effectiveAppearance.density
+                      ? undefined
+                      : validateDensity({}),
+                  };
+                  this.refreshMenu();
+                },
+              },
+              ...(view.effectiveAppearance.density
+                ? (() => {
+                    const density = view.effectiveAppearance.density;
+                    const update = (patch) => {
+                      view.appearance = {
+                        ...view.effectiveAppearance,
+                        density: { ...density, ...patch },
+                      };
+                      this.refreshMenu();
+                    };
+                    return [
+                      choose(
+                        "Depth",
+                        density.mode,
+                        [
+                          { value: "all", label: "All Contributions" },
+                          { value: "front", label: "Front Layer" },
+                        ],
+                        (mode) => update({ mode }),
+                      ),
+                      choose(
+                        "Reference",
+                        density.reference,
+                        [
+                          { value: "percentile", label: "Percentile" },
+                          { value: "fixed", label: "Fixed" },
+                        ],
+                        (reference) => update({ reference }),
+                      ),
+                      ...[
+                        ["value", "Reference Value", Number.MIN_VALUE, 1000000],
+                        ["percentile", "Percentile", 0, 1],
+                        ["exposure", "Exposure", Number.MIN_VALUE, 1000000],
+                      ].map(([key, label, min, max]) => ({
+                        label,
+                        input: "number",
+                        min,
+                        max,
+                        step: "any",
+                        value: density[key],
+                        action: (value) => update({ [key]: value }),
+                      })),
+                      {
+                        label: "Weight by Opacity",
+                        checked: density.opacityWeight,
+                        action: () =>
+                          update({ opacityWeight: !density.opacityWeight }),
+                      },
+                      {
+                        label: "Memory Budget (MiB)",
+                        input: "number",
+                        min: 0,
+                        step: 1,
+                        value: (density.budget ?? 0) / 1048576,
+                        action: (value) =>
+                          update({ budget: value ? value * 1048576 : null }),
+                      },
+                    ];
+                  })()
+                : []),
+            ],
+          },
           choose(
             "Color Space",
             view.effectiveAppearance.colorSpace ?? "hsl",

@@ -18,6 +18,8 @@ export function settingsKey(job) {
 }
 
 export function preparationKey(job) {
+  const appearance = job.appearance ? { ...job.appearance } : undefined;
+  if (appearance) delete appearance.density;
   const configuration = job.configuration
     ? { ...job.configuration }
     : undefined;
@@ -29,7 +31,7 @@ export function preparationKey(job) {
     job.sourceId,
     job.offset,
     job.length,
-    settingsKey({ ...job, configuration }),
+    settingsKey({ ...job, configuration, appearance }),
   ]);
 }
 

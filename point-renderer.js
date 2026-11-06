@@ -12,6 +12,7 @@ import { paintCPU } from "./point-raster.js";
 import { paintWebGL } from "./point-webgl.js";
 import { preparationKey, geometryKey, frameKey } from "./render-identity.js";
 import { pointFactors } from "./point-factors.js";
+import { paintDensity, assertDensityStorage } from "./density.js";
 import {
   createProviderDiagnostics,
   retainedProviderStorage,
@@ -173,18 +174,36 @@ export async function renderPoints(canvas, job, cache, current) {
     config = job.configuration;
   const preparation = performance.now() - started;
   const { columns: width, rows: height } = job;
+  const appearance =
+    job.appearance ||
+    defaultAppearance(job.region, job.shaders, job.frequencyOpacity);
+  if (appearance.density)
+    assertDensityStorage(job, width, height, appearance.density);
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
   const context = canvas.getContext("2d"),
     scratch = (cache.pointRaster ||= {});
+  if (!appearance.density) delete scratch.density;
   const projection = projectPoints(prepared, job, scratch);
   const { projected, order, spatial, cellWidth, cellHeight } = projection;
   const rasterStarted = performance.now();
+  const density = appearance.density
+    ? paintDensity(
+        context,
+        prepared,
+        projection,
+        scratch,
+        appearance.density,
+        job,
+      )
+    : undefined;
   const accelerated =
+    !density &&
     config.backend === "webgl" &&
     paintWebGL(cache, context, prepared, projected, order, projection);
   cache.pointBackend = accelerated ? "webgl" : "cpu";
-  if (!accelerated) paintCPU(context, prepared, projection, scratch);
+  if (!accelerated && !density)
+    paintCPU(context, prepared, projection, scratch);
   if (prepared.text) {
     context.textAlign = "center";
     context.textBaseline = "middle";
@@ -211,10 +230,12 @@ export async function renderPoints(canvas, job, cache, current) {
     source: job.sourceId ?? job.source,
     prepared,
     projection,
+    density,
   };
   return {
     duration: performance.now() - started,
     dimensions: prepared.grid.dimensions,
+    ...(density ? { density } : {}),
     ...(diagnostics ? { diagnostics } : {}),
     timings: {
       preparation,

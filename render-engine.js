@@ -204,7 +204,9 @@ export class RenderEngine {
       if (result) {
         this.measure(request.job, result.duration, result.work);
         this.presented = Math.max(this.presented, request.id);
-        this.presentedJob = request.job;
+        this.presentedJob = result.density
+          ? { ...request.job, densityReference: result.density.referenceValue }
+          : request.job;
         this.presentedRemote = false;
         this.cancelInspection();
         this.reportFrame(request, result);
@@ -274,6 +276,7 @@ export class RenderEngine {
     timings,
     reused,
     diagnostics,
+    density,
     canceled,
     error,
     jobError,
@@ -311,7 +314,9 @@ export class RenderEngine {
         context.clearRect(0, 0, bitmap.width, bitmap.height);
         context.drawImage(bitmap, 0, 0);
         this.presented = id;
-        this.presentedJob = request.job;
+        this.presentedJob = density
+          ? { ...request.job, densityReference: density.referenceValue }
+          : request.job;
         this.presentedRemote = true;
         this.cancelInspection();
         this.reportFrame(request, { dimensions, timings, reused, diagnostics });

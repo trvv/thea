@@ -29,10 +29,28 @@ async function process(data) {
       self.postMessage({ id, canceled: true });
       return;
     }
-    const { duration, work, dimensions, timings, reused, diagnostics } = result;
+    const {
+      duration,
+      work,
+      dimensions,
+      timings,
+      reused,
+      diagnostics,
+      density,
+    } = result;
     const bitmap = canvas.transferToImageBitmap();
     self.postMessage(
-      { id, bitmap, duration, work, dimensions, timings, reused, diagnostics },
+      {
+        id,
+        bitmap,
+        duration,
+        work,
+        dimensions,
+        timings,
+        reused,
+        diagnostics,
+        density,
+      },
       [bitmap],
     );
   } catch (error) {

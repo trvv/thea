@@ -62,7 +62,7 @@ Further implemented tools include [byte-frequency tables](byte-frequency.md),
 [scoped statistical factors](statistical-analyses.md),
 [repetition and local spectra](nonlocal-analyses.md),
 [wide numeric and text interpretations](text-interpretations.md),
-[reference resemblance](reference-models.md), and an optional
+[reference resemblance](reference-models.md), [screen density](density.md), and an optional
 [comparison pane](comparison-views.md). Native files, bookmarks and annotations
 are described in [source navigation](source-navigation.md).
 

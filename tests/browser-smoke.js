@@ -335,6 +335,15 @@ try {
     assert(popup.textContent.includes('Record 0')&&popup.textContent.includes('Red:')&&popup.textContent.includes('Green:'),'Packed inspector lacks RGB provenance');
     assert(popup.textContent.includes('Occurrences')&&popup.textContent.includes('Context'),'Occurrence/context controls missing');
     host.view.closeInspection();
+    host.view.pointConfiguration={...host.view.pointConfiguration,footprint:'point',position:[{op:'constant',value:0.5},{op:'constant',value:0.5},'none']};
+    host.view.appearance={...host.view.effectiveAppearance,density:{mode:'all'}};await host.view.render();
+    let densityJob=host.view.renderer.presentedJob;
+    let aggregate=await host.view.renderer.inspect(densityJob.columns/2,densityJob.rows/2);
+    assert(aggregate.rendering.accumulation.contributorCount===4,'All-depth density lost overlapping contributions');
+    assert(aggregate.rendering.accumulation.reference>0,'Displayed density reference was not preserved');
+    host.view.appearance={...host.view.effectiveAppearance,density:{...host.view.effectiveAppearance.density,mode:'front'}};await host.view.render();
+    densityJob=host.view.renderer.presentedJob;aggregate=await host.view.renderer.inspect(densityJob.columns/2,densityJob.rows/2);
+    assert(aggregate.rendering.accumulation.contributorCount===1,'Front-layer density flag did not change ownership');
     host.toggleComparison();await host.comparisonView.render();
     const comparison=host.comparisonView;
     assert(comparison.offset===host.view.offset&&comparison.length===host.view.length,'Comparison selection drift');

@@ -15,6 +15,7 @@ import { describeSpectrumSample } from "./spectrum-sampling.js";
 import { interpretNumber } from "./numeric-interpretation.js";
 import { inspectByteContext } from "./occurrences.js";
 import { describeSourceOffset } from "./source-metadata.js";
+import { inspectDensity } from "./density.js";
 
 /** Same footprint/probe rules as the CPU and WebGL rasterizers; later/deeper marks win overlap. */
 export function hitPoint(prepared, projection, x, y) {
@@ -96,6 +97,12 @@ export async function inspectPoint(
       prepared: result.prepared,
       projection: projectPoints(result.prepared, job, {}),
     };
+  } else if (
+    renderCache.pointRaster?.projection &&
+    frame.projection.state !== renderCache.pointRaster.projection
+  ) {
+    // Failed later raster work can overwrite projection scratch without presenting its frame.
+    frame = { ...frame, projection: projectPoints(frame.prepared, job, {}) };
   }
   // Resolve the hit synchronously before any subsequent frame can overwrite projected scratch.
   const { prepared, projection } = frame,
@@ -107,6 +114,16 @@ export async function inspectPoint(
   const appearance =
     job.appearance ||
     defaultAppearance(job.region, job.shaders, job.frequencyOpacity);
+  const accumulation = appearance.density
+    ? inspectDensity(
+        prepared,
+        projection,
+        x,
+        y,
+        appearance.density,
+        job.densityReference ?? frame.density?.referenceValue,
+      )
+    : undefined;
   const roots = recipeRoots(job.configuration, appearance);
   if (prepared.text) roots.text = "value";
   const program = compileRecipes(roots, job.configuration.recipes);
@@ -290,6 +307,7 @@ export async function inspectPoint(
           size: prepared.sizes[index],
           shape: prepared.shape,
           footprint: job.configuration.footprint,
+          ...(accumulation ? { accumulation } : {}),
           raster: { width: projection.width, height: projection.height },
           pointScale: job.pointScale || 1,
           projection: {

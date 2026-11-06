@@ -4,6 +4,7 @@
  * @see docs/recipes.md
  */
 import { validateRecipe } from "./recipes.js";
+import { validateDensity } from "./density.js";
 import {
   appearanceChannels as defaultChannels,
   appearanceChannelsFor,
@@ -57,6 +58,8 @@ export function validateAppearance(region, mapping, definitions = {}) {
   if (!mapping || !["square", "circle"].includes(mapping.shape))
     throw new TypeError("Invalid appearance mapping");
   const copy = { shape: mapping.shape };
+  if (mapping.density !== undefined)
+    copy.density = validateDensity(mapping.density);
   if (
     mapping.colorSpace !== undefined &&
     !["hsl", "rgb"].includes(mapping.colorSpace)
