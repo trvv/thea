@@ -17,4 +17,3 @@ views, terminal points in the architecture that consume streams and render them 
 the simplest data source variety is that of the byte stream, incoming data received as a sequence of 8-bit chunks
 these chunks may be mapped into other sizes of data or perhaps have some structure imposed over them e.g. ascii-encoded gene data may be mapped to sequences of 2-bit objects
 that may then further be mapped into 6-bit object sequences for codons
-

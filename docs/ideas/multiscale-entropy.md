@@ -51,22 +51,27 @@ The factories below create supported expression data. Raw bit-valued
 intermediates remain inside the containing expression, before terminal clamping.
 
 ```js
-const entropyBits = window => ({
-  op: 'multiply',
-  a: {op: 'entropy', offset: {op: 'offset'}, window},
-  b: {op: 'constant', value: Math.min(8, Math.log2(window))}
+const entropyBits = (window) => ({
+  op: "multiply",
+  a: { op: "entropy", offset: { op: "offset" }, window },
+  b: { op: "constant", value: Math.min(8, Math.log2(window)) },
 });
-const difference = {op: 'subtract', a: entropyBits(32), b: entropyBits(256)};
+const difference = { op: "subtract", a: entropyBits(32), b: entropyBits(256) };
 const expressions = {
-  small: {op: 'divide', a: entropyBits(32), b: {op: 'constant', value: 8}},
-  large: {op: 'divide', a: entropyBits(256), b: {op: 'constant', value: 8}},
-  contrast: {op: 'normalize', input: difference, min: -8, max: 8},
-  magnitude: {op: 'normalize', input: {op: 'abs', input: difference}, min: 0, max: 8}
+  small: { op: "divide", a: entropyBits(32), b: { op: "constant", value: 8 } },
+  large: { op: "divide", a: entropyBits(256), b: { op: "constant", value: 8 } },
+  contrast: { op: "normalize", input: difference, min: -8, max: 8 },
+  magnitude: {
+    op: "normalize",
+    input: { op: "abs", input: difference },
+    min: 0,
+    max: 8,
+  },
 };
 view.appearance = {
   ...view.effectiveAppearance,
   hue: expressions.contrast,
-  lightness: expressions.large
+  lightness: expressions.large,
 };
 ```
 

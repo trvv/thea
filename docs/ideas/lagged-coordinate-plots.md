@@ -31,32 +31,41 @@ is implied.
 
 ```js
 const lag = 16;
-const channel = delta => ({
-  op: 'normalize', min: 0, max: 255,
+const channel = (delta) => ({
+  op: "normalize",
+  min: 0,
+  max: 255,
   input: {
-    op: 'byte',
-    offset: {op: 'add', a: {op: 'offset'}, b: {op: 'constant', value: delta}}
-  }
+    op: "byte",
+    offset: {
+      op: "add",
+      a: { op: "offset" },
+      b: { op: "constant", value: delta },
+    },
+  },
 });
 const expressions = {
   x: channel(0),
   y: channel(lag),
   z: channel(2 * lag),
   valid: {
-    op: 'normalize', min: 0, max: 1,
+    op: "normalize",
+    min: 0,
+    max: 1,
     input: {
-      op: 'subtract',
-      a: {op: 'subtract', a: {op: 'length'}, b: {op: 'offset'}},
-      b: {op: 'constant', value: 2 * lag}
-    }
-  }
+      op: "subtract",
+      a: { op: "subtract", a: { op: "length" }, b: { op: "offset" } },
+      b: { op: "constant", value: 2 * lag },
+    },
+  },
 };
 view.pointConfiguration = {
   ...view.pointConfiguration,
-  space: 'cube', footprint: 'point',
-  position: [expressions.x, expressions.y, expressions.z]
+  space: "cube",
+  footprint: "point",
+  position: [expressions.x, expressions.y, expressions.z],
 };
-view.appearance = {...view.effectiveAppearance, opacity: expressions.valid};
+view.appearance = { ...view.effectiveAppearance, opacity: expressions.valid };
 ```
 
 For two dimensions, select a square or circle and retain only the visible X/Y

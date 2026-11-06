@@ -1,47 +1,124 @@
 // Real Chromium/Canvas/OffscreenCanvas integration without an npm dependency.
 // CHROMIUM_PATH overrides the system executable. Requires permission to launch a browser.
-import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-const root=new URL('../',import.meta.url).pathname;
-const server=Bun.serve({hostname:'127.0.0.1',port:0,async fetch(request){
- const path=decodeURIComponent(new URL(request.url).pathname);
- if(path==='/fixture.bin')return new Response(Uint8Array.from({length:65536},(_,i)=>(i*71+(i>>>3))%251));
- if(path==='/browser.html')return new Response('<!DOCTYPE html><body></body>',{headers:{'content-type':'text/html'}});
- const file=resolve(root,`.${path==='/'?'/index.html':path}`);
- if(!file.startsWith(root))return new Response(null,{status:403});
- const body=Bun.file(file);return await body.exists()?new Response(body):new Response(null,{status:404});
-}});
-const profile=await mkdtemp(join(tmpdir(),'thea-browser-'));
-let browser,socket;
-try{
- browser=Bun.spawn([process.env.CHROMIUM_PATH||'/usr/bin/chromium-browser','--headless','--no-sandbox','--disable-dev-shm-usage',
-  '--enable-unsafe-swiftshader','--use-angle=swiftshader','--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{stdout:'ignore',stderr:'pipe'});
- const errors=new Response(browser.stderr).text();
- const deadline=Date.now()+15000;let port;
- while(Date.now()<deadline){
-  try{port=(await Bun.file(join(profile,'DevToolsActivePort')).text()).split('\n')[0];break;}catch{}
-  if(browser.exitCode!==null)throw Error(await errors);
-  await Bun.sleep(25);
- }
- assert(port,'Chromium did not expose its debugging port');
- const targets=await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
- socket=new WebSocket(targets.find(target=>target.type==='page').webSocketDebuggerUrl);
- await new Promise((resolve,reject)=>{socket.onopen=resolve;socket.onerror=reject;});
- let serial=0;const pending=new Map(),pageErrors=[];
- socket.onmessage=event=>{const message=JSON.parse(event.data);if(message.id){const {resolve,reject,timer}=pending.get(message.id);pending.delete(message.id);clearTimeout(timer);message.error?reject(Error(JSON.stringify(message.error))):resolve(message.result);}else if(message.method==='Runtime.exceptionThrown')pageErrors.push(message.params.exceptionDetails);};
- const call=(method,params={})=>new Promise((resolve,reject)=>{const id=++serial;const timer=setTimeout(()=>reject(Error(`CDP timeout: ${method}`)),30000);pending.set(id,{resolve,reject,timer});socket.send(JSON.stringify({id,method,params}));});
- const evaluate=async expression=>{
-  const response=await call('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});
-  if(response.exceptionDetails)throw Error(JSON.stringify(response.exceptionDetails));
-  return response.result.value;
- };
- await call('Runtime.enable');await call('Page.enable');
- await call('Emulation.setDeviceMetricsOverride',{width:640,height:480,deviceScaleFactor:2,mobile:false});
- await call('Page.navigate',{url:`http://127.0.0.1:${server.port}/browser.html`});
- while(!await evaluate("document.readyState === 'complete'"))await Bun.sleep(25);
- const result=await evaluate(`(async()=>{
+import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+const root = new URL("../", import.meta.url).pathname;
+const server = Bun.serve({
+  hostname: "127.0.0.1",
+  port: 0,
+  async fetch(request) {
+    const path = decodeURIComponent(new URL(request.url).pathname);
+    if (path === "/fixture.bin")
+      return new Response(
+        Uint8Array.from(
+          { length: 65536 },
+          (_, i) => (i * 71 + (i >>> 3)) % 251,
+        ),
+      );
+    if (path === "/browser.html")
+      return new Response("<!DOCTYPE html><body></body>", {
+        headers: { "content-type": "text/html" },
+      });
+    const file = resolve(root, `.${path === "/" ? "/index.html" : path}`);
+    if (!file.startsWith(root)) return new Response(null, { status: 403 });
+    const body = Bun.file(file);
+    return (await body.exists())
+      ? new Response(body)
+      : new Response(null, { status: 404 });
+  },
+});
+const profile = await mkdtemp(join(tmpdir(), "thea-browser-"));
+let browser, socket;
+try {
+  browser = Bun.spawn(
+    [
+      process.env.CHROMIUM_PATH || "/usr/bin/chromium-browser",
+      "--headless",
+      "--no-sandbox",
+      "--disable-dev-shm-usage",
+      "--enable-unsafe-swiftshader",
+      "--use-angle=swiftshader",
+      "--remote-debugging-port=0",
+      `--user-data-dir=${profile}`,
+      "about:blank",
+    ],
+    { stdout: "ignore", stderr: "pipe" },
+  );
+  const errors = new Response(browser.stderr).text();
+  const deadline = Date.now() + 15000;
+  let port;
+  while (Date.now() < deadline) {
+    try {
+      port = (await Bun.file(join(profile, "DevToolsActivePort")).text()).split(
+        "\n",
+      )[0];
+      break;
+    } catch {}
+    if (browser.exitCode !== null) throw Error(await errors);
+    await Bun.sleep(25);
+  }
+  assert(port, "Chromium did not expose its debugging port");
+  const targets = await (
+    await fetch(`http://127.0.0.1:${port}/json/list`)
+  ).json();
+  socket = new WebSocket(
+    targets.find((target) => target.type === "page").webSocketDebuggerUrl,
+  );
+  await new Promise((resolve, reject) => {
+    socket.onopen = resolve;
+    socket.onerror = reject;
+  });
+  let serial = 0;
+  const pending = new Map(),
+    pageErrors = [];
+  socket.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+    if (message.id) {
+      const { resolve, reject, timer } = pending.get(message.id);
+      pending.delete(message.id);
+      clearTimeout(timer);
+      message.error
+        ? reject(Error(JSON.stringify(message.error)))
+        : resolve(message.result);
+    } else if (message.method === "Runtime.exceptionThrown")
+      pageErrors.push(message.params.exceptionDetails);
+  };
+  const call = (method, params = {}) =>
+    new Promise((resolve, reject) => {
+      const id = ++serial;
+      const timer = setTimeout(
+        () => reject(Error(`CDP timeout: ${method}`)),
+        30000,
+      );
+      pending.set(id, { resolve, reject, timer });
+      socket.send(JSON.stringify({ id, method, params }));
+    });
+  const evaluate = async (expression) => {
+    const response = await call("Runtime.evaluate", {
+      expression,
+      awaitPromise: true,
+      returnByValue: true,
+    });
+    if (response.exceptionDetails)
+      throw Error(JSON.stringify(response.exceptionDetails));
+    return response.result.value;
+  };
+  await call("Runtime.enable");
+  await call("Page.enable");
+  await call("Emulation.setDeviceMetricsOverride", {
+    width: 640,
+    height: 480,
+    deviceScaleFactor: 2,
+    mobile: false,
+  });
+  await call("Page.navigate", {
+    url: `http://127.0.0.1:${server.port}/browser.html`,
+  });
+  while (!(await evaluate("document.readyState === 'complete'")))
+    await Bun.sleep(25);
+  const result = await evaluate(`(async()=>{
   const assert=(value,message)=>{if(!value)throw Error(message);};
   const {DataScroll}=await import('/main.js');
   assert(document.querySelectorAll('data-scroll').length===0,'Component import mounted the demo');
@@ -131,7 +208,8 @@ try{
   assert(JSON.stringify(view.exportProfile())===curveProfile,'3D Hilbert profile did not round trip');
   scroll.refreshMenu();scroll.menu.open(10,10);
   scroll.menu.controls().find(button=>button.textContent.includes('Preset')).click();
-  scroll.menu.childMenu.controls().find(button=>button.textContent.includes('Hilbert 3D')).click();
+  scroll.menu.childMenu.controls().find(button=>button.textContent.includes('Load')).click();
+  scroll.menu.childMenu.childMenu.controls().find(button=>button.textContent.includes('Hilbert 3D')).click();
   await view.render();
   assert(view.region==='hilbert3d'&&view.spatial&&view.pointConfiguration.population==='bytes','Hilbert 3D preset menu failed');
   assert(view.effectiveAppearance.lightness==='value'&&view.pointConfiguration.position[2].input.op==='hilbert3d','Hilbert 3D preset lost its coordinate or shading mappings');
@@ -173,6 +251,7 @@ try{
    const inspectScroll=new DataScroll(new Blob([Uint8Array.from({length:16},(_,i)=>i*11)]),16);
    inspectScroll.barCount=0;
    const inspectedView=inspectScroll.view;
+   inspectedView.applyPreset('linear');
    inspectedView.renderer.budget=backend==='local'?Infinity:0;
    if(backend==='local')inspectedView.renderer.supported=false;
    document.body.append(inspectScroll);
@@ -195,7 +274,7 @@ try{
     return inspectedView.inspector;
    };
    let popup=await clickPoint();
-   assert(popup.textContent.includes('Byte 0 @ 0')&&popup.textContent.includes('Source Offset'),'Byte popup lacks value/index');
+   assert(popup.textContent.includes('Byte 0x00 @ 0x0')&&popup.textContent.includes('Source Offset'),'Byte popup lacks value/index: '+popup.querySelector('strong')?.textContent+' '+JSON.stringify(inspectedView.renderer.presentedJob.configuration));
    assert(popup.textContent.includes('Hue: Local Entropy')&&popup.textContent.includes('Lightness: Byte Value'),'Popup lacks trait associations');
    assert([...popup.querySelectorAll('details')].every(section=>!section.open),'Inspection sections must start collapsed');
    assert(popup.textContent.includes('0 (0x00, ASCII NUL)'),'Byte inspection lacks hex/control representation');
@@ -218,8 +297,8 @@ try{
   }
   return {sourceBytes:source.size,population:before};
  })()`);
- // Real pointer input verifies that capture/preventDefault still allows stationary 3D clicks.
- const pointLocation=await evaluate(`(async()=>{
+  // Real pointer input verifies that capture/preventDefault still allows stationary 3D clicks.
+  const pointLocation = await evaluate(`(async()=>{
   const {DataScroll}=await import('/main.js'),{executeRender}=await import('/rendering.js'),{hitPoint}=await import('/point-inspection.js');
   const fixture=window.inspectionFixture=new DataScroll(new Blob([Uint8Array.from({length:64},(_,i)=>i*3)]),64);
   fixture.barCount=0;fixture.view.applyPreset('hilbert3d');fixture.view.renderer.budget=0;document.body.append(fixture);
@@ -232,27 +311,162 @@ try{
   }
   throw Error('No 3D point to click');
  })()`);
- await call('Input.dispatchMouseEvent',{type:'mouseMoved',...pointLocation});
- await call('Input.dispatchMouseEvent',{type:'mousePressed',...pointLocation,button:'left',clickCount:1});
- await call('Input.dispatchMouseEvent',{type:'mouseReleased',...pointLocation,button:'left',clickCount:1});
- const inspectionDeadline=Date.now()+5000;
- while(Date.now()<inspectionDeadline&&!await evaluate("window.inspectionFixture.view.inspector?.matches(':popover-open')"))await Bun.sleep(10);
- assert(await evaluate("window.inspectionFixture.view.inspector?.matches(':popover-open')"),'A real stationary 3D click failed to inspect');
- const yaw=await evaluate('window.inspectionFixture.view.rotation.yaw');
- await evaluate('window.inspectionFixture.view.closeInspection()');
- await call('Input.dispatchMouseEvent',{type:'mousePressed',...pointLocation,button:'left',clickCount:1});
- const dragged={x:pointLocation.x+20,y:pointLocation.y+10};
- await call('Input.dispatchMouseEvent',{type:'mouseMoved',...dragged,button:'left',buttons:1});
- await call('Input.dispatchMouseEvent',{type:'mouseReleased',...dragged,button:'left',clickCount:1});
- assert(await evaluate('window.inspectionFixture.view.rotation.yaw')!==yaw,'Real pointer drag failed to rotate');
- assert(!await evaluate("window.inspectionFixture.view.inspector?.matches(':popover-open')"),'Camera drag opened inspection');
- await evaluate('window.inspectionFixture.remove();delete window.inspectionFixture');
- await call('Page.navigate',{url:`http://127.0.0.1:${server.port}/#fixture.bin`});
- const loadedDeadline=Date.now()+10000;
- while(Date.now()<loadedDeadline&&!await evaluate("document.querySelector('data-scroll')?.source?.size === 65536"))await Bun.sleep(25);
- assert(await evaluate("document.querySelector('data-scroll')?.source?.size === 65536"),'Bootstrap failed to mount/load the fragment');
- assert.equal(pageErrors.length,0,JSON.stringify(pageErrors));
- console.log('Browser checks pass: component import, real worker/bitmap, CPU/WebGL parity and fallback, mixed populations, profiles, snapshots, sample/quality boundaries, source replacement, DPR/text, point inspection, real 3D click/drag, native popover keyboard focus, disconnect.',result);
-}finally{
- socket?.close();browser?.kill();if(browser)await browser.exited;server.stop(true);await rm(profile,{recursive:true,force:true});
+  await call("Input.dispatchMouseEvent", {
+    type: "mouseMoved",
+    ...pointLocation,
+  });
+  await call("Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    ...pointLocation,
+    button: "left",
+    clickCount: 1,
+  });
+  await call("Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    ...pointLocation,
+    button: "left",
+    clickCount: 1,
+  });
+  const inspectionDeadline = Date.now() + 5000;
+  while (
+    Date.now() < inspectionDeadline &&
+    !(await evaluate(
+      "window.inspectionFixture.view.inspector?.matches(':popover-open')",
+    ))
+  )
+    await Bun.sleep(10);
+  assert(
+    await evaluate(
+      "window.inspectionFixture.view.inspector?.matches(':popover-open')",
+    ),
+    "A real stationary 3D click failed to inspect",
+  );
+  const yaw = await evaluate("window.inspectionFixture.view.rotation.yaw");
+  await evaluate("window.inspectionFixture.view.closeInspection()");
+  await call("Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    ...pointLocation,
+    button: "left",
+    clickCount: 1,
+  });
+  const dragged = { x: pointLocation.x + 20, y: pointLocation.y + 10 };
+  await call("Input.dispatchMouseEvent", {
+    type: "mouseMoved",
+    ...dragged,
+    button: "left",
+    buttons: 1,
+  });
+  await call("Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    ...dragged,
+    button: "left",
+    clickCount: 1,
+  });
+  assert(
+    (await evaluate("window.inspectionFixture.view.rotation.yaw")) !== yaw,
+    "Real pointer drag failed to rotate",
+  );
+  assert(
+    !(await evaluate(
+      "window.inspectionFixture.view.inspector?.matches(':popover-open')",
+    )),
+    "Camera drag opened inspection",
+  );
+  await evaluate(
+    "window.inspectionFixture.remove();delete window.inspectionFixture",
+  );
+  const persisted = await evaluate(`(async()=>{
+    const assert=(value,message)=>{if(!value)throw Error(message);};
+    const {DataScroll}=await import('/main.js');
+    const {storageKey,readLibrary}=await import('/preset-library.js');
+    localStorage.removeItem(storageKey);
+    const host=new DataScroll(new Blob([Uint8Array.from({length:256},(_,i)=>i%251)]),64);
+    host.barCount=3;host.view.applyPreset('hilbert3d');
+    host.view.pointConfiguration={...host.view.pointConfiguration,sampleLimit:64};
+    host.view.setFactor('Neighbor',{op:'byte',offset:{op:'offset'}});
+    host.view.appearance={...host.view.effectiveAppearance,hue:{op:'entropy',offset:{op:'offset'},window:64}};
+    document.body.append(host);await host.view.render();
+    const prompts=[],alerts=[],fallback=[];
+    const originalPrompt=window.prompt,originalAlert=window.alert;
+    const originalClipboard=Object.getOwnPropertyDescriptor(navigator,'clipboard');
+    let copied;
+    window.prompt=(message,value)=>{if(message==='Preset JSON'&&value)fallback.push(value);return prompts.length?prompts.shift():null;};
+    window.alert=message=>alerts.push(message);
+    Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{copied=text;}}});
+    const run=async(...labels)=>{
+      host.refreshMenu();host.menu.open(10,10);let menu=host.menu;
+      for(const label of ['Preset',...labels]) {
+        const button=menu.controls().find(control=>control.textContent.includes(label));
+        assert(button,'Missing preset command '+label);button.click();menu=menu.childMenu;
+      }
+      await new Promise(resolve=>setTimeout(resolve,0));
+    };
+    try {
+      prompts.push('Durable Cube');await run('Save As');
+      assert(readLibrary().presets.length===1,'Save As did not persist');
+      prompts.push('Cube Copy');await run('Manage','Durable Cube','Duplicate');
+      assert(readLibrary().presets.length===2,'Duplicate did not persist');
+      host.view.appearance={...host.view.effectiveAppearance,hue:{op:'entropy',offset:{op:'offset'},window:96}};
+      await run('Manage','Durable Cube','Update');
+      await run('Load','Saved','Cube Copy');
+      assert(host.view.effectiveAppearance.hue.window===64,'Copy was aliased to updated original');
+      prompts.push('Other Cube');await run('Manage','Cube Copy','Rename');
+      await run('Manage','Other Cube','Delete');
+      assert(readLibrary().presets.length===1,'Delete did not persist');
+      await run('Manage','Durable Cube','Copy JSON');
+      assert(JSON.parse(copied).profile.appearance.hue.window===96,'Clipboard copy lost settings');
+      prompts.push(copied,'Imported Cube');await run('Import JSON');
+      assert(readLibrary().presets.length===2&&host.view.effectiveAppearance.hue.window===96,'Import failed');
+      const unchanged=localStorage.getItem(storageKey);
+      prompts.push(null);await run('Save As');assert(localStorage.getItem(storageKey)===unchanged,'Canceled save changed data');
+      prompts.push('Durable Cube');await run('Save As');
+      assert(alerts.length===1&&localStorage.getItem(storageKey)===unchanged,'Name collision overwrote preset');
+      const originalSetItem=Storage.prototype.setItem;
+      Storage.prototype.setItem=function(key,value){if(key===storageKey)throw new DOMException('Preset quota exceeded','QuotaExceededError');return originalSetItem.call(this,key,value);};
+      try {prompts.push('Quota failure');await run('Save As');}
+      finally {Storage.prototype.setItem=originalSetItem;}
+      assert(alerts.length===2&&localStorage.getItem(storageKey)===unchanged,'Quota failure erased prior presets or failed silently');
+      Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw Error('denied');}}});
+      await run('Copy JSON');assert(fallback.length===1&&JSON.parse(fallback[0]).barCount===3,'Clipboard failure did not provide copyable JSON');
+      return {snapshot:JSON.stringify(host.presetSnapshot()),name:'Imported Cube'};
+    }finally {
+      host.remove();window.prompt=originalPrompt;window.alert=originalAlert;
+      if(originalClipboard)Object.defineProperty(navigator,'clipboard',originalClipboard);else delete navigator.clipboard;
+    }
+  })()`);
+  await call("Page.navigate", {
+    url: `http://127.0.0.1:${server.port}/#fixture.bin`,
+  });
+  const loadedDeadline = Date.now() + 10000;
+  while (
+    Date.now() < loadedDeadline &&
+    !(await evaluate(
+      "document.querySelector('data-scroll')?.source?.size === 65536",
+    ))
+  )
+    await Bun.sleep(25);
+  assert(
+    await evaluate(
+      "document.querySelector('data-scroll')?.source?.size === 65536",
+    ),
+    "Bootstrap failed to mount/load the fragment",
+  );
+  assert.equal(
+    await evaluate(
+      "JSON.stringify(document.querySelector('data-scroll').presetSnapshot())",
+    ),
+    persisted.snapshot,
+    "Browser refresh did not restore the saved preset and bar count",
+  );
+  assert.equal(pageErrors.length, 0, JSON.stringify(pageErrors));
+  console.log(
+    "Browser checks pass: component import, real worker/bitmap, CPU/WebGL parity and fallback, mixed populations, profiles, snapshots, sample/quality boundaries, source replacement, DPR/text, point inspection, real 3D click/drag, native popover keyboard focus, persistent preset CRUD/copy/import and refresh, disconnect.",
+    result,
+  );
+} finally {
+  socket?.close();
+  browser?.kill();
+  if (browser) await browser.exited;
+  server.stop(true);
+  await rm(profile, { recursive: true, force: true });
 }

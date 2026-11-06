@@ -40,12 +40,13 @@ totals avoid rebuilding full-page contributions, but changing ranges with evicte
 partial-page detail can still require reads. Sharing immutable source summaries
 across bars would reduce duplicate work without sharing mutable renderer caches.
 
-### Build profile management on the versioned format
+### Extend profile management when useful
 
-The application exposes JSON import/export without automatically choosing storage
-or adding a profile library. Named storage, duplication, import/export controls,
-and migrations can use the existing schema. Source-specific selection/bookmark
-state should stay separate from reusable visualization settings.
+A named localStorage library now supports save/load/update/duplicate/rename/delete,
+clipboard JSON transfer, and restoration of the last selected preset. See
+[saved presets](../presets.md). Source files and selected byte ranges remain
+session state. File-based export/import, explicit bookmarks and richer editing
+can build on the existing versioned schema if there is a concrete need.
 
 ### Keep populations and provider relationships composable
 

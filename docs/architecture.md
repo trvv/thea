@@ -32,14 +32,14 @@ flowchart TD
 
 ## Elements and event boundaries
 
-| Class / tag | Responsibility | Important boundary |
-| --- | --- | --- |
-| `Popup` / `ui-popup` | Native popover positioning and dismissal. | Coordinates are viewport pixels. |
-| `ContextMenu` / `context-menu` | Descriptor-driven nested menus and focus. | Submenus are DOM descendants so native auto-popovers keep their ancestors open. |
-| `ByteCanvas` | Internal canvas, resize observer, renderer lifetime. | Removing an element cancels its worker and pending work. |
-| `DataScrollView` / `data-scroll-view` | Visualization settings, geometry, rotation, final source window. | `offset` is absolute within the root Blob. |
-| `DataScrollBar` / `data-scroll-bar` | Parent-scope overview and child selector. | Cursor offsets are local to that parent scope. |
-| `DataScroll` / `data-scroll` | Source, scope reconciliation, menu composition. | The only component that translates all nested scopes into the final absolute range. |
+| Class / tag                           | Responsibility                                                   | Important boundary                                                                  |
+| ------------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `Popup` / `ui-popup`                  | Native popover positioning and dismissal.                        | Coordinates are viewport pixels.                                                    |
+| `ContextMenu` / `context-menu`        | Descriptor-driven nested menus and focus.                        | Submenus are DOM descendants so native auto-popovers keep their ancestors open.     |
+| `ByteCanvas`                          | Internal canvas, resize observer, renderer lifetime.             | Removing an element cancels its worker and pending work.                            |
+| `DataScrollView` / `data-scroll-view` | Visualization settings, geometry, rotation, final source window. | `offset` is absolute within the root Blob.                                          |
+| `DataScrollBar` / `data-scroll-bar`   | Parent-scope overview and child selector.                        | Cursor offsets are local to that parent scope.                                      |
+| `DataScroll` / `data-scroll`          | Source, scope reconciliation, menu composition.                  | The only component that translates all nested scopes into the final absolute range. |
 
 View/bar `seek` events and bar `window-change` events are listened to directly by
 `DataScroll`; they are not a public, bubbling global event bus. `window-change`
@@ -63,8 +63,8 @@ in tests still requires DOM stubs.
 A minimal programmatic instance is:
 
 ```js
-const { DataScroll } = await import('./main.js');
-const response = await fetch('./examples/cat');
+const { DataScroll } = await import("./main.js");
+const response = await fetch("./examples/cat");
 if (!response.ok) throw new Error(`HTTP ${response.status}`);
 const scroll = new DataScroll(await response.blob(), 4096);
 document.body.append(scroll);
@@ -92,6 +92,10 @@ settings. Explicit configuration remains authoritative.
 flags, camera orientation, and raw configuration. Named factor definitions remain
 available. The older `region` setter exits raw configuration but preserves more
 per-region compatibility settings; it is not equivalent to applying a full preset.
+
+The Preset menu adds named localStorage snapshots and remembers the last selected
+entry or built-in. `DataScroll` restores them through the existing profile API
+and separately restores saved bar count. See [preset storage](presets.md).
 
 Current raw configuration shape:
 
@@ -135,30 +139,30 @@ axis, and shader getters return owned snapshots.
 
 ## Module map
 
-| Module | Why it exists |
-| --- | --- |
-| `main.js`, `bootstrap.js` | Reusable DOM components and separate demo loader. |
-| `dimensions.js` | Per-axis ranges, natural defaults, grid cells, Scale/Truncate, and Fit. |
-| `populations.js`, `profiles.js` | Point populations/sample budgets and versioned profile JSON. |
-| `render-identity.js` | Shared preparation/presentation/quality setting identity. |
-| `histograms.js`, `spectrum.js` | Incremental counts and selection-scoped spectral providers. |
-| `render-engine.js`, `render-worker.js` | Scheduling, transfer protocol, presentation order, thread-local cache lifetime. |
-| `rendering.js` | Shared view dispatcher, structural cost estimation, and overview painting. |
-| `overview.js` | Exact overview averaging without rereading every nested scope. |
-| `fourier.js` | Selection-length FFT/Bluestein spectrum. |
-| `entropy.js`, `text.js` | Shared entropy windows and byte glyph decoding. |
-| `factor-catalog.js`, `factors.js` | Stable factor-slot ABI and reachability/cost planning. |
-| `recipes.js` | Validation, named references, shared typed IR, CPU evaluator compilation. |
-| `point-factors.js` | Lazy source/window providers and sampled byte-offset contexts. |
-| `spaces.js`, `point-configuration.js` | Shared positional channels, preset intent, mapping validation, geometry transform. |
-| `appearance.js` | Default channel mappings, HSL conversion, and exact conditional color tables. |
-| `point-inspection.js`, `point-provenance.js`, `inspection-content.js` | On-demand picking, source/recipe descriptions, and plain DOM popup content. |
-| `point-renderer.js` | Shared recipe preparation with separate geometry and appearance invalidation. |
-| `point-projection.js` | Camera projection and cached depth ordering. |
-| `point-raster.js`, `point-webgl.js` | Shared CPU coverage and optional WebGL rasterization. |
-| `recipe-menu.js` | DOM-independent descriptors for expression edits. |
-| `recipe-shaders.js` | GLSL/WGSL function-library generation from validated IR. |
-| `adaptive-resolution.js` | Measured interaction-quality feedback independent of source selection. |
+| Module                                                                | Why it exists                                                                      |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `main.js`, `bootstrap.js`                                             | Reusable DOM components and separate demo loader.                                  |
+| `dimensions.js`                                                       | Per-axis ranges, natural defaults, grid cells, Scale/Truncate, and Fit.            |
+| `populations.js`, `profiles.js`                                       | Point populations/sample budgets and versioned profile JSON.                       |
+| `render-identity.js`                                                  | Shared preparation/presentation/quality setting identity.                          |
+| `histograms.js`, `spectrum.js`                                        | Incremental counts and selection-scoped spectral providers.                        |
+| `render-engine.js`, `render-worker.js`                                | Scheduling, transfer protocol, presentation order, thread-local cache lifetime.    |
+| `rendering.js`                                                        | Shared view dispatcher, structural cost estimation, and overview painting.         |
+| `overview.js`                                                         | Exact overview averaging without rereading every nested scope.                     |
+| `fourier.js`                                                          | Selection-length FFT/Bluestein spectrum.                                           |
+| `entropy.js`, `text.js`                                               | Shared entropy windows and byte glyph decoding.                                    |
+| `factor-catalog.js`, `factors.js`                                     | Stable factor-slot ABI and reachability/cost planning.                             |
+| `recipes.js`                                                          | Validation, named references, shared typed IR, CPU evaluator compilation.          |
+| `point-factors.js`                                                    | Lazy source/window providers and sampled byte-offset contexts.                     |
+| `spaces.js`, `point-configuration.js`                                 | Shared positional channels, preset intent, mapping validation, geometry transform. |
+| `appearance.js`                                                       | Default channel mappings, HSL conversion, and exact conditional color tables.      |
+| `point-inspection.js`, `point-provenance.js`, `inspection-content.js` | On-demand picking, source/recipe descriptions, and plain DOM popup content.        |
+| `point-renderer.js`                                                   | Shared recipe preparation with separate geometry and appearance invalidation.      |
+| `point-projection.js`                                                 | Camera projection and cached depth ordering.                                       |
+| `point-raster.js`, `point-webgl.js`                                   | Shared CPU coverage and optional WebGL rasterization.                              |
+| `recipe-menu.js`                                                      | DOM-independent descriptors for expression edits.                                  |
+| `recipe-shaders.js`                                                   | GLSL/WGSL function-library generation from validated IR.                           |
+| `adaptive-resolution.js`                                              | Measured interaction-quality feedback independent of source selection.             |
 
 The names `region`, `shaders`, and `coordinateSystem` in jobs are historical.
 `shaders` is also the compatibility array for entropy/brightness/text flags; it

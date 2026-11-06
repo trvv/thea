@@ -21,12 +21,16 @@ page requires an intentional host-layout change.
 
 ## Test commands
 
+The tracked pre-commit hook runs `bun fmt --staged`. Enable it in a new checkout
+with `git config core.hooksPath .githooks`. Use `bun fmt --check` to verify formatting;
+format before tests only when needed. The hook handles the commit-time pass.
+
 Tests are executable Bun scripts using assertions, not a `bun test` discovery
 suite. Run from the repository root:
 
 ```sh
 for test in recipes recipe-shaders hilbert dimensions pipeline point-factors point-configuration appearance \
-  data-scroll context-menu render-engine render-thread-smoke render-pipeline rasterization point-inspection trigraph \
+  data-scroll context-menu render-engine render-thread-smoke render-pipeline rasterization point-inspection preset-library trigraph \
   trigraph-opacity coordinates adaptive-resolution scroll-performance digraph fourier
 do
   bun "tests/$test.js" || exit 1
@@ -62,24 +66,25 @@ permission to launch processes and bind a local port in restricted environments.
 
 ### What the tests establish
 
-| Tests | Main regressions guarded against |
-| --- | --- |
-| `data-scroll` | Nested scope containment, true source bytes, root/local offsets, snapping/anchors, zero bars, recipe state and navigation sync. |
-| `context-menu` | Native popover ownership, focus restoration, keyboard/hover behavior, submenu flipping, numeric input. |
-| `render-engine` | Local/worker parity with a worker double, routing, bounded pending queue, stale-frame rejection, bitmap cleanup, fallback. |
-| `render-thread-smoke` | Actual Bun worker execution of the shared renderer and timer progress on the main thread. |
-| `adaptive-resolution` | Sustained miss/fast thresholds, recovery, unsuccessful-reduction rollback, DPR footprints, selection stability. |
-| `trigraph`, `trigraph-opacity` | Sliding tuple boundaries, cached/fresh equivalence, projection, opacity, colored depth ordering. |
-| `coordinates`, `point-configuration` | Coordinate conventions, repeated mappings, all spaces, sample/camera/raster cache boundaries. |
-| `point-factors` | Laziness, exact neighbors, entropy/histogram/FFT reuse, hidden axes, selection boundaries, empty/short inputs. |
-| `dimensions` | Ranges/cell counts, Scale/Truncate, independent Fit, Cartesian/radial domains, coordinate presets, and profile migration. |
-| `hilbert` | True 3D Hilbert orientation, exhaustive small-cube uniqueness/adjacency, exact large indices, vec3 sharing, menu deduplication, and population semantics. |
-| `recipes` | Typed DAGs, sharing, named references, cycle/type limits, menu edits, configurable entropy, serialization, shader emission. |
-| `recipe-shaders` | Representative generated GLSL compiled, linked, executed, and compared against CPU results; WGSL structural generation checks. |
-| `appearance`, `scroll-performance` | Color parity, source/cache reuse and bounded overview storage. |
-| `point-inspection` | Byte/tuple/bin origins, averaged sources, entropy/DFT provenance, mixed recipes, picking and evaluator trace parity. |
-| `render-pipeline`, `rasterization` | Preset/configuration equivalence, stage invalidation, exact optimized/reference CPU coverage. |
-| `digraph`, `fourier` | Overlapping pairs, chunk/selection boundaries, defining DFT sums, prime lengths, phase/frequency convention, amplitude scaling. |
+| Tests                                | Main regressions guarded against                                                                                                                          |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data-scroll`                        | Nested scope containment, true source bytes, root/local offsets, snapping/anchors, zero bars, recipe state and navigation sync.                           |
+| `context-menu`                       | Native popover ownership, focus restoration, keyboard/hover behavior, submenu flipping, numeric input.                                                    |
+| `render-engine`                      | Local/worker parity with a worker double, routing, bounded pending queue, stale-frame rejection, bitmap cleanup, fallback.                                |
+| `render-thread-smoke`                | Actual Bun worker execution of the shared renderer and timer progress on the main thread.                                                                 |
+| `adaptive-resolution`                | Sustained miss/fast thresholds, recovery, unsuccessful-reduction rollback, DPR footprints, selection stability.                                           |
+| `trigraph`, `trigraph-opacity`       | Sliding tuple boundaries, cached/fresh equivalence, projection, opacity, colored depth ordering.                                                          |
+| `coordinates`, `point-configuration` | Coordinate conventions, repeated mappings, all spaces, sample/camera/raster cache boundaries.                                                             |
+| `point-factors`                      | Laziness, exact neighbors, entropy/histogram/FFT reuse, hidden axes, selection boundaries, empty/short inputs.                                            |
+| `dimensions`                         | Ranges/cell counts, Scale/Truncate, independent Fit, Cartesian/radial domains, coordinate presets, and profile migration.                                 |
+| `hilbert`                            | True 3D Hilbert orientation, exhaustive small-cube uniqueness/adjacency, exact large indices, vec3 sharing, menu deduplication, and population semantics. |
+| `recipes`                            | Typed DAGs, sharing, named references, cycle/type limits, menu edits, configurable entropy, serialization, shader emission.                               |
+| `recipe-shaders`                     | Representative generated GLSL compiled, linked, executed, and compared against CPU results; WGSL structural generation checks.                            |
+| `appearance`, `scroll-performance`   | Color parity, source/cache reuse and bounded overview storage.                                                                                            |
+| `preset-library`                     | Persistent CRUD, selection, copying/import, migrations, collisions and storage failure atomicity.                                                         |
+| `point-inspection`                   | Byte/tuple/bin origins, averaged sources, entropy/DFT provenance, mixed recipes, picking and evaluator trace parity.                                      |
+| `render-pipeline`, `rasterization`   | Preset/configuration equivalence, stage invalidation, exact optimized/reference CPU coverage.                                                             |
+| `digraph`, `fourier`                 | Overlapping pairs, chunk/selection boundaries, defining DFT sums, prime lengths, phase/frequency convention, amplitude scaling.                           |
 
 DOM/canvas doubles do not validate browser fonts, text compositing, real native
 popover geometry, or all CSS behavior. `fillRect`/`fillText` in the canvas double
@@ -142,22 +147,22 @@ bytes silently, or shrinking source selections along with the raster.
 
 ## Common traps
 
-| Symptom | First thing to check |
-| --- | --- |
-| Nothing displays on a fresh clone | The ignored `examples/cat` default may not exist; inspect fetch status and the console. |
-| A file path in the fragment fails | It is a browser URL under the static server, not a host filesystem path; inspect the resolved request/CORS response. |
-| Navigation and the bar disagree | Root-relative view offsets versus parent-local bar offsets. |
-| Selection drifts during resize | Lost `anchorEnd`, snapping from committed rather than requested length, or raster dimensions used as sample columns. |
-| Repeated Hilbert cells | Square-fill sampling can repeat representative bytes; inspect sampling before blaming source duplication. |
-| Changing a range leaves a point cloud in place | Scale with Fit on cancels geometrically; use Truncate for a domain window or turn Fit off to change occupied extent. |
-| Preset-like output looks different | Compare population, sampling, dimensions and appearance; all views use the same painter. |
-| Expression mostly saturates | Raw `byte` gives 0–255; built-ins are normalized; final outputs clamp to 0–1. |
+| Symptom                                                  | First thing to check                                                                                                               |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Nothing displays on a fresh clone                        | The ignored `examples/cat` default may not exist; inspect fetch status and the console.                                            |
+| A file path in the fragment fails                        | It is a browser URL under the static server, not a host filesystem path; inspect the resolved request/CORS response.               |
+| Navigation and the bar disagree                          | Root-relative view offsets versus parent-local bar offsets.                                                                        |
+| Selection drifts during resize                           | Lost `anchorEnd`, snapping from committed rather than requested length, or raster dimensions used as sample columns.               |
+| Repeated Hilbert cells                                   | Square-fill sampling can repeat representative bytes; inspect sampling before blaming source duplication.                          |
+| Changing a range leaves a point cloud in place           | Scale with Fit on cancels geometrically; use Truncate for a domain window or turn Fit off to change occupied extent.               |
+| Preset-like output looks different                       | Compare population, sampling, dimensions and appearance; all views use the same painter.                                           |
+| Expression mostly saturates                              | Raw `byte` gives 0–255; built-ins are normalized; final outputs clamp to 0–1.                                                      |
 | Neighbor access is inaccurate far into a large selection | Keep address arithmetic in index operations; visual float32 operations can still lose precision. Shader indices are signed 32-bit. |
-| Corruption after scrolling | Cancelled histogram mutation or incomplete source/range/cache identity. |
-| More workers do not speed scrolling | Data reads, cache duplication, fixed per-point preparation, sorting, or transfer/presentation can dominate. |
-| Reduced resolution stays equally slow | The bottleneck may be source/statistical/point work; see adaptive rollback. |
-| Text counts as a passing pixel test but looks wrong | The test double records text commands; actual fonts/combining glyphs are browser behavior. |
-| A "shader" option does not use the GPU | The compatibility flag is a renderer setting; emitted recipe functions still need a GPU backend. |
+| Corruption after scrolling                               | Cancelled histogram mutation or incomplete source/range/cache identity.                                                            |
+| More workers do not speed scrolling                      | Data reads, cache duplication, fixed per-point preparation, sorting, or transfer/presentation can dominate.                        |
+| Reduced resolution stays equally slow                    | The bottleneck may be source/statistical/point work; see adaptive rollback.                                                        |
+| Text counts as a passing pixel test but looks wrong      | The test double records text commands; actual fonts/combining glyphs are browser behavior.                                         |
+| A "shader" option does not use the GPU                   | The compatibility flag is a renderer setting; emitted recipe functions still need a GPU backend.                                   |
 
 ## Version control and local artifacts
 

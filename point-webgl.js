@@ -1,5 +1,5 @@
 /** Optional WebGL2 point rasterizer. CPU providers/recipes remain the reference. */
-const vertexSource=`#version 300 es
+const vertexSource = `#version 300 es
 precision highp float;
 layout(location=0) in vec4 mark;
 layout(location=1) in vec4 color;
@@ -13,7 +13,7 @@ void main(){
  gl_Position=vec4(pixel.x/raster.x*2.0-1.0,1.0-pixel.y/raster.y*2.0,0,1);
  bounds=mark;tint=color;
 }`;
-const fragmentSource=`#version 300 es
+const fragmentSource = `#version 300 es
 precision highp float;
 uniform vec2 raster;
 uniform bool circle;
@@ -33,76 +33,149 @@ void main(){
 }`;
 
 export class PointWebGL {
- constructor() {
-  this.canvas=typeof OffscreenCanvas==='function'?new OffscreenCanvas(1,1):document.createElement('canvas');
-  const gl=this.gl=this.canvas.getContext('webgl2',{alpha:false,antialias:false,depth:false,stencil:false,preserveDrawingBuffer:true});
-  if(!gl)throw Error('WebGL2 unavailable');
-  const shaders=[];
-  try {
-   const compile=(type,source)=>{
-    const shader=gl.createShader(type);shaders.push(shader);gl.shaderSource(shader,source);gl.compileShader(shader);
-    if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(shader));
-    return shader;
-   };
-   this.program=gl.createProgram();
-   gl.attachShader(this.program,compile(gl.VERTEX_SHADER,vertexSource));
-   gl.attachShader(this.program,compile(gl.FRAGMENT_SHADER,fragmentSource));
-   gl.linkProgram(this.program);
-   if(!gl.getProgramParameter(this.program,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(this.program));
-   this.buffer=gl.createBuffer();this.vao=gl.createVertexArray();
-   gl.bindVertexArray(this.vao);gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer);
-   for(let slot=0;slot<2;slot++){
-    gl.enableVertexAttribArray(slot);gl.vertexAttribPointer(slot,4,gl.FLOAT,false,32,slot*16);gl.vertexAttribDivisor(slot,1);
-   }
-   this.raster=gl.getUniformLocation(this.program,'raster');this.circle=gl.getUniformLocation(this.program,'circle');
-   this.maximum=gl.getParameter(gl.MAX_VIEWPORT_DIMS);
-   this.canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();this.lost=true;});
-  }catch(error){this.dispose();throw error;}
-  finally{for(const shader of shaders)gl.deleteShader(shader);}
- }
-
- draw(context,prepared,projected,order,{width,height,spatial,cellWidth,cellHeight}) {
-  const gl=this.gl;
-  if(this.lost||gl.isContextLost()||width>this.maximum[0]||height>this.maximum[1])return false;
-  const required=prepared.size*8;
-  if(!this.instances||this.instances.length<required)this.instances=new Float32Array(Math.max(256,2**Math.ceil(Math.log2(Math.max(1,required)))));
-  const instances=this.instances;
-  for(let n=0;n<prepared.size;n++){
-   const i=order?order[n]:n,q=i*4,p=n*8;
-   instances[p]=projected[q];instances[p+1]=projected[q+1];
-   instances[p+2]=(spatial?projected[q+3]:cellWidth/2)*prepared.sizes[i];
-   instances[p+3]=(spatial?projected[q+3]:cellHeight/2)*prepared.sizes[i];
-   for(let c=0;c<4;c++)instances[p+4+c]=prepared.colors[q+c]/255;
+  constructor() {
+    this.canvas =
+      typeof OffscreenCanvas === "function"
+        ? new OffscreenCanvas(1, 1)
+        : document.createElement("canvas");
+    const gl = (this.gl = this.canvas.getContext("webgl2", {
+      alpha: false,
+      antialias: false,
+      depth: false,
+      stencil: false,
+      preserveDrawingBuffer: true,
+    }));
+    if (!gl) throw Error("WebGL2 unavailable");
+    const shaders = [];
+    try {
+      const compile = (type, source) => {
+        const shader = gl.createShader(type);
+        shaders.push(shader);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+          throw Error(gl.getShaderInfoLog(shader));
+        return shader;
+      };
+      this.program = gl.createProgram();
+      gl.attachShader(this.program, compile(gl.VERTEX_SHADER, vertexSource));
+      gl.attachShader(
+        this.program,
+        compile(gl.FRAGMENT_SHADER, fragmentSource),
+      );
+      gl.linkProgram(this.program);
+      if (!gl.getProgramParameter(this.program, gl.LINK_STATUS))
+        throw Error(gl.getProgramInfoLog(this.program));
+      this.buffer = gl.createBuffer();
+      this.vao = gl.createVertexArray();
+      gl.bindVertexArray(this.vao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+      for (let slot = 0; slot < 2; slot++) {
+        gl.enableVertexAttribArray(slot);
+        gl.vertexAttribPointer(slot, 4, gl.FLOAT, false, 32, slot * 16);
+        gl.vertexAttribDivisor(slot, 1);
+      }
+      this.raster = gl.getUniformLocation(this.program, "raster");
+      this.circle = gl.getUniformLocation(this.program, "circle");
+      this.maximum = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
+      this.canvas.addEventListener("webglcontextlost", (event) => {
+        event.preventDefault();
+        this.lost = true;
+      });
+    } catch (error) {
+      this.dispose();
+      throw error;
+    } finally {
+      for (const shader of shaders) gl.deleteShader(shader);
+    }
   }
-  if(this.canvas.width!==width)this.canvas.width=width;
-  if(this.canvas.height!==height)this.canvas.height=height;
-  gl.viewport(0,0,width,height);gl.disable(gl.DITHER);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);
-  gl.useProgram(this.program);gl.bindVertexArray(this.vao);gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer);
-  gl.bufferData(gl.ARRAY_BUFFER,instances.subarray(0,required),gl.DYNAMIC_DRAW);
-  gl.uniform2f(this.raster,width,height);gl.uniform1i(this.circle,prepared.shape==='circle'?1:0);
-  gl.enable(gl.BLEND);gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ZERO,gl.ONE);
-  gl.drawArraysInstanced(gl.TRIANGLES,0,6,prepared.size);
-  if(gl.isContextLost()||gl.getError()!==gl.NO_ERROR)return false;
-  context.clearRect(0,0,width,height);context.drawImage(this.canvas,0,0);
-  return true;
- }
 
- dispose(){
-  const gl=this.gl;if(!gl)return;
-  if(this.buffer)gl.deleteBuffer(this.buffer);
-  if(this.vao)gl.deleteVertexArray(this.vao);
-  if(this.program)gl.deleteProgram(this.program);
-  gl.getExtension('WEBGL_lose_context')?.loseContext();this.lost=true;
- }
+  draw(
+    context,
+    prepared,
+    projected,
+    order,
+    { width, height, spatial, cellWidth, cellHeight },
+  ) {
+    const gl = this.gl;
+    if (
+      this.lost ||
+      gl.isContextLost() ||
+      width > this.maximum[0] ||
+      height > this.maximum[1]
+    )
+      return false;
+    const required = prepared.size * 8;
+    if (!this.instances || this.instances.length < required)
+      this.instances = new Float32Array(
+        Math.max(256, 2 ** Math.ceil(Math.log2(Math.max(1, required)))),
+      );
+    const instances = this.instances;
+    for (let n = 0; n < prepared.size; n++) {
+      const i = order ? order[n] : n,
+        q = i * 4,
+        p = n * 8;
+      instances[p] = projected[q];
+      instances[p + 1] = projected[q + 1];
+      instances[p + 2] =
+        (spatial ? projected[q + 3] : cellWidth / 2) * prepared.sizes[i];
+      instances[p + 3] =
+        (spatial ? projected[q + 3] : cellHeight / 2) * prepared.sizes[i];
+      for (let c = 0; c < 4; c++)
+        instances[p + 4 + c] = prepared.colors[q + c] / 255;
+    }
+    if (this.canvas.width !== width) this.canvas.width = width;
+    if (this.canvas.height !== height) this.canvas.height = height;
+    gl.viewport(0, 0, width, height);
+    gl.disable(gl.DITHER);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.useProgram(this.program);
+    gl.bindVertexArray(this.vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      instances.subarray(0, required),
+      gl.DYNAMIC_DRAW,
+    );
+    gl.uniform2f(this.raster, width, height);
+    gl.uniform1i(this.circle, prepared.shape === "circle" ? 1 : 0);
+    gl.enable(gl.BLEND);
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, prepared.size);
+    if (gl.isContextLost() || gl.getError() !== gl.NO_ERROR) return false;
+    context.clearRect(0, 0, width, height);
+    context.drawImage(this.canvas, 0, 0);
+    return true;
+  }
+
+  dispose() {
+    const gl = this.gl;
+    if (!gl) return;
+    if (this.buffer) gl.deleteBuffer(this.buffer);
+    if (this.vao) gl.deleteVertexArray(this.vao);
+    if (this.program) gl.deleteProgram(this.program);
+    gl.getExtension("WEBGL_lose_context")?.loseContext();
+    this.lost = true;
+  }
 }
 
-export function paintWebGL(cache,context,prepared,projected,order,options){
- if(cache.pointGPU===false)return false;
- try{
-  const gpu=cache.pointGPU||(cache.pointGPU=new PointWebGL());
-  if(gpu.draw(context,prepared,projected,order,options))return true;
-  gpu.dispose();
- }catch{cache.pointGPU?.dispose?.();}
- cache.pointGPU=false;
- return false;
+export function paintWebGL(
+  cache,
+  context,
+  prepared,
+  projected,
+  order,
+  options,
+) {
+  if (cache.pointGPU === false) return false;
+  try {
+    const gpu = cache.pointGPU || (cache.pointGPU = new PointWebGL());
+    if (gpu.draw(context, prepared, projected, order, options)) return true;
+    gpu.dispose();
+  } catch {
+    cache.pointGPU?.dispose?.();
+  }
+  cache.pointGPU = false;
+  return false;
 }

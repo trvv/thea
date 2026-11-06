@@ -20,18 +20,18 @@ own normalized lookup input.
 ```js
 view.pointConfiguration = {
   ...view.pointConfiguration,
-  population: 'triples',
-  position: ['value', 'byte2', 'byte3'],
+  population: "triples",
+  position: ["value", "byte2", "byte3"],
   sampleLimit: 262144, // null explicitly requests all samples
-  footprint: 'point', // 'grid' uses placement-cell dimensions, including perspective in 3D
-  backend: 'cpu',     // 'webgl' requests accelerated rasterization with fallback
-  space: 'sphere'
+  footprint: "point", // 'grid' uses placement-cell dimensions, including perspective in 3D
+  backend: "cpu", // 'webgl' requests accelerated rasterization with fallback
+  space: "sphere",
 };
 view.appearance = {
   ...view.effectiveAppearance,
-  hue: 'phase',
-  lightness: 'entropy',
-  opacity: 'tripleCount'
+  hue: "phase",
+  lightness: "entropy",
+  opacity: "tripleCount",
 };
 ```
 
@@ -65,13 +65,15 @@ for normalized versus integer inputs, order limits, and a complete configuration
 
 ```js
 const json = JSON.stringify(view.exportProfile());
-localStorage.setItem('thea-profile', json);
+localStorage.setItem("thea-profile", json);
 // In another session, after constructing the view:
-view.importProfile(localStorage.getItem('thea-profile'));
+view.importProfile(localStorage.getItem("thea-profile"));
 ```
 
-The host chooses storage and names. `profiles.js` also exports `serializeProfile`
-and `parseProfile`. Version 3 includes dimension ranges/flags, population, sample
+The Preset menu provides a named localStorage library, JSON copying/import, and
+restoration of the last selected preset. Saved snapshots also include bar count.
+See [saved presets](presets.md). `profiles.js` separately exports `serializeProfile`
+and `parseProfile` for host-managed raw view profiles. Version 3 includes dimension ranges/flags, population, sample
 policy, geometry, appearance, definitions, text/compatibility settings, camera, and backend. Source
 URLs and selected ranges are session state and excluded. Imports validate before
 replacing state. Versions 1 and 2 are migrated: former arrangements become
@@ -100,8 +102,7 @@ releases local GL resources or terminates the owning worker.
 
 ## Remaining boundaries
 
-No automatic profile persistence or profile-library UI is provided. No HTTP Range
-reader, streaming input, WebGPU backend, or GPU recipe/provider execution is
+No HTTP Range reader, streaming input, WebGPU backend, or GPU recipe/provider execution is
 implemented. Overview page totals help whole-page contributions; changed ranges
 whose pixels require evicted partial pages can still need source reads. Browser
 coverage currently exercises Chromium with SwiftShader; physical GPU and other

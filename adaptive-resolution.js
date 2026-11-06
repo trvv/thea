@@ -10,84 +10,99 @@
  * blurry view.
  */
 export class AdaptiveResolution {
-	/**
-	 * Use elapsed milliseconds and a dimension scale; pixel work changes approximately with the square
-	 * of scale.
-	 */
-	constructor({ budget = 1000 / 60, minimum = 0.25 } = {}) {
-		this.budget = budget;
-		this.minimum = minimum;
-		this.scale = 1;
-		this.moving = false;
-		this.resetMeasurements();
-	}
+  /**
+   * Use elapsed milliseconds and a dimension scale; pixel work changes approximately with the square
+   * of scale.
+   */
+  constructor({ budget = 1000 / 60, minimum = 0.25 } = {}) {
+    this.budget = budget;
+    this.minimum = minimum;
+    this.scale = 1;
+    this.moving = false;
+    this.resetMeasurements();
+  }
 
-	/**
-	 * Discard evidence tied to the previous interaction, including any failed downscaling trial.
-	 */
-	resetMeasurements() {
-		this.slow = this.fast = this.warmup = 0;
-		this.trial = null;
-		this.locked = false;
-	}
+  /**
+   * Discard evidence tied to the previous interaction, including any failed downscaling trial.
+   */
+  resetMeasurements() {
+    this.slow = this.fast = this.warmup = 0;
+    this.trial = null;
+    this.locked = false;
+  }
 
-	/**
-	 * Start a fresh trial only at interaction boundaries, preserving feedback across successive
-	 * pointer events.
-	 */
-	touch() {
-		if (!this.moving) this.resetMeasurements();
-		this.moving = true;
-	}
+  /**
+   * Start a fresh trial only at interaction boundaries, preserving feedback across successive
+   * pointer events.
+   */
+  touch() {
+    if (!this.moving) this.resetMeasurements();
+    this.moving = true;
+  }
 
-	/**
-	 * Idle always restores full detail; callers need the returned flag to know whether another frame
-	 * is necessary.
-	 */
-	settle() {
-		const changed = this.scale !== 1;
-		this.scale = 1;
-		this.moving = false;
-		this.resetMeasurements();
-		return changed;
-	}
+  /**
+   * Idle always restores full detail; callers need the returned flag to know whether another frame
+   * is necessary.
+   */
+  settle() {
+    const changed = this.scale !== 1;
+    this.scale = 1;
+    this.moving = false;
+    this.resetMeasurements();
+    return changed;
+  }
 
-	/**
-	 * Ignore stale-quality reports and resized-cache warmup. Roll back a reduction that fails to help
-	 * rather than sacrificing more detail to a CPU-bound preparation step.
-	 * @returns {boolean} Whether the caller should schedule a frame at the new scale.
-	 */
-	record(duration, scale) {
-		if (!this.moving || scale !== this.scale || !Number.isFinite(duration) || duration <= 0 || this.locked) return false;
-		if (this.warmup) { this.warmup--; return false; }
-		if (duration > this.budget * 1.1) {
-			this.fast = 0;
-			if (++this.slow < 2) return false;
-			this.slow = 0;
-			// If a reduction did not help, fixed per-point work is the bottleneck.
-			// Restore detail instead of repeatedly shrinking the same slow frame.
-			if (this.trial && duration >= this.trial.duration * 0.95) {
-				this.scale = this.trial.scale;
-				this.locked = true;
-				return true;
-			}
-			const next = Math.max(this.minimum, Math.floor(this.scale * Math.min(0.85, Math.sqrt(this.budget / duration)) * 20) / 20);
-			if (next >= this.scale) return false;
-			this.trial = { scale: this.scale, duration };
-			this.scale = next;
-			this.warmup = 1;
-			return true;
-		}
-		this.slow = 0;
-		this.trial = null;
-		if (duration < this.budget * 0.6 && this.scale < 1) {
-			if (++this.fast < 6) return false;
-			this.fast = 0;
-			this.scale = Math.min(1, Math.round((this.scale + 0.1) * 20) / 20);
-			this.warmup = 1;
-			return true;
-		}
-		this.fast = 0;
-		return false;
-	}
+  /**
+   * Ignore stale-quality reports and resized-cache warmup. Roll back a reduction that fails to help
+   * rather than sacrificing more detail to a CPU-bound preparation step.
+   * @returns {boolean} Whether the caller should schedule a frame at the new scale.
+   */
+  record(duration, scale) {
+    if (
+      !this.moving ||
+      scale !== this.scale ||
+      !Number.isFinite(duration) ||
+      duration <= 0 ||
+      this.locked
+    )
+      return false;
+    if (this.warmup) {
+      this.warmup--;
+      return false;
+    }
+    if (duration > this.budget * 1.1) {
+      this.fast = 0;
+      if (++this.slow < 2) return false;
+      this.slow = 0;
+      // If a reduction did not help, fixed per-point work is the bottleneck.
+      // Restore detail instead of repeatedly shrinking the same slow frame.
+      if (this.trial && duration >= this.trial.duration * 0.95) {
+        this.scale = this.trial.scale;
+        this.locked = true;
+        return true;
+      }
+      const next = Math.max(
+        this.minimum,
+        Math.floor(
+          this.scale * Math.min(0.85, Math.sqrt(this.budget / duration)) * 20,
+        ) / 20,
+      );
+      if (next >= this.scale) return false;
+      this.trial = { scale: this.scale, duration };
+      this.scale = next;
+      this.warmup = 1;
+      return true;
+    }
+    this.slow = 0;
+    this.trial = null;
+    if (duration < this.budget * 0.6 && this.scale < 1) {
+      if (++this.fast < 6) return false;
+      this.fast = 0;
+      this.scale = Math.min(1, Math.round((this.scale + 0.1) * 20) / 20);
+      this.warmup = 1;
+      return true;
+    }
+    this.fast = 0;
+    return false;
+  }
 }

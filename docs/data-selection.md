@@ -34,10 +34,10 @@ left; the widest is farthest right. Do not reverse the model to match the DOM.
 
 For example:
 
-| Level | Parent scope in root coordinates | Local selection | Child scope in root coordinates |
-| --- | --- | --- | --- |
-| Outer | `[0, 10000)` | offset 2000, length 2000 | `[2000, 4000)` |
-| Inner | `[2000, 4000)` | offset 300, length 512 | `[2300, 2812)` |
+| Level | Parent scope in root coordinates | Local selection          | Child scope in root coordinates |
+| ----- | -------------------------------- | ------------------------ | ------------------------------- |
+| Outer | `[0, 10000)`                     | offset 2000, length 2000 | `[2000, 4000)`                  |
+| Inner | `[2000, 4000)`                   | offset 300, length 512   | `[2300, 2812)`                  |
 
 The view receives the root Blob plus offset 2300 and length 512. An inner bar
 `seek(310)` is local; `DataScroll.seek(2310)` is absolute. Mixing these coordinate

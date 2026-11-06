@@ -18,16 +18,18 @@ switching presets, but currently live only in memory: reload loses them.
 
 ```js
 const neighbor = {
-  op: 'normalize', min: 0, max: 255,
+  op: "normalize",
+  min: 0,
+  max: 255,
   input: {
-    op: 'byte',
-    offset: { op: 'add', a: { op: 'offset' }, b: { op: 'constant', value: 1 } }
-  }
+    op: "byte",
+    offset: { op: "add", a: { op: "offset" }, b: { op: "constant", value: 1 } },
+  },
 };
-view.setFactor('Neighbor', neighbor);
+view.setFactor("Neighbor", neighbor);
 view.appearance = {
   ...view.effectiveAppearance,
-  lightness: { op: 'ref', name: 'Neighbor' }
+  lightness: { op: "ref", name: "Neighbor" },
 };
 ```
 
@@ -39,14 +41,14 @@ raw read makes most nonzero bytes saturate, rather than expanding the color rang
 ## Shared coordinate expressions
 
 ```js
-const curve = { op: 'hilbert', input: 'position', order: 0 };
+const curve = { op: "hilbert", input: "position", order: 0 };
 view.pointConfiguration = {
   ...view.pointConfiguration,
   position: [
-    { op: 'component', input: curve, component: 0 },
-    { op: 'component', input: curve, component: 1 },
-    'none'
-  ]
+    { op: "component", input: curve, component: 0 },
+    { op: "component", input: curve, component: 1 },
+    "none",
+  ],
 };
 ```
 
@@ -65,12 +67,12 @@ constructors are not implemented.
 ### Three-dimensional Hilbert coordinates
 
 ```js
-import { hilbert3DCoordinate } from './recipes.js';
+import { hilbert3DCoordinate } from "./recipes.js";
 view.pointConfiguration = {
   ...view.pointConfiguration,
-  space: 'cube',
-  footprint: 'point',
-  position: [0, 1, 2].map(axis => hilbert3DCoordinate(axis))
+  space: "cube",
+  footprint: "point",
+  position: [0, 1, 2].map((axis) => hilbert3DCoordinate(axis)),
 };
 ```
 
@@ -103,23 +105,22 @@ This is an explicit coordinate expression, independent of display space and
 other position mappings. It does not reorder the input to FFT, entropy, or occurrence
 providers. Existing explicit 2D Hilbert expressions retain their conventions. The Hilbert preset itself uses explicit 2D coordinate expressions.
 
-
 ## Built-in sources
 
 The public choices come from `factor-catalog.js` and feed the same pool for all
 position and appearance channels:
 
-| Source | Normalized meaning |
-| --- | --- |
-| `value` | Byte value / 255; sequential downsampling may average an interval. |
-| `previous`, `byte2`, `byte3` | Byte at sample offset −1, +1, +2, divided by 255; unavailable neighbors are zero. |
-| `position` | Sample byte offset / `max(1, selectedLength - 1)`. |
-| `column`, `row`, `slice` | Normalized cell centers generated from dimension ranges/steps and width/height/depth strides. |
-| `entropy` | Quantized Shannon entropy in a rolling 32-byte neighborhood. |
+| Source                                  | Normalized meaning                                                                                                                    |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `value`                                 | Byte value / 255; sequential downsampling may average an interval.                                                                    |
+| `previous`, `byte2`, `byte3`            | Byte at sample offset −1, +1, +2, divided by 255; unavailable neighbors are zero.                                                     |
+| `position`                              | Sample byte offset / `max(1, selectedLength - 1)`.                                                                                    |
+| `column`, `row`, `slice`                | Normalized cell centers generated from dimension ranges/steps and width/height/depth strides.                                         |
+| `entropy`                               | Quantized Shannon entropy in a rolling 32-byte neighborhood.                                                                          |
 | `byteCount`, `pairCount`, `tripleCount` | Occurrence count of the sample's byte/sliding pair/sliding triple over the selection, mapped through `1 - exp(-0.25 * log1p(count))`. |
-| `frequency` | One-sided bin frequency relative to Nyquist; no transform is required for indices alone. |
-| `phase` | DFT phase mapped from −π…π to 0…1, with numerical real-axis stabilization. |
-| `amplitude` | One-sided amplitude, log-scaled relative to the window's peak; negligible numerical noise is suppressed. |
+| `frequency`                             | One-sided bin frequency relative to Nyquist; no transform is required for indices alone.                                              |
+| `phase`                                 | DFT phase mapped from −π…π to 0…1, with numerical real-axis stabilization.                                                            |
+| `amplitude`                             | One-sided amplitude, log-scaled relative to the window's peak; negligible numerical noise is suppressed.                              |
 
 `byte1` is a compatibility alias for `value`. Legacy `count` follows the historical
 preset: pairs for Digraph, triples for Trigraph, byte occurrences otherwise. New
@@ -135,26 +136,26 @@ slots; appearance/position compilation consumes the program's bindings.
 A string factor name is shorthand for `{op: 'factor', name}`. `none` is a mapping
 sentinel, not an arithmetic expression; use a constant inside a recipe.
 
-| Operation | Fields | Output / reason |
-| --- | --- | --- |
-| `constant` | `value` | Scalar literal. |
-| `factor` | `name` | Scalar primitive source. |
-| `ref` | `name` | Named scalar definition, expanded during compilation. |
-| `offset`, `length` | none | Current compatibility byte offset or selected byte length, as an exact index. |
-| `pointIndex`, `pointCount` | none | Exact unsampled population ordinal/count, independent of byte addressing. |
-| `add`, `subtract`, `multiply`, `divide` | `a`, `b` | Scalar arithmetic; division by zero returns zero. |
-| `invert` | `input` | `1 - input`. |
-| `abs`, `floor`, `fract` | `input` | Absolute, floor, or input minus floor. |
-| `power` | `input`, `exponent` | `max(input, 0) ** exponent`; exponent 0 returns 1. |
-| `normalize` | `input`, `min`, `max` | Clamp `(input - min) / (max - min)` to 0–1. |
-| `clamp` | `input`, `min`, `max` | Clamp to the given interval. |
-| `byte` | `offset` | Raw byte at a floored, selection-relative offset; outside the selection returns zero. |
-| `entropy` | `offset`, `window` | Local normalized entropy at an explicit byte offset. |
-| `spectrum` | `input`, `kind` | Sample normalized one-sided spectrum position; kind is `phase`, `frequency`, or `amplitude`. |
-| `linear` | `input` | vec2 cell center from a normalized traversal input and current sample grid. |
-| `hilbert` | `input`, `order` | vec2 cell center along a power-of-two Hilbert square. |
-| `hilbert3d` | `input`, `order` | vec3 cell center on a Hilbert cube; exact index or normalized scalar input. |
-| `component` | `input`, `component` | Extract X (0), Y (1), or Z (2); Z requires vec3. |
+| Operation                               | Fields                | Output / reason                                                                              |
+| --------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------- |
+| `constant`                              | `value`               | Scalar literal.                                                                              |
+| `factor`                                | `name`                | Scalar primitive source.                                                                     |
+| `ref`                                   | `name`                | Named scalar definition, expanded during compilation.                                        |
+| `offset`, `length`                      | none                  | Current compatibility byte offset or selected byte length, as an exact index.                |
+| `pointIndex`, `pointCount`              | none                  | Exact unsampled population ordinal/count, independent of byte addressing.                    |
+| `add`, `subtract`, `multiply`, `divide` | `a`, `b`              | Scalar arithmetic; division by zero returns zero.                                            |
+| `invert`                                | `input`               | `1 - input`.                                                                                 |
+| `abs`, `floor`, `fract`                 | `input`               | Absolute, floor, or input minus floor.                                                       |
+| `power`                                 | `input`, `exponent`   | `max(input, 0) ** exponent`; exponent 0 returns 1.                                           |
+| `normalize`                             | `input`, `min`, `max` | Clamp `(input - min) / (max - min)` to 0–1.                                                  |
+| `clamp`                                 | `input`, `min`, `max` | Clamp to the given interval.                                                                 |
+| `byte`                                  | `offset`              | Raw byte at a floored, selection-relative offset; outside the selection returns zero.        |
+| `entropy`                               | `offset`, `window`    | Local normalized entropy at an explicit byte offset.                                         |
+| `spectrum`                              | `input`, `kind`       | Sample normalized one-sided spectrum position; kind is `phase`, `frequency`, or `amplitude`. |
+| `linear`                                | `input`               | vec2 cell center from a normalized traversal input and current sample grid.                  |
+| `hilbert`                               | `input`, `order`      | vec2 cell center along a power-of-two Hilbert square.                                        |
+| `hilbert3d`                             | `input`, `order`      | vec3 cell center on a Hilbert cube; exact index or normalized scalar input.                  |
+| `component`                             | `input`, `component`  | Extract X (0), Y (1), or Z (2); Z requires vec3.                                             |
 
 Vector inputs cannot be passed directly to scalar arithmetic. Shapes and camera
 transforms are outside this expression language; recipe outputs supply their
@@ -234,7 +235,6 @@ Byte/entropy provider wrappers consume integer offsets. Its `maxIndex` is
 CPU fallback/paging. This is a narrower range than CPU safe integers. A GLES
 execution fixture checks neighboring-byte access above `2 ** 24`.
 
-
 ## Appearance and space conversion
 
 None position channels supply 0.5 before geometry conversion. That is the center
@@ -254,10 +254,13 @@ actual sampled bytes, not the normalized or transformed scalar used for color.
 ## Shader generation and its boundary
 
 ```js
-import { compileRecipes } from '../recipes.js';
-import { emitRecipeShader } from '../recipe-shaders.js';
-const program = compileRecipes({ lightness: { op: 'ref', name: 'Neighbor' } }, { Neighbor: neighbor });
-const { source, bindings } = emitRecipeShader(program, 'wgsl'); // or 'glsl'
+import { compileRecipes } from "../recipes.js";
+import { emitRecipeShader } from "../recipe-shaders.js";
+const program = compileRecipes(
+  { lightness: { op: "ref", name: "Neighbor" } },
+  { Neighbor: neighbor },
+);
+const { source, bindings } = emitRecipeShader(program, "wgsl"); // or 'glsl'
 ```
 
 The result is a **function library**, not a complete shader module with a stage
@@ -270,12 +273,12 @@ The final two integer arguments describe the unsampled point population; they
 are distinct from byte-offset/selection-length inputs. The returned binding
 descriptors identify externally supplied functions:
 
-| Function | Required return value |
-| --- | --- |
-| `recipeReadByte(index)` | Raw byte value as a float. |
-| `recipeReadEntropy<N>(index)` | Normalized local entropy for that requested window size. |
-| `recipeReadSpectrumPhase(index)` | Normalized one-sided phase. |
-| `recipeReadSpectrumAmplitude(index)` | Normalized one-sided amplitude. |
+| Function                             | Required return value                                    |
+| ------------------------------------ | -------------------------------------------------------- |
+| `recipeReadByte(index)`              | Raw byte value as a float.                               |
+| `recipeReadEntropy<N>(index)`        | Normalized local entropy for that requested window size. |
+| `recipeReadSpectrumPhase(index)`     | Normalized one-sided phase.                              |
+| `recipeReadSpectrumAmplitude(index)` | Normalized one-sided amplitude.                          |
 
 Indices are signed integers. Generated wrappers bound-check byte/entropy offsets
 and turn normalized spectral positions into bin indices. Frequency-only sampling

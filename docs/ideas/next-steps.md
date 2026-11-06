@@ -31,14 +31,14 @@ improves execution, editing and relationships between existing measurements.
 
 ## Suggested order
 
-| Priority | Work | First useful result |
-| --- | --- | --- |
-| 1 | Measure provider and frame costs | Identify which stages dominate time and retained memory on representative inputs. |
-| 2 | Bound provider preparation | Avoid allocating selection-sized results when only sampled lookups are needed. |
-| 3 | Reuse overview summaries across bars | Reduce repeated reads and duplicate source summaries. |
-| 4 | Move projection and expression work to GPU selectively | Improve camera interaction without changing analysis semantics. |
-| Alongside these | Expand browser/device coverage | Establish where acceleration is reliable and beneficial. |
-| Product decisions | Refine menus, profiles, and sampling relationships | Expose useful control without making routine exploration cumbersome. |
+| Priority          | Work                                                   | First useful result                                                               |
+| ----------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| 1                 | Measure provider and frame costs                       | Identify which stages dominate time and retained memory on representative inputs. |
+| 2                 | Bound provider preparation                             | Avoid allocating selection-sized results when only sampled lookups are needed.    |
+| 3                 | Reuse overview summaries across bars                   | Reduce repeated reads and duplicate source summaries.                             |
+| 4                 | Move projection and expression work to GPU selectively | Improve camera interaction without changing analysis semantics.                   |
+| Alongside these   | Expand browser/device coverage                         | Establish where acceleration is reliable and beneficial.                          |
+| Product decisions | Refine menus, profiles, and sampling relationships     | Expose useful control without making routine exploration cumbersome.              |
 
 The order is provisional. Measurements should determine whether preparation,
 sorting, rasterization, or transfer deserves the next performance change. Menu
@@ -245,8 +245,10 @@ relationship without changing point population or activating unrelated providers
 
 ## 6. Build profile management and improve editing
 
-Version 3 JSON supports validated import/export. A modest next step is
-named profile storage, duplication, rename/delete, and file import/export.
+Named localStorage presets, duplication, rename/delete, JSON clipboard
+copy/import, and last-selection restoration are now implemented; see
+[saved presets](../presets.md). File-based transfer and richer editing remain
+possible next steps. Version 3 JSON supports validated import/export.
 localStorage is adequate for small configurations; IndexedDB is justified only
 if actual size or transaction requirements outgrow it. Keep reusable settings
 separate from source URLs and selected ranges. Storage failures must leave the

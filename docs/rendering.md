@@ -20,31 +20,31 @@ source window → population + lazy providers → compiled recipes
 `executeRender`; caches belong exclusively to that canvas/thread. Never run
 unrelated concurrent jobs against the same mutable cache.
 
-| Job field | Contract |
-| --- | --- |
-| `source`, `sourceId`, `offset`, `length` | Immutable source, engine-local identity, half-open selected interval. |
-| `region` | Preset defaults and legacy `count` interpretation; never a painter selector. |
-| `configuration` | Population, sampling, dimensions, coordinate expressions, space, footprint, backend, definitions. |
-| `sampleLayout` | Sample budget and aspect hint, independent of output resolution. |
-| `columns`, `rows` | Actual output raster dimensions. |
-| `appearance`, `shaders` | Scalar/expression mappings and compatibility color/text flags. |
-| `rotation`, `pointScale` | Camera and DPR × interaction-quality scale. |
-| `coordinateSystem`, `axes` | Compatibility inputs converted to configuration when one is absent. |
+| Job field                                | Contract                                                                                          |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `source`, `sourceId`, `offset`, `length` | Immutable source, engine-local identity, half-open selected interval.                             |
+| `region`                                 | Preset defaults and legacy `count` interpretation; never a painter selector.                      |
+| `configuration`                          | Population, sampling, dimensions, coordinate expressions, space, footprint, backend, definitions. |
+| `sampleLayout`                           | Sample budget and aspect hint, independent of output resolution.                                  |
+| `columns`, `rows`                        | Actual output raster dimensions.                                                                  |
+| `appearance`, `shaders`                  | Scalar/expression mappings and compatibility color/text flags.                                    |
+| `rotation`, `pointScale`                 | Camera and DPR × interaction-quality scale.                                                       |
+| `coordinateSystem`, `axes`               | Compatibility inputs converted to configuration when one is absent.                               |
 
 ## Independent cache boundaries
 
-| Stage | Reuse and invalidation |
-| --- | --- |
-| Overview summaries | Per-source prefix pages and coarse totals; bounded detailed-page LRU. |
-| Selected byte window | Source/selection plus entropy halos; larger halos upgrade the cached read. |
-| Histograms | Incremental byte/pair/triple counts over valid tuple starts; all reads are staged before mutation. |
-| Spectrum | Exact-selection coefficients; phase and amplitude arrays are lazy. |
-| Entropy | One result per requested window size for the selected source interval. |
-| Recipe plans | Bounded structural caches; cloned expressions share plans, evaluators own scratch. |
-| `pointGeometry` | Source/range, sampling/population, position/space/dimensions/definitions, text sampling. Color, opacity, size, shape, encoding, backend and footprint are excluded. |
-| `preparedPoints` | Geometry plus appearance/text settings. Camera and output raster dimensions are excluded. |
-| Projection and ordering | Geometry, camera, raster size, space, footprint and point scale. Color/opacity/shape/size changes reuse them; mark size is applied after projection. |
-| CPU raster storage | Reused until output dimensions change; pixels are recomposited for each frame. |
+| Stage                   | Reuse and invalidation                                                                                                                                              |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Overview summaries      | Per-source prefix pages and coarse totals; bounded detailed-page LRU.                                                                                               |
+| Selected byte window    | Source/selection plus entropy halos; larger halos upgrade the cached read.                                                                                          |
+| Histograms              | Incremental byte/pair/triple counts over valid tuple starts; all reads are staged before mutation.                                                                  |
+| Spectrum                | Exact-selection coefficients; phase and amplitude arrays are lazy.                                                                                                  |
+| Entropy                 | One result per requested window size for the selected source interval.                                                                                              |
+| Recipe plans            | Bounded structural caches; cloned expressions share plans, evaluators own scratch.                                                                                  |
+| `pointGeometry`         | Source/range, sampling/population, position/space/dimensions/definitions, text sampling. Color, opacity, size, shape, encoding, backend and footprint are excluded. |
+| `preparedPoints`        | Geometry plus appearance/text settings. Camera and output raster dimensions are excluded.                                                                           |
+| Projection and ordering | Geometry, camera, raster size, space, footprint and point scale. Color/opacity/shape/size changes reuse them; mark size is applied after projection.                |
+| CPU raster storage      | Reused until output dimensions change; pixels are recomposited for each frame.                                                                                      |
 
 Truncation records visible sample ordinals alongside world coordinates. An
 appearance-only pass evaluates exactly those samples, including the case where

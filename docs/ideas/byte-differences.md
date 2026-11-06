@@ -23,21 +23,30 @@ representative byte offset directly, avoiding an accidental comparison between
 an averaged `value` factor and a single predecessor byte.
 
 ```js
-const read = delta => ({
-  op: 'byte',
-  offset: {op: 'add', a: {op: 'offset'}, b: {op: 'constant', value: delta}}
+const read = (delta) => ({
+  op: "byte",
+  offset: {
+    op: "add",
+    a: { op: "offset" },
+    b: { op: "constant", value: delta },
+  },
 });
-const difference = {op: 'subtract', a: read(0), b: read(-1)};
+const difference = { op: "subtract", a: read(0), b: read(-1) };
 const expressions = {
-  signed: {op: 'normalize', input: difference, min: -255, max: 255},
-  magnitude: {op: 'normalize', input: {op: 'abs', input: difference}, min: 0, max: 255},
-  valid: {op: 'normalize', input: {op: 'offset'}, min: 0, max: 1}
+  signed: { op: "normalize", input: difference, min: -255, max: 255 },
+  magnitude: {
+    op: "normalize",
+    input: { op: "abs", input: difference },
+    min: 0,
+    max: 255,
+  },
+  valid: { op: "normalize", input: { op: "offset" }, min: 0, max: 1 },
 };
 view.appearance = {
   ...view.effectiveAppearance,
   hue: expressions.signed,
   lightness: expressions.magnitude,
-  opacity: expressions.valid
+  opacity: expressions.valid,
 };
 ```
 

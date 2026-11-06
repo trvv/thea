@@ -17,13 +17,13 @@ number or a format field.
 
 ## A small family of useful measurements
 
-| Measurement | Meaning | Scope |
-| --- | --- | --- |
-| Bit value | Whether a selected bit is set. | One byte. |
-| Population count | Number of set bits, optionally divided by eight. | One byte. |
-| Hamming change | Number of differing bits between two bytes, divided by eight. | Two explicit byte addresses. |
-| Bit bias | Fraction of bytes with a selected bit set. | An explicit local or selected window. |
-| Bit entropy | Binary entropy of that bit's observed zero/one distribution. | The same explicit window. |
+| Measurement      | Meaning                                                       | Scope                                 |
+| ---------------- | ------------------------------------------------------------- | ------------------------------------- |
+| Bit value        | Whether a selected bit is set.                                | One byte.                             |
+| Population count | Number of set bits, optionally divided by eight.              | One byte.                             |
+| Hamming change   | Number of differing bits between two bytes, divided by eight. | Two explicit byte addresses.          |
+| Bit bias         | Fraction of bytes with a selected bit set.                    | An explicit local or selected window. |
+| Bit entropy      | Binary entropy of that bit's observed zero/one distribution.  | The same explicit window.             |
 
 Number bits from zero at the least significant bit through seven at the most
 significant bit. The byte lookup, bit index and comparison lag should be recipe

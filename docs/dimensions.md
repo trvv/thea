@@ -35,12 +35,12 @@ still analyze that interval. A grid larger than its population leaves cells empt
 The default is **Scale with Fit on for every dimension**, including radial axes.
 Both choices are independent for each axis.
 
-| Range mode | Fit | Behavior |
-| --- | --- | --- |
-| Scale | On | Map the full input domain into the chosen range, then fit that range to the full axis. Positions retain their normalized placement; cell counts/resolution can change. |
-| Scale | Off | Map all input values into the chosen physical extent, preserving its size relative to the natural axis. |
-| Truncate | On | Hide points outside the chosen natural-domain window and expand the remaining window across the full axis. |
-| Truncate | Off | Hide points outside the window and keep surviving points at their natural positions. |
+| Range mode | Fit | Behavior                                                                                                                                                               |
+| ---------- | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scale      | On  | Map the full input domain into the chosen range, then fit that range to the full axis. Positions retain their normalized placement; cell counts/resolution can change. |
+| Scale      | Off | Map all input values into the chosen physical extent, preserving its size relative to the natural axis.                                                                |
+| Truncate   | On  | Hide points outside the chosen natural-domain window and expand the remaining window across the full axis.                                                             |
+| Truncate   | Off | Hide points outside the window and keep surviving points at their natural positions.                                                                                   |
 
 For an angular range of 0–90°, Scale/Fit on distributes the input around a full
 circle; Scale/Fit off compresses it into a quarter-circle. Truncate keeps only
@@ -87,13 +87,13 @@ raster footprint to keep subpixel cells visible; they are point marks, not solid
 ```js
 view.pointConfiguration = {
   ...view.pointConfiguration,
-  space: 'cube',
-  position: ['column', 'row', 'slice'],
+  space: "cube",
+  position: ["column", "row", "slice"],
   dimensions: {
-    width:  { start: 0, end: 16, step: 1, mode: 'scale', fit: true },
-    height: { start: 0, end: 8,  step: 1, mode: 'scale', fit: true },
-    depth:  { start: 0, end: 4,  step: 1, mode: 'scale', fit: true }
-  }
+    width: { start: 0, end: 16, step: 1, mode: "scale", fit: true },
+    height: { start: 0, end: 8, step: 1, mode: "scale", fit: true },
+    depth: { start: 0, end: 4, step: 1, mode: "scale", fit: true },
+  },
 };
 ```
 

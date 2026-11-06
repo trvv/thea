@@ -46,10 +46,10 @@ These forms have different code-unit sizes and byte-order requirements; the
 relationships. They should be selectable interpretations, not competing modes
 that replace access to other analyses.
 
-| Interpretation | Candidate handling |
-| --- | --- |
+| Interpretation      | Candidate handling                                                                                                                                                      |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | UTF-16LE / UTF-16BE | Examine both byte alignments. Decode a single ordinary code unit or a valid surrogate pair; either byte of either unit can be clicked. Preserve the selected alignment. |
-| UTF-32LE / UTF-32BE | Examine all four byte alignments and retain scalar values in range, excluding surrogate values. Preserve the selected alignment. |
+| UTF-32LE / UTF-32BE | Examine all four byte alignments and retain scalar values in range, excluding surrogate values. Preserve the selected alignment.                                        |
 
 UTF-16 surrogate pairs must have the correct high/low ordering; isolated
 surrogates are not successful scalar decodes. The byte-order and surrogate rules
@@ -111,16 +111,16 @@ setting exists; this proposal requires no profile/schema changes.
 
 ## Fixtures for eventual implementation
 
-| Bytes | Expected interpretation |
-| --- | --- |
-| `41` | UTF-8 U+0041, also the existing ASCII `A`. |
-| `C3 A9` | UTF-8 U+00E9; either byte resolves to the same two-byte span. |
-| `E2 82 AC` | UTF-8 U+20AC; each clicked byte resolves to the same span. |
-| `F0 9F 98 80` | UTF-8 U+1F600; all four clicked positions retain their within-sequence index. |
-| `65 CC 81` | Two code points; do not silently compose their bytes into another encoding. |
-| `C0 AF`, `ED A0 80`, `F4 90 80 80` | Reject as successful UTF-8 scalar interpretations. |
-| `3D D8 00 DE` | UTF-16LE U+1F600; inspect both surrogate units and all four clicked bytes. |
-| `00 F6 01 00` | UTF-32LE U+1F600. |
+| Bytes                              | Expected interpretation                                                       |
+| ---------------------------------- | ----------------------------------------------------------------------------- |
+| `41`                               | UTF-8 U+0041, also the existing ASCII `A`.                                    |
+| `C3 A9`                            | UTF-8 U+00E9; either byte resolves to the same two-byte span.                 |
+| `E2 82 AC`                         | UTF-8 U+20AC; each clicked byte resolves to the same span.                    |
+| `F0 9F 98 80`                      | UTF-8 U+1F600; all four clicked positions retain their within-sequence index. |
+| `65 CC 81`                         | Two code points; do not silently compose their bytes into another encoding.   |
+| `C0 AF`, `ED A0 80`, `F4 90 80 80` | Reject as successful UTF-8 scalar interpretations.                            |
+| `3D D8 00 DE`                      | UTF-16LE U+1F600; inspect both surrogate units and all four clicked bytes.    |
+| `00 F6 01 00`                      | UTF-32LE U+1F600.                                                             |
 
 Also cover isolated continuation bytes, truncated files, selection/page boundaries,
 BOM and non-BOM cases, both byte orders, alternate alignments, controls, missing

@@ -23,15 +23,15 @@ value/next byte/byte +2 with point footprints. Both shade hue by byte value and
 lightness by local entropy. Appearance edits alternate hue between value/next byte.
 Scroll advances 32 bytes; camera changes yaw by 0.02 radians.
 
-| Fixture / operation | Previous shared renderer | Replacement | Approximate reduction |
-| --- | ---: | ---: | ---: |
-| Square scrolling | 55.55 ms | 26.25 ms | 53% |
-| Square appearance edit | 39.33 ms | 13.48 ms | 66% |
-| Square repeated frame | 17.88 ms | 4.94 ms | 72% |
-| Cube scrolling | 259.17 ms | 97.57 ms | 62% |
-| Cube appearance edit | 217.68 ms | 15.60 ms | 93% |
-| Cube repeated frame | 200.19 ms | 8.85 ms | 96% |
-| Cube camera motion | 197.78 ms | 23.37 ms | 88% |
+| Fixture / operation    | Previous shared renderer | Replacement | Approximate reduction |
+| ---------------------- | -----------------------: | ----------: | --------------------: |
+| Square scrolling       |                 55.55 ms |    26.25 ms |                   53% |
+| Square appearance edit |                 39.33 ms |    13.48 ms |                   66% |
+| Square repeated frame  |                 17.88 ms |     4.94 ms |                   72% |
+| Cube scrolling         |                259.17 ms |    97.57 ms |                   62% |
+| Cube appearance edit   |                217.68 ms |    15.60 ms |                   93% |
+| Cube repeated frame    |                200.19 ms |     8.85 ms |                   96% |
+| Cube camera motion     |                197.78 ms |    23.37 ms |                   88% |
 
 These comparisons explicitly configure both renderers identically. They measure
 shared-stage improvements, avoiding a comparison of the old gray tuple painter

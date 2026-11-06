@@ -12,16 +12,16 @@ names.
 
 ## Analysis proposals
 
-| Idea | Main question | Initial implementation boundary |
-| --- | --- | --- |
-| [Conditional surprise](conditional-surprise.md) | How unexpected is a byte given its predecessor? | One explicitly scoped transition model with smoothing, probability, surprise and validity. |
-| [Lag dependence](lag-dependence.md) | Which byte separations preserve relationships? | One configurable lag; equality/difference before local mutual information or automatic searches. |
-| [Distribution change](distribution-change.md) | Where do neighboring byte distributions change? | Two explicit histograms and one named bounded comparison metric. |
-| [Repetition distance](repetition-distance.md) | Where did this byte block occur previously? | Exact fixed-width nearest matches inside a configured history. |
-| [Bit structure](bit-structure.md) | Which individual bits or masks carry structure? | Existing bit-extraction experiments, then compact operations and shared rolling bit statistics. |
-| [Numeric interpretations](numeric-interpretations.md) | Do explicit word/float interpretations expose coherent values? | Configurable 16/32-bit reads with endian, validity, normalization and byte provenance. |
-| [Localized spectral energy](localized-spectral-energy.md) | Where does a periodic component start or disappear? | Explicit frames and one local band-energy projection, not a new mandatory spectrogram mode. |
-| [Multibyte encoding ideas](<MULTIBYTE ENCODING IDEAS.md>) | Can the inspected byte participate in a useful text interpretation? | Bounded UTF-8 context first; UTF-16/32 candidates and encoding-derived factors later. |
+| Idea                                                      | Main question                                                       | Initial implementation boundary                                                                  |
+| --------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| [Conditional surprise](conditional-surprise.md)           | How unexpected is a byte given its predecessor?                     | One explicitly scoped transition model with smoothing, probability, surprise and validity.       |
+| [Lag dependence](lag-dependence.md)                       | Which byte separations preserve relationships?                      | One configurable lag; equality/difference before local mutual information or automatic searches. |
+| [Distribution change](distribution-change.md)             | Where do neighboring byte distributions change?                     | Two explicit histograms and one named bounded comparison metric.                                 |
+| [Repetition distance](repetition-distance.md)             | Where did this byte block occur previously?                         | Exact fixed-width nearest matches inside a configured history.                                   |
+| [Bit structure](bit-structure.md)                         | Which individual bits or masks carry structure?                     | Existing bit-extraction experiments, then compact operations and shared rolling bit statistics.  |
+| [Numeric interpretations](numeric-interpretations.md)     | Do explicit word/float interpretations expose coherent values?      | Configurable 16/32-bit reads with endian, validity, normalization and byte provenance.           |
+| [Localized spectral energy](localized-spectral-energy.md) | Where does a periodic component start or disappear?                 | Explicit frames and one local band-energy projection, not a new mandatory spectrogram mode.      |
+| [Multibyte encoding ideas](<MULTIBYTE ENCODING IDEAS.md>) | Can the inspected byte participate in a useful text interpretation? | Bounded UTF-8 context first; UTF-16/32 candidates and encoding-derived factors later.            |
 
 Each proposal discusses its meaning, parameters, boundaries, visualization uses,
 population relationships, performance, inspection and acceptance fixtures. Any
