@@ -1,19 +1,11 @@
-Thea is a browser-based binary visualization explorer.
+---
 
-Start with [docs/README.md](docs/README.md) for running the app, current architecture,
-factor recipes, rendering internals, tests, and planned direction.
+/ /_/ /_ ___ ____ _
+/ **/ __ \/ _ \/ __ `/
+/ /_/ / / / \__/ /_/ /
+\__/_/ /\_/\_**/\__,_/
 
-Original design sketch (broader than the currently implemented Blob-based viewer):
+thea is a browser-based binary visualization platform with a dream of being
+useful for RE
 
-thea is a data visualization platform
-
-it is built from a few simple core concepts:
-
-sources, incoming streams of data
-buffers, holds incoming data streams up to a certain (potentially system limited) size, can be themselves streamed from
-maps, translation layers that consume some kind of data stream and produce another
-views, terminal points in the architecture that consume streams and render them to the display
-
-the simplest data source variety is that of the byte stream, incoming data received as a sequence of 8-bit chunks
-these chunks may be mapped into other sizes of data or perhaps have some structure imposed over them e.g. ascii-encoded gene data may be mapped to sequences of 2-bit objects
-that may then further be mapped into 6-bit object sequences for codons
+just spin up an HTTP server e.g. `python3 -m http.server` to run it yourself
