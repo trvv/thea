@@ -1,3 +1,4 @@
+import { fourierSpectrum, fourierSpectrumAsync } from "../fourier.js";
 // Non-gating before/after tuple measurements. Optional checkout path supplies the reference.
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -58,5 +59,35 @@ for (const repeated of [false, true]) {
         incremental: !!cache.tupleIndex?.incremental,
       });
     }
+  }
+}
+
+// Include cooperative scheduling overhead rather than timing only synchronous FFT kernels.
+const referenceFFT = process.argv[2]
+  ? (
+      await import(
+        new URL("fourier.js", pathToFileURL(resolve(process.argv[2]) + "/"))
+      )
+    ).fourierSpectrum
+  : null;
+for (const length of [4096, 65536, 65537, 1048576]) {
+  const samples = Uint8Array.from({ length }, (_, index) => index & 255);
+  for (const [implementation, transform] of [
+    ["current-sync", fourierSpectrum],
+    ["current-async", fourierSpectrumAsync],
+    ...(referenceFFT ? [["reference", referenceFFT]] : []),
+  ]) {
+    const times = [];
+    for (let iteration = 0; iteration < 8; iteration++) {
+      const started = performance.now();
+      await transform(samples);
+      if (iteration > 2) times.push(performance.now() - started);
+    }
+    times.sort((a, b) => a - b);
+    console.log({
+      implementation,
+      transformLength: length,
+      milliseconds: times[times.length >> 1],
+    });
   }
 }
