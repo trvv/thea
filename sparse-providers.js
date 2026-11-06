@@ -191,6 +191,21 @@ export async function prepareSparseProviders(
     }
     if (total > maximumSparseBytes || total >= job.length / 2) return undefined;
   }
+  // Only addresses and entropy parameters affect these buffers, not consuming expressions.
+  const requestKey = JSON.stringify([
+    job.offset,
+    job.length,
+    ranges.map(({ start, end }) => [start, end]),
+    [...entropyIndices]
+      .map(([size, indices]) => [size, [...indices].sort((a, b) => a - b)])
+      .sort((a, b) => a[0] - b[0]),
+  ]);
+  const previous =
+    cache.factorSparse?.source === source ? cache.factorSparse : null;
+  if (previous?.requestKey === requestKey) {
+    recordProvider(diagnostics, "sparse", started, false);
+    return previous;
+  }
   // Map/object overhead is engine-dependent; the budget uses a conservative explicit estimate.
   const entries = [...entropyIndices.values()].reduce(
     (sum, indices) => sum + indices.size,
@@ -203,13 +218,30 @@ export async function prepareSparseProviders(
     total + entries * 64 + ranges.length * 64 + temporaryBytes,
     "Sparse byte and entropy preparation",
   );
+  let previousIndex = 0;
   for (const range of ranges) {
-    range.data = await readProviderBytes(
-      job.source,
-      range.start,
-      range.end,
-      diagnostics,
-    );
+    while (
+      previous &&
+      previousIndex < previous.ranges.length &&
+      previous.ranges[previousIndex].end <= range.start
+    )
+      previousIndex++;
+    const candidate = previous?.ranges[previousIndex];
+    const retained =
+      candidate && candidate.start <= range.start && candidate.end >= range.end
+        ? candidate
+        : null;
+    range.data = retained
+      ? retained.data.slice(
+          range.start - retained.start,
+          range.end - retained.start,
+        )
+      : await readProviderBytes(
+          job.source,
+          range.start,
+          range.end,
+          diagnostics,
+        );
     if (!current()) return null;
     if (range.data.length !== range.end - range.start)
       throw new Error("Byte source ended before its declared size.");
@@ -245,6 +277,7 @@ export async function prepareSparseProviders(
   const sparse = {
     source,
     key,
+    requestKey,
     ranges,
     entropyValues,
     byte(index) {

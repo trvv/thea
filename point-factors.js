@@ -13,6 +13,7 @@ import { pointGrid, gridCoordinates } from "./dimensions.js";
 import { compileRecipes, recipeRoots } from "./recipes.js";
 import { factorCount, factorIndices as slots } from "./factors.js";
 import { occurrenceFactor } from "./appearance.js";
+import { fourierStorage } from "./fourier.js";
 import { prepareSpectrum, spectrumComponents } from "./spectrum.js";
 import { windowCounts } from "./histograms.js";
 import {
@@ -287,9 +288,12 @@ export async function pointFactors(
   }
   const bins = job.length ? Math.floor(job.length / 2) + 1 : 0;
   if (phase || amplitude) {
+    if (diagnostics)
+      diagnostics.estimatedTransformPeakBytes = fourierStorage(job.length);
     const started = diagnostics ? performance.now() : 0;
     const rebuilt = !matches(cache.factorSpectrum);
-    spectrum = prepareSpectrum(job, cache, bytes);
+    spectrum = await prepareSpectrum(job, cache, bytes, current);
+    if (!spectrum || !current()) return null;
     recordProvider(diagnostics, "spectrum", started, rebuilt);
     const componentsStarted = diagnostics ? performance.now() : 0;
     const componentsRebuilt =
@@ -531,6 +535,7 @@ export async function pointFactors(
   }
   visit.grid = grid;
   visit.count = count;
+  visit.entropies = cache.recipeEntropy?.values;
   visit.provenance = {
     window: needBytes ? cache.factorWindow : undefined,
     bytes,

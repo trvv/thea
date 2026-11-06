@@ -29,20 +29,20 @@ const job = {
   configuration: { ...base, providerBudget: 1 },
 };
 const cache = {};
-assert.throws(() => prepareSpectrum(job, cache, bytes), /budget/);
+await assert.rejects(() => prepareSpectrum(job, cache, bytes), /budget/);
 assert.equal(cache.factorSpectrum, undefined);
 const allowed = {
   ...job,
   configuration: { ...base, providerBudget: fourierStorage(bytes.length) },
 };
-const result = prepareSpectrum(allowed, cache, bytes);
+const result = await prepareSpectrum(allowed, cache, bytes);
 const direct = fourierSpectrum(bytes);
 assert.deepEqual(result.real, direct.real.slice(0, result.real.length));
 assert.deepEqual(
   result.imaginary,
   direct.imaginary.slice(0, result.imaginary.length),
 );
-assert.throws(() => prepareSpectrum(job, cache, bytes), /budget/);
+await assert.rejects(() => prepareSpectrum(job, cache, bytes), /budget/);
 assert.equal(
   cache.factorSpectrum,
   result,

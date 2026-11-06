@@ -1,3 +1,5 @@
+import { sharedRenderWorker, sharedSourceId } from "./render-worker-hub.js";
+import { sharedAnalysisFor } from "./shared-analysis.js";
 /**
  * Per-canvas scheduling and presentation. Worker ownership and monotonic frame IDs protect both
  * responsiveness and cache locality.
@@ -53,12 +55,7 @@ export class RenderEngine {
   constructor(canvas, { budget = 8, workerFactory } = {}) {
     this.canvas = canvas;
     this.budget = budget;
-    this.workerFactory =
-      workerFactory ||
-      (() =>
-        new Worker(new URL("./render-worker.js", import.meta.url), {
-          type: "module",
-        }));
+    this.workerFactory = workerFactory || sharedRenderWorker;
     this.supported =
       Boolean(workerFactory) ||
       (typeof Worker === "function" &&
@@ -71,6 +68,16 @@ export class RenderEngine {
     this.presented = 0;
     this.sourceIds = new WeakMap();
     this.sourceSerial = 0;
+    this.statistics = {
+      requested: 0,
+      started: 0,
+      completed: 0,
+      presented: 0,
+      superseded: 0,
+      failed: 0,
+      canceled: 0,
+      cancelRequested: 0,
+    };
   }
 
   /**
@@ -114,7 +121,22 @@ export class RenderEngine {
       dimensions: metrics?.dimensions,
       timings: metrics?.timings,
       reused: metrics?.reused,
-      ...(metrics?.diagnostics ? { diagnostics: metrics.diagnostics } : {}),
+      ...(metrics?.diagnostics
+        ? {
+            diagnostics: {
+              ...metrics.diagnostics,
+              engine: {
+                ...this.statistics,
+                queueMilliseconds: request.started - request.enqueued,
+                renderMilliseconds: metrics.duration ?? null,
+                presentationMilliseconds:
+                  request.presentationMilliseconds ?? null,
+                requestToPresentationMilliseconds:
+                  performance.now() - request.enqueued,
+              },
+            },
+          }
+        : {}),
     };
     queueMicrotask(() => this.onFrame?.(frame));
   }
@@ -165,19 +187,24 @@ export class RenderEngine {
       ...structuredClone(settings),
       source,
       sourceId: this.sourceIds.get(source),
+      sharedSourceId: sharedSourceId(source),
     });
     job.appearanceKey = settingsKey(job);
     job.preparationKey = preparationKey(job);
     job.presentationKey = presentationKey(job);
     const id = ++this.version;
     this.latest = job;
-    if (this.active && !this.canPresent(this.active))
+    if (this.active && !this.canPresent(this.active)) {
+      this.statistics.cancelRequested++;
       this.worker?.postMessage({ cancel: this.active.id });
+    }
     // One running worker job and one replaceable pending job per canvas.
+    if (this.pending) this.statistics.superseded++;
     this.pending?.resolve(false);
     this.pending = null;
     return new Promise((resolve, reject) => {
-      const request = { id, job, resolve, reject };
+      this.statistics.requested++;
+      const request = { id, job, resolve, reject, enqueued: performance.now() };
       if (
         this.supported &&
         (this.estimate(job) >= this.budget || this.offloaded.has(this.key(job)))
@@ -194,6 +221,8 @@ export class RenderEngine {
    */
   async local(request) {
     request.started = performance.now();
+    this.statistics.started++;
+    this.cache.sharedAnalysis = sharedAnalysisFor(request.job.source);
     try {
       const result = await executeRender(
         this.canvas,
@@ -201,7 +230,10 @@ export class RenderEngine {
         this.cache,
         () => request.id === this.version,
       );
+      this.statistics.completed++;
+      if (!result) this.statistics.canceled++;
       if (result) {
+        this.statistics.presented++;
         this.measure(request.job, result.duration, result.work);
         this.presented = Math.max(this.presented, request.id);
         this.presentedJob = result.density
@@ -213,6 +245,7 @@ export class RenderEngine {
       }
       request.resolve(Boolean(result));
     } catch (error) {
+      this.statistics.failed++;
       request.reject(error);
     }
   }
@@ -228,6 +261,7 @@ export class RenderEngine {
     }
     this.active = request;
     request.started = performance.now();
+    this.statistics.started++;
     this.offloaded.add(this.key(request.job));
     try {
       if (!this.worker) {
@@ -286,6 +320,7 @@ export class RenderEngine {
         const request = this.active;
         if (!request || request.id !== id) return;
         this.active = null;
+        this.statistics.failed++;
         if (request.id === this.version) request.reject(new Error(error));
         else request.resolve(false);
         const next = this.pending;
@@ -302,10 +337,13 @@ export class RenderEngine {
       return;
     }
     this.active = null;
+    this.statistics.completed++;
+    if (canceled) this.statistics.canceled++;
     try {
       if (!canceled) this.measure(request.job, duration, work);
       const present = !canceled && this.canPresent(request);
       if (present) {
+        const presentationStarted = performance.now();
         if (this.canvas.width !== bitmap.width)
           this.canvas.width = bitmap.width;
         if (this.canvas.height !== bitmap.height)
@@ -313,13 +351,22 @@ export class RenderEngine {
         const context = this.canvas.getContext("2d");
         context.clearRect(0, 0, bitmap.width, bitmap.height);
         context.drawImage(bitmap, 0, 0);
+        request.presentationMilliseconds =
+          performance.now() - presentationStarted;
+        this.statistics.presented++;
         this.presented = id;
         this.presentedJob = density
           ? { ...request.job, densityReference: density.referenceValue }
           : request.job;
         this.presentedRemote = true;
         this.cancelInspection();
-        this.reportFrame(request, { dimensions, timings, reused, diagnostics });
+        this.reportFrame(request, {
+          duration,
+          dimensions,
+          timings,
+          reused,
+          diagnostics,
+        });
       }
       request.resolve(present);
     } catch (error) {
@@ -393,6 +440,7 @@ export class RenderEngine {
    * regress the visible state.
    */
   failed() {
+    this.statistics.failed++;
     this.cancelInspection();
     this.workerInspection = undefined;
     this.supported = false;
@@ -424,6 +472,7 @@ export class RenderEngine {
     this.pending?.resolve(false);
     this.active = this.pending = null;
     this.cache.pointGPU?.dispose?.();
+    this.cache.pointCompute?.dispose?.();
     this.cache = {};
     this.offloaded.clear();
   }

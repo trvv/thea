@@ -568,3 +568,36 @@ assert.equal(
 await coalescedWorker.completeInspection(2);
 assert.equal((await latestPick).point.sourceOffset, inspectionJob.offset + 6);
 coalescedInspector.cancel();
+
+// Lifecycle telemetry distinguishes pending replacement from canceled active execution.
+{
+  const worker = new TestWorker();
+  const engine = new RenderEngine(new RenderCanvas(), {
+    budget: 0,
+    workerFactory: () => worker,
+  });
+  let report;
+  engine.onFrame = (frame) => {
+    report = frame;
+  };
+  const first = engine.render({ ...job, diagnostics: true });
+  const replaced = engine.render({ ...job, offset: 64, diagnostics: true });
+  const newest = engine.render({ ...job, offset: 96, diagnostics: true });
+  assert.equal(await replaced, false);
+  engine.finish({ id: worker.messages[0].id, canceled: true });
+  assert.equal(await first, false);
+  await worker.complete(1);
+  assert.equal(await newest, true);
+  await Promise.resolve();
+  assert.equal(engine.statistics.requested, 3);
+  assert.equal(engine.statistics.started, 2);
+  assert.equal(engine.statistics.superseded, 1);
+  assert.equal(engine.statistics.canceled, 1);
+  assert.equal(engine.statistics.presented, 1);
+  assert(report.diagnostics.engine.queueMilliseconds >= 0);
+  assert(
+    report.diagnostics.engine.requestToPresentationMilliseconds >=
+      report.diagnostics.engine.presentationMilliseconds,
+  );
+  engine.cancel();
+}

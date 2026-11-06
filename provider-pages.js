@@ -4,9 +4,11 @@ import { windowEntropy } from "./entropy.js";
 
 const pageSize = 65536;
 export function providerPages(cache, source, identity, budget = 8 * 1048576) {
-  if (cache.providerPages?.source !== identity)
-    cache.providerPages = { source: identity, entries: new Map(), bytes: 0 };
-  const state = cache.providerPages;
+  const owner = cache.sharedAnalysis || cache;
+  if (cache.sharedAnalysis) identity = source;
+  if (owner.providerPages?.source !== identity)
+    owner.providerPages = { source: identity, entries: new Map(), bytes: 0 };
+  const state = (cache.providerPages = owner.providerPages);
   const trim = () => {
     while (state.bytes > budget && state.entries.size) {
       const key = state.entries.keys().next().value;
@@ -23,6 +25,19 @@ export function providerPages(cache, source, identity, budget = 8 * 1048576) {
       state.entries.set(key, previous);
       return previous;
     }
+    state.pending ||= new Map();
+    if (state.pending.has(key)) return state.pending.get(key);
+    // A page is immutable source work, so cancellation of one waiter cannot poison others.
+    const pending = fillPage(index, window, diagnostics);
+    state.pending.set(key, pending);
+    try {
+      return await pending;
+    } finally {
+      state.pending.delete(key);
+    }
+  }
+  async function fillPage(index, window, diagnostics) {
+    const key = `${index}/${window}`;
     const start = index * pageSize;
     const end = Math.min(source.size, start + pageSize);
     let value;
@@ -36,14 +51,12 @@ export function providerPages(cache, source, identity, budget = 8 * 1048576) {
         source.size,
         end + window - Math.floor(window / 2) - 1,
       );
-      const bytes = await range(left, right, 0, diagnostics, current);
-      if (!bytes) return null;
+      const bytes = await range(left, right, 0, diagnostics, () => true);
       value = windowEntropy(bytes, window, window === 32).slice(
         start - left,
         end - left,
       );
     }
-    if (!current()) return null;
     if (value.byteLength <= budget) {
       state.entries.set(key, value);
       state.bytes += value.byteLength;

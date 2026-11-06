@@ -1,5 +1,5 @@
 /** Selection-scoped spectrum shared by all point populations. */
-import { fourierSpectrum, fourierStorage } from "./fourier.js";
+import { fourierSpectrumAsync, fourierStorage } from "./fourier.js";
 import { assertProviderBudget } from "./provider-budget.js";
 
 export function matchingSpectrum(job, cache) {
@@ -10,19 +10,56 @@ export function matchingSpectrum(job, cache) {
     : null;
 }
 
-export function prepareSpectrum(job, cache, bytes) {
+export async function prepareSpectrum(job, cache, bytes, current = () => true) {
   assertProviderBudget(job, fourierStorage(job.length), "DFT preparation");
   const cached = matchingSpectrum(job, cache);
   if (cached) return cached;
-  const { real, imaginary } = fourierSpectrum(bytes);
-  const bins = job.length ? Math.floor(job.length / 2) + 1 : 0;
-  // Consumers only use the real-input one-sided spectrum. Copy rather than
-  // subarray so a small selection cannot retain Bluestein's padded work buffers.
+  const shared = cache.sharedAnalysis;
+  const key = `${job.offset}/${job.length}`;
+  let entry = shared?.spectra.get(key);
+  const waiter = { current };
+  if (!entry) {
+    entry = { waiters: new Set([waiter]) };
+    entry.promise = (async () => {
+      const result = await fourierSpectrumAsync(bytes, () =>
+        [...entry.waiters].some((consumer) => consumer.current()),
+      );
+      if (!result) return null;
+      const bins = job.length ? Math.floor(job.length / 2) + 1 : 0;
+      return {
+        real: result.real.slice(0, bins),
+        imaginary: result.imaginary.slice(0, bins),
+      };
+    })();
+    shared?.spectra.set(key, entry);
+  } else entry.waiters.add(waiter);
+  let result;
+  try {
+    result = await entry.promise;
+  } catch (error) {
+    if (shared?.spectra.get(key) === entry) shared.spectra.delete(key);
+    throw error;
+  } finally {
+    entry.waiters.delete(waiter);
+  }
+  if (shared && !entry.accounted) {
+    if (!result) shared.spectra.delete(key);
+    else {
+      entry.accounted = result.real.byteLength + result.imaginary.byteLength;
+      shared.spectrumBytes += entry.accounted;
+      for (const [cachedKey, cachedEntry] of shared.spectra) {
+        if (shared.spectrumBytes <= 32 * 1048576) break;
+        if (!cachedEntry.accounted) continue;
+        shared.spectra.delete(cachedKey);
+        shared.spectrumBytes -= cachedEntry.accounted;
+      }
+    }
+  }
+  if (!result || !current()) return null;
   return (cache.factorSpectrum = {
     source: job.sourceId ?? job.source,
-    key: `${job.offset}/${job.length}`,
-    real: real.slice(0, bins),
-    imaginary: imaginary.slice(0, bins),
+    key,
+    ...result,
   });
 }
 

@@ -6,27 +6,56 @@
 import { inspectPoint } from "./point-inspection.js";
 import { executeRender } from "./rendering.js";
 
-const canvas = new OffscreenCanvas(1, 1);
-const cache = {};
-let canceledThrough = 0;
+import { sharedAnalysisFor } from "./shared-analysis.js";
+const clients = new Map();
+const sources = new Map();
+function release(state) {
+  const source = sources.get(state.sourceId);
+  if (source && !--source.users) sources.delete(state.sourceId);
+  state.sourceId = undefined;
+}
+function bindSource(state, job) {
+  const identity = job.sharedSourceId;
+  if (identity === undefined) return;
+  if (state.sourceId !== identity) {
+    release(state);
+    if (!sources.has(identity))
+      sources.set(identity, { source: job.source, users: 0 });
+    sources.get(identity).users++;
+    state.sourceId = identity;
+  }
+  job.source = sources.get(identity).source;
+  state.cache.sharedAnalysis = sharedAnalysisFor(job.source);
+}
 // Inspection can await source reads too. Serialize it with rendering so mutable provider caches
 // never have two concurrent owners. Only the clicked point's description crosses the thread boundary.
-async function process(data) {
+async function process(data, state) {
+  if (state.disconnected) return;
+  const { canvas, cache } = state;
+  const post = (message, transfer = []) =>
+    self.postMessage({ ...message, channel: data.channel }, transfer);
   const { id, job, inspection, x, y } = data;
   try {
+    bindSource(state, job);
     if (inspection !== undefined) {
-      const point = await inspectPoint(job, cache, x, y);
-      self.postMessage({ inspection, point });
+      const point = await inspectPoint(
+        job,
+        cache,
+        x,
+        y,
+        () => !state.disconnected,
+      );
+      post({ inspection, point });
       return;
     }
     const result = await executeRender(
       canvas,
       job,
       cache,
-      () => id > canceledThrough,
+      () => !state.disconnected && id > state.canceledThrough,
     );
     if (!result) {
-      self.postMessage({ id, canceled: true });
+      post({ id, canceled: true });
       return;
     }
     const {
@@ -39,7 +68,7 @@ async function process(data) {
       density,
     } = result;
     const bitmap = canvas.transferToImageBitmap();
-    self.postMessage(
+    post(
       {
         id,
         bitmap,
@@ -54,18 +83,38 @@ async function process(data) {
       [bitmap],
     );
   } catch (error) {
-    self.postMessage(
+    post(
       inspection === undefined
         ? { id, error: error.message, jobError: true }
         : { inspection, error: error.message },
     );
   }
 }
-let queue = Promise.resolve();
 self.onmessage = ({ data }) => {
-  if (data.cancel !== undefined) {
-    canceledThrough = Math.max(canceledThrough, data.cancel);
+  const channel = data.channel ?? 0;
+  let state = clients.get(channel);
+  if (data.disconnect) {
+    if (state) {
+      state.disconnected = true;
+      state.cache.pointGPU?.dispose?.();
+      state.cache.pointCompute?.dispose?.();
+      release(state);
+      clients.delete(channel);
+    }
     return;
   }
-  queue = queue.then(() => process(data));
+  if (!state) {
+    state = {
+      canvas: new OffscreenCanvas(1, 1),
+      cache: {},
+      canceledThrough: 0,
+      queue: Promise.resolve(),
+    };
+    clients.set(channel, state);
+  }
+  if (data.cancel !== undefined) {
+    state.canceledThrough = Math.max(state.canceledThrough, data.cancel);
+    return;
+  }
+  state.queue = state.queue.then(() => process(data, state));
 };

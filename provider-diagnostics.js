@@ -37,9 +37,9 @@ export async function readProviderBytes(source, start, end, diagnostics) {
  * Count retained provider ArrayBuffer storage exactly, including backing storage of subarrays.
  * Excludes object/Map overhead, prepared marks, raster/GPU storage and transient FFT work.
  */
-export function retainedProviderStorage(cache) {
+export function retainedProviderStorage(cache, retainedBuffers) {
   const views = new Set(),
-    buffers = new Set(),
+    buffers = retainedBuffers || new Set(),
     maps = new Set();
   const add = (value) => {
     if (ArrayBuffer.isView(value)) {
@@ -57,6 +57,7 @@ export function retainedProviderStorage(cache) {
     add(cache[name]?.counts);
   for (const value of Object.values(cache.factorCounts || {})) add(value);
   for (const value of Object.values(cache.factorSpectrum || {})) add(value);
+  add(cache.tupleIndex?.entries);
   add(cache.population?.offsets);
   add(cache.population?.keys);
   add(cache.population?.counts);
@@ -85,5 +86,59 @@ export function retainedProviderStorage(cache) {
     buffers: buffers.size,
     views: views.size,
     mapEntries: [...maps].reduce((sum, map) => sum + map.size, 0),
+  };
+}
+
+/** Known owned buffers only; browser/GPU driver heaps and JS objects are not observable here. */
+export function retainedRenderStorage(cache) {
+  const buffers = new Set();
+  const visit = (value, depth = 0) => {
+    if (ArrayBuffer.isView(value)) buffers.add(value.buffer);
+    else if (value && depth < 3 && typeof value === "object") {
+      if (value instanceof Map)
+        for (const entry of value.values()) visit(entry, depth + 1);
+      else if (value.constructor === Object)
+        for (const entry of Object.values(value)) visit(entry, depth + 1);
+    }
+  };
+  for (const value of [
+    cache.preparedPoints,
+    cache.pointGeometry,
+    cache.pointRaster,
+    cache.pointRaster?.image?.data,
+    cache.pointRaster?.density?.image?.data,
+    cache.pointGPU?.instances,
+    cache.pointCompute?.scratch,
+    ...(cache.pointCompute?.uploadedProviders || []),
+  ])
+    visit(value);
+  const typedArrayBytes = [...buffers].reduce(
+    (sum, buffer) => sum + buffer.byteLength,
+    0,
+  );
+  const knownRetainedTypedArrayBytes = retainedProviderStorage(
+    cache,
+    buffers,
+  ).typedArrayBytes;
+  cache.observedKnownPeak = Math.max(
+    cache.observedKnownPeak || 0,
+    knownRetainedTypedArrayBytes,
+  );
+  cache.observedRenderPeak = Math.max(
+    cache.observedRenderPeak || 0,
+    typedArrayBytes,
+  );
+  return {
+    typedArrayBytes,
+    observedRenderPeakBytes: cache.observedRenderPeak,
+    knownRetainedTypedArrayBytes,
+    observedKnownPeakBytes: cache.observedKnownPeak,
+    sharedPageBytes: cache.sharedAnalysis?.providerPages?.bytes || 0,
+    sharedSpectrumBytes: cache.sharedAnalysis?.spectrumBytes || 0,
+    gpuUploadBytes: cache.pointGPU?.uploadBytes || 0,
+    computeUploadBytes: cache.pointCompute?.uploadBytes || 0,
+    computeReadbackBytes: cache.pointCompute?.readbackBytes || 0,
+    recipeBackend: cache.recipeBackend || "cpu",
+    projectionBackend: cache.pointRaster?.projection?.backend || "cpu",
   };
 }

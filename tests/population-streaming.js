@@ -56,7 +56,17 @@ for (const [population, width] of [
     assert.deepEqual([...offsets], [...expected.values()]);
     assert.deepEqual([...cache.population.keys], [...expected.keys()]);
     assert.equal(cache.population.representative, representative);
-    assert.equal(metrics.source.bytes, config.length);
+    assert.equal(
+      metrics.source.bytes,
+      cache.tupleIndex?.disabled
+        ? config.length
+        : config.length +
+            (Math.ceil(
+              (config.length - width + 1) / (scanChunkSize - width + 1),
+            ) -
+              1) *
+              (width - 1),
+    );
     assert(reads.every(([start, end]) => end - start <= scanChunkSize));
     if (firstKeys)
       assert.deepEqual(

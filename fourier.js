@@ -1,3 +1,4 @@
+import { yieldScan } from "./scan.js";
 /**
  * Selection-length DFTs without changing the signal by padding it. Working convolution buffers may
  * be larger; the returned spectrum still has exactly N bins.
@@ -8,12 +9,17 @@
  * Mutate reusable complex buffers instead of allocating values per butterfly; inverse normalization
  * belongs here so convolution callers do not double-scale.
  */
-function fft(real, imaginary, inverse = false) {
+function* fft(real, imaginary, inverse = false) {
+  let work = 0;
   const length = real.length;
   for (let i = 1, j = 0; i < length; i++) {
     let bit = length / 2;
     for (; j & bit; bit /= 2) j ^= bit;
     j ^= bit;
+    if (++work === 16384) {
+      work = 0;
+      yield;
+    }
     if (i < j) {
       [real[i], real[j]] = [real[j], real[i]];
       [imaginary[i], imaginary[j]] = [imaginary[j], imaginary[i]];
@@ -27,6 +33,10 @@ function fft(real, imaginary, inverse = false) {
       let rotationReal = 1,
         rotationImaginary = 0;
       for (let i = start; i < start + size / 2; i++) {
+        if (++work === 16384) {
+          work = 0;
+          yield;
+        }
         const j = i + size / 2;
         const re = real[j] * rotationReal - imaginary[j] * rotationImaginary;
         const im = real[j] * rotationImaginary + imaginary[j] * rotationReal;
@@ -46,6 +56,10 @@ function fft(real, imaginary, inverse = false) {
     for (let i = 0; i < length; i++) {
       real[i] /= length;
       imaginary[i] /= length;
+      if (++work === 16384) {
+        work = 0;
+        yield;
+      }
     }
 }
 
@@ -92,7 +106,7 @@ export function fourierStorage(length) {
  * @returns {{real: Float64Array, imaginary: Float64Array}} N complex coefficients, including both
  *   frequency halves.
  */
-export function fourierSpectrum(samples) {
+function* spectrumSteps(samples) {
   const length = samples.length;
   if (!length)
     return { real: new Float64Array(), imaginary: new Float64Array() };
@@ -101,11 +115,12 @@ export function fourierSpectrum(samples) {
     imaginary = new Float64Array(size);
   if (radix2) {
     real.set(samples);
-    fft(real, imaginary);
+    yield* fft(real, imaginary);
   } else {
     const kernelReal = new Float64Array(size),
       kernelImaginary = new Float64Array(size);
     for (let i = 0; i < length; i++) {
+      if (i && i % 16384 === 0) yield;
       const angle = (Math.PI * ((i * i) % (2 * length))) / length;
       const cosine = Math.cos(angle),
         sine = Math.sin(angle);
@@ -118,16 +133,18 @@ export function fourierSpectrum(samples) {
         kernelImaginary[size - i] = sine;
       }
     }
-    fft(real, imaginary);
-    fft(kernelReal, kernelImaginary);
+    yield* fft(real, imaginary);
+    yield* fft(kernelReal, kernelImaginary);
     for (let i = 0; i < size; i++) {
+      if (i && i % 16384 === 0) yield;
       const re = real[i] * kernelReal[i] - imaginary[i] * kernelImaginary[i];
       imaginary[i] =
         real[i] * kernelImaginary[i] + imaginary[i] * kernelReal[i];
       real[i] = re;
     }
-    fft(real, imaginary, true);
+    yield* fft(real, imaginary, true);
     for (let i = 0; i < length; i++) {
+      if (i && i % 16384 === 0) yield;
       const angle = (Math.PI * ((i * i) % (2 * length))) / length;
       const cosine = Math.cos(angle),
         sine = Math.sin(angle);
@@ -140,4 +157,28 @@ export function fourierSpectrum(samples) {
     real: real.subarray(0, length),
     imaginary: imaginary.subarray(0, length),
   };
+}
+
+/** Synchronous reference uses exactly the same arithmetic and traversal. */
+export function fourierSpectrum(samples) {
+  const steps = spectrumSteps(samples);
+  let step;
+  do step = steps.next();
+  while (!step.done);
+  return step.value;
+}
+
+/** Yield real tasks during large transforms; canceled work never publishes coefficients. */
+export async function fourierSpectrumAsync(samples, current = () => true) {
+  if (!current()) return null;
+  const steps = spectrumSteps(samples);
+  try {
+    for (;;) {
+      const step = steps.next();
+      if (step.done) return current() ? step.value : null;
+      if (!(await yieldScan(current))) return null;
+    }
+  } finally {
+    steps.return();
+  }
 }

@@ -1,7 +1,6 @@
+import { scanPopulation } from "./population-scan.js";
+import { tupleIndex } from "./tuple-index.js";
 /** Point populations choose marks; providers remain independent and freely mixable. */
-import { assertProviderBudget } from "./provider-budget.js";
-import { readProviderBytes } from "./provider-diagnostics.js";
-import { scanChunkSize, mapEntryEstimate, yieldScan } from "./scan.js";
 export const populations = [
   "bytes",
   "symbols",
@@ -32,63 +31,29 @@ export async function populationOffsets(
   if (cache.population?.source === source && cache.population.key === key)
     return cache.population.offsets;
   const width = population === "symbols" ? 1 : population === "pairs" ? 2 : 3;
-  const symbolBytes =
-    population === "symbols" ? 256 * Float64Array.BYTES_PER_ELEMENT : 0;
-  const inputBytes =
-    (bytes ? 0 : Math.min(scanChunkSize, job.length)) + symbolBytes;
-  // The entry estimate is a conservative policy allowance, not a claim about engine Map bytes.
-  const entryBytes =
-    mapEntryEstimate +
-    Float64Array.BYTES_PER_ELEMENT +
-    Uint32Array.BYTES_PER_ELEMENT;
-  assertProviderBudget(job, inputBytes, "Tuple scan input");
-  const symbolCounts = symbolBytes ? new Float64Array(256) : null;
-  const addresses = new Map();
-  const budget = job.configuration.providerBudget ?? null;
-  const maxEntries =
-    budget === null ? Infinity : Math.floor((budget - inputBytes) / entryBytes);
-  let tuple = 0;
-  let seen = 0;
-  const mask = width === 1 ? 0xff : width === 2 ? 0xffff : 0xffffff;
-  for (let offset = 0; offset < job.length;) {
-    const end = Math.min(job.length, offset + scanChunkSize);
-    const chunk = bytes
-      ? bytes.subarray(offset, end)
-      : await readProviderBytes(
-          job.source,
-          job.offset + offset,
-          job.offset + end,
-          diagnostics,
-        );
-    if (!current()) return null;
-    if (chunk.length !== end - offset)
-      throw new Error("Byte source ended before its declared size.");
-    for (let i = 0; i < chunk.length; i++) {
-      tuple = ((tuple << 8) | chunk[i]) & mask;
-      if (seen >= width - 1) {
-        if (symbolCounts) symbolCounts[tuple]++;
-        const address = offset + i - width + 1;
-        if (!addresses.has(tuple)) {
-          if (addresses.size >= maxEntries)
-            assertProviderBudget(
-              job,
-              inputBytes + (addresses.size + 1) * entryBytes,
-              "Distinct tuple index (estimated Map storage)",
-            );
-          addresses.set(tuple, address);
-        } else if (representative === "last") addresses.set(tuple, address);
-      }
-      seen++;
-    }
-    offset = end;
-    if (offset < job.length && !(await yieldScan(current))) return null;
-  }
-  if (!current()) return null;
-  const keys = Uint32Array.from(addresses.keys());
-  if (symbolCounts) keys.sort();
-  const offsets = symbolCounts
-    ? Float64Array.from(keys, (symbol) => addresses.get(symbol))
-    : Float64Array.from(addresses.values());
+  const index = await tupleIndex(
+    job,
+    bytes,
+    cache,
+    width,
+    current,
+    diagnostics,
+  );
+  if (index === undefined)
+    return scanPopulation(job, bytes, cache, current, diagnostics);
+  if (!index || !current()) return null;
+  const keys = index.keys;
+  const offsets = Float64Array.from(
+    keys,
+    (key) => index.entries.get(key)[representative] - job.offset,
+  );
+  const symbolCounts =
+    population === "symbols"
+      ? Float64Array.from(
+          { length: 256 },
+          (_, key) => index.entries.get(key)?.count || 0,
+        )
+      : null;
   cache.population = {
     source,
     key,

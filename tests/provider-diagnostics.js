@@ -6,6 +6,7 @@ import { defaultAppearance } from "../appearance.js";
 import {
   createProviderDiagnostics,
   retainedProviderStorage,
+  retainedRenderStorage,
 } from "../provider-diagnostics.js";
 import { windowCounts } from "../histograms.js";
 import { RenderCanvas } from "./render-canvas.js";
@@ -211,4 +212,15 @@ try {
 }
 console.log(
   "Provider diagnostics pass: opt-in pixel parity, exact reads, cold/warm reuse, multiple windows, FFT/components, deduplicated storage, histogram deltas and real worker callbacks.",
+);
+
+const aliasedBuffer = new Float32Array(32);
+const aliasedCache = {
+  factorWindow: { data: aliasedBuffer },
+  preparedPoints: { positions: aliasedBuffer },
+  pointCompute: { uploadedProviders: [aliasedBuffer] },
+};
+assert.equal(
+  retainedRenderStorage(aliasedCache).knownRetainedTypedArrayBytes,
+  aliasedBuffer.byteLength,
 );
