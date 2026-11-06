@@ -52,10 +52,8 @@ const byteText = (value) => {
       ? controls[value]
       : value === 127
         ? "DEL"
-        : value < 127
-          ? JSON.stringify(String.fromCharCode(value))
-          : "non-ASCII";
-  return `${value} (0x${value.toString(16).padStart(2, "0").toUpperCase()}, ${value > 127 ? "non-ASCII" : `ASCII ${ascii}`})`;
+        : JSON.stringify(String.fromCharCode(value));
+  return `${value} (0x${value.toString(16).padStart(2, "0").toUpperCase()}${value > 127 ? "" : `, ASCII ${ascii}`})`;
 };
 const element = (tag, text) => {
   const node = document.createElement(tag);
