@@ -157,3 +157,92 @@ Adaptive resolution is now opt-in under Advanced → Adaptive Resolution, saved
 with each preset. Missing settings in older profiles mean disabled. Normal 3D
 interaction keeps full resolution; enabling the flag restores the existing
 feedback controller and idle restoration. Point sampling remains independent.
+
+## Performance follow-up: shared work, cancellation and density
+
+Default engines lease one module render worker rather than allocating a worker
+per canvas. The worker multiplexes separate canvases and mutable caches, with
+per-engine queues, cancellation IDs and inspection serialization. Stable
+process-local source IDs canonicalize cloned Blobs. Source-owned immutable page
+caches deduplicate in-flight fills; selection spectra share in-flight transforms
+and coefficient buffers, with a 32 MiB retained spectrum-cache limit per source.
+Each waiter cancels independently. Source references are released when leases
+change source or disconnect; the worker terminates after its final lease ends.
+Local engines share analysis by Blob identity in their own context. Local and
+worker contexts do not share buffers with each other.
+
+This saves repeated computation and buffer copies for matching views. It also
+shares one CPU execution thread: unrelated CPU-heavy graphs can contend rather
+than run on separate cores. The existing injectable `workerFactory` supports
+independent workers when that tradeoff is preferable. Shared immutable cache
+limits are separate from individual operation budgets. They are not a global
+process-memory cap across unrelated open sources.
+
+Histograms already updated incrementally for small overlapping selections.
+Tuple discovery now additionally keeps exact first/last/count entries for low-cardinality
+populations, applies detached edge changes and recovers only invalidated
+representatives. Ordering is preserved by merging changed first representatives.
+Recovery starts with small reads, growing to the normal scan bound for rare matches.
+Above 4,096 distinct pair/triple keys, the simpler full-scan reference remains in
+use: measurements showed that cloning large object indexes costs more than scanning.
+No occurrence is dropped; numeric byte-symbol order and last-representative
+semantics remain unchanged. Initial detection reuses its first input chunk if it
+switches to a scan. Cancellation never publishes a partial index.
+
+`bun tests/performance-benchmark.js /path/to/older/checkout` compares identical
+fixtures. A 256 KiB repeated four-byte pattern moved by 32 bytes measured about
+0.03–0.04 ms versus about 0.8 ms for representative discovery. Random pair/triple
+fixtures remained on the scan path, measuring approximately 6/16 ms in both
+versions. The repeated-pattern updates read 322/324 bytes rather than 262,144
+bytes. These are CPU-only non-gating measurements, not complete frame times.
+
+Sparse providers now key equivalent requested addresses and entropy parameters
+independently of consuming expression graphs. New requests reuse covered source
+ranges with a linear merge walk, without retaining an unbounded range history.
+The 1 MiB sparse appearance-edit fixture now issues zero source reads rather than
+256 reads totaling 8,176 bytes.
+
+Large radix-2 and Bluestein transforms yield real tasks after bounded batches of
+butterflies, permutation, chirp and convolution work. The synchronous reference
+and asynchronous execution traverse the same generator and produce identical
+coefficients. A superseded transform exits without publishing partial results.
+Small local spectral frames retain the synchronous reference and yield between
+frame batches. Kernels stay in ordinary tight functions; generator/task boundaries
+sit outside batches of up to 65,536 operations. This avoids the large regression
+observed when yielding inside inner arithmetic loops. A direct before/after run
+measured a 1M-sample radix-2 transform around 45 ms in both versions. A 65,537-sample
+Bluestein case measured about 49 ms synchronously before and 54 ms cooperatively
+after: cancellation has scheduling overhead even when numerical work is unchanged.
+Yield frequency is a work bound, not a universal millisecond guarantee.
+
+Unweighted density uses integer quarter-probe sums when a conservative overflow
+bound permits it; otherwise the Float64 reference remains. Weighted-opacity mode
+retains Float64 arithmetic. Default all-contribution percentile storage is now
+24 bytes/pixel (about 47.5 MiB at 1080p), or 20 for fixed references. Front ownership
+adds one byte/pixel. High-count all-contribution/weighted paths retain 44/36 bytes
+plus optional ownership. Nearest-rank exposure uses bounded quickselect instead
+of sorting every occupied value. Pixel/reference/provenance fixtures remain exact.
+
+## Queue and memory diagnostics
+
+Opt-in frame diagnostics include `engine` counters for requested, started,
+completed, presented, superseded pending, canceled, cancellation requests and
+failed work; queue delay, render duration, worker-frame canvas presentation time
+and request-to-presentation latency. Local presentation is included in render time,
+with the separate presentation field null. Presentation means canvas draw completion, not
+browser compositor/GPU scanout. Worker turnaround includes transport; only the
+worker's reported render time excludes it. `RenderEngine.statistics` exposes
+lifetime counters without adding page UI.
+
+`diagnostics.memory` inventories known prepared, projection/order, sort scratch,
+raster, density and compute typed buffers. It reports observed retained-buffer
+high-water marks, shared page/spectrum bytes and upload/readback counters.
+`knownRetainedTypedArrayBytes` includes the provider inventory; shared totals are
+reported separately and may overlap that inventory, so they must not simply be
+added to it. `estimatedTransformPeakBytes` is the existing conservative FFT
+allocation estimate, not a measured process peak. JS objects/Maps, textures,
+driver heaps, browser canvas/compositor copies and unobserved transient allocations
+remain outside exact byte accounting. No universal process peak is claimed.
+
+See [optional GPU execution](gpu-execution.md) for supported graphs, executed
+checks, measured gains and the projection readback limitation.

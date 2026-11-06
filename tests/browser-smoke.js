@@ -152,6 +152,31 @@ try {
    let maximum=0,total=0;for(let i=0;i<a.length;i++){const difference=Math.abs(a[i]-b[i]);maximum=Math.max(maximum,difference);total+=difference;}
    assert(maximum<=3&&total/a.length<0.1,'CPU/WebGL range mismatch '+mode+'/'+shape+': '+maximum+'/'+total/a.length);
   }
+  const computeCache={};
+  const computeSpec={...spec,configuration:{...spec.configuration,position:['value','byte2','byte3'],gpuRecipes:true,gpuProjection:true}};
+  await executeRender(gpu,computeSpec,computeCache);
+  assert(computeCache.recipeBackend==='webgl','GPU recipe execution fell back');
+  assert(computeCache.pointRaster.projection.backend==='webgl','GPU projection fell back');
+  await executeRender(cpu,{...computeSpec,configuration:{...computeSpec.configuration,gpuRecipes:false,gpuProjection:false}},{});
+  const computeCpu=cpu.getContext('2d').getImageData(0,0,96,72).data,computeGpu=gpu.getContext('2d').getImageData(0,0,96,72).data;
+  assert(computeCpu.every((value,index)=>Math.abs(value-computeGpu[index])<=3),'GPU compute changed coverage');
+  assert(computeCache.pointCompute.recipeDispatches===1&&computeCache.pointCompute.projectionDispatches===1,'Compute dispatch counters incorrect');
+  computeCache.pointCompute.dispose();
+  for(const [name,position,hue] of [
+   ['byte/entropy',[{op:'normalize',min:0,max:255,input:{op:'byte',offset:{op:'offset'}}},'byte2','byte3'],{op:'entropy',offset:{op:'offset'},window:17}],
+   ['Hilbert 3D',[0,1,2].map(axis=>hilbert3DCoordinate(axis,{op:'pointIndex'},3)),'value'],
+   ['spectrum',['phase','frequency','amplitude'],'value']]){
+   const check={...spec,configuration:{...spec.configuration,position,gpuRecipes:true},appearance:{...spec.appearance,hue}};
+   const checkCache={};
+   await executeRender(gpu,check,checkCache);
+   assert(checkCache.recipeBackend==='webgl','GPU recipe fixture fell back: '+name);
+   await executeRender(cpu,{...check,configuration:{...check.configuration,gpuRecipes:false}},{});
+   for(let i=0;i<checkCache.preparedPoints.positions.length;i++)assert(Number.isFinite(checkCache.preparedPoints.positions[i]),'GPU geometry invalid: '+name);
+   const a=cpu.getContext('2d').getImageData(0,0,96,72).data,b=gpu.getContext('2d').getImageData(0,0,96,72).data;
+   assert(a.every((value,index)=>Math.abs(value-b[index])<=3),'GPU recipe mismatch: '+name);
+   checkCache.pointCompute.dispose();
+  }
+
   const persistent={...spec,configuration:{...spec.configuration,backend:'webgl'}};
   await executeRender(gpu,persistent,gpuCache);
   const uploadCount=gpuCache.pointGPU.uploads;
@@ -171,6 +196,40 @@ try {
   await new Promise(resolve=>setTimeout(resolve,50));
   await executeRender(gpu,{...spec,configuration:{...spec.configuration,backend:'webgl'}},gpuCache);
   assert(gpuCache.pointBackend==='cpu','Context loss did not fall back');
+  const {RenderEngine}=await import('/render-engine.js');
+  const sharedSource=new Blob([Uint8Array.from({length:262144},(_,i)=>(i*71)&255)]);
+  const sharedJob={...spec,source:sharedSource,length:131072,diagnostics:true,sampleLayout:{columns:256,rows:256},
+   configuration:{...spec.configuration,position:['phase','value','byte2'],sampling:'representative'},
+   appearance:{...spec.appearance,hue:'entropy'}};
+  const leftEngine=new RenderEngine(document.createElement('canvas'),{budget:0});
+  const rightEngine=new RenderEngine(document.createElement('canvas'),{budget:0});
+  let sharedReport;
+  rightEngine.onFrame=report=>sharedReport=report;
+  assert(await leftEngine.render(sharedJob),'Shared worker first canvas failed');
+  assert(await rightEngine.render(sharedJob),'Shared worker second canvas failed');
+  await Promise.resolve();
+  assert(sharedReport.diagnostics.source.reads===0,'Comparison repeated shared source reads');
+  assert(sharedReport.diagnostics.memory.sharedSpectrumBytes>0,'Comparison did not share spectrum storage');
+  assert(sharedReport.diagnostics.engine.requestToPresentationMilliseconds>=0,'Missing presentation metrics');
+  leftEngine.cancel();
+  assert(await rightEngine.render({...sharedJob,rotation:{yaw:0.1,pitch:0.2}}),'Releasing one worker lease broke another canvas');
+  rightEngine.cancel();
+  const computeBenchmarks=[];
+  if(${JSON.stringify(process.env.THEA_BENCHMARK === "1" || process.argv.includes("--benchmark"))}) {
+   for(const [name,gpuRecipes,gpuProjection] of [['cpu',false,false],['recipes',true,false],['projection',false,true],['both',true,true]]) {
+    const benchmarkCache={},benchmarkCanvas=document.createElement('canvas'),total=[],preparation=[],projection=[];
+    for(let frame=0;frame<16;frame++) {
+     const benchmarkJob={...sharedJob,length:65536,diagnostics:false,columns:512,rows:384,
+      configuration:{...presetConfiguration('hilbert3d'),gpuRecipes,gpuProjection,inverted:[!!(frame%2),false,false]},
+      appearance:{...defaultAppearance('hilbert3d'),hue:'entropy',size:{op:'constant',value:0.5}}};
+     const metrics=await executeRender(benchmarkCanvas,benchmarkJob,benchmarkCache);
+     if(frame>=4){total.push(metrics.duration);preparation.push(metrics.timings.preparation);projection.push(metrics.timings.projection);}
+    }
+    const median=values=>values.sort((a,b)=>a-b)[values.length>>1];
+    computeBenchmarks.push({name,total:median(total),preparation:median(preparation),projection:median(projection),recipeBackend:benchmarkCache.recipeBackend,projectionBackend:benchmarkCache.pointRaster.projection.backend});
+    benchmarkCache.pointCompute?.dispose?.();
+   }
+  }
   const scroll=new DataScroll(source,4096);document.body.append(scroll);
   const view=scroll.view;
   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
@@ -297,7 +356,7 @@ try {
    const representations=inspectionContent({point:{population:'bytes',index:0,sourceOffset:0,byteValue:65,tuple:[10,32,127,255]},traits:[],nodes:[],rendering:{}});
    assert(representations.textContent.includes('65 (0x41, ASCII "A")')&&representations.textContent.includes('0x0A, ASCII LF')
     &&representations.textContent.includes('0x20, ASCII " "')&&representations.textContent.includes('0x7F, ASCII DEL')
-    &&representations.textContent.includes('0xFF, non-ASCII'),'Byte representations are incorrect');
+    &&representations.textContent.includes('255 (0xFF)')&&!representations.textContent.includes('non-ASCII'),'Byte representations are incorrect');
    assert(popup.getAttribute('role')==='dialog'&&inspectScroll.shadowRoot.activeElement===inspectedView,'Popup focus escaped the view');
    inspectScroll.source=new Blob([new TextEncoder().encode('😀')]);await inspectedView.render();
    popup=await clickPoint();
@@ -313,7 +372,7 @@ try {
    assert(!popup.matches(':popover-open')&&inspectScroll.shadowRoot.activeElement===inspectedView,'Escape did not dismiss inspection/restore focus');
    inspectScroll.remove();assert(!inspectedView.renderer.worker&&!popup.matches(':popover-open'),'Disconnect retained popup/worker');
   }
-  return {sourceBytes:source.size,population:before};
+  return {sourceBytes:source.size,population:before,...(computeBenchmarks.length?{computeBenchmarks}:{})};
  })()`);
   await evaluate(`(async()=>{
     const {DataScroll}=await import('/main.js');

@@ -17,8 +17,9 @@ source window → population + lazy providers → compiled recipes
 
 `RenderEngine` owns a canvas and assigns each immutable Blob an engine-local
 `sourceId`. Jobs are owned snapshots. UI and worker execution call the same
-`executeRender`; caches belong exclusively to that canvas/thread. Never run
-unrelated concurrent jobs against the same mutable cache.
+`executeRender`; mutable caches belong exclusively to that canvas. Default engines
+lease a shared worker and source-owned immutable pages/spectra; independent worker
+factories remain supported. Never run concurrent jobs against the same mutable cache.
 
 | Job field                                | Contract                                                                                          |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------- |
@@ -112,23 +113,26 @@ cache locality. Each canvas has one active and one replaceable pending job.
 Reject already-presented IDs and frames with incompatible sources/settings/output
 sizes. Compatible progressive scrolling and camera-only changes in any 3D space
 can present completed intermediate frames so continuous input does not starve the
-display. Worker errors retry only the newest request locally. Disconnect terminates
-the worker, settles pending work, and disposes local GPU resources.
+display. Worker errors retry only the newest request locally. Disconnect releases
+the worker lease, settles pending work and disposes local GPU resources. The last
+lease terminates the shared worker.
 
-Supersession is checked after asynchronous reads. Long synchronous loops still run
-to completion; cancellation latency remains an avenue for improvement. Histogram
-changes are staged before commit so cancellation cannot poison later frames.
+Supersession is checked after reads and real-task yields. Large FFTs now yield
+within butterfly/permutation/chirp work; point evaluation and raster loops remain
+synchronous. Histogram and tuple changes are staged before publication.
 
 ## Coverage, acceleration and adaptive quality
 
 The CPU rasterizer is the reference. Three-dimensional points are ordered
 back-to-front; four sample probes determine pixel coverage, followed by ordered
 alpha blending. This preserves rear contributions at partially covered edges.
-WebGL2 uses instanced quads with the same coverage rule. CPU providers, recipes,
-projection, sorting and text remain in place. WebGL is opt-in and falls back on
-unavailable contexts, viewport limits, errors or context loss.
+WebGL2 uses instanced quads with the same coverage rule. Providers, ordering and
+text retain CPU ownership. [Optional GPU recipes/projection](gpu-execution.md)
+use transform feedback, retaining CPU fallback. WebGL rasterization is opt-in and
+falls back on unavailable contexts, viewport limits, errors or context loss.
 
-The adaptive controller belongs to all 3D spaces. Two sustained slow reports can
+Adaptive resolution is disabled by default and enabled per preset under Advanced.
+Its controller belongs to all 3D spaces. Two sustained slow reports can
 reduce raster scale; six fast reports permit recovery, and roughly 180 ms idle
 restores detail. Scale remains at least 0.25. An ineffective reduction rolls back
 and locks for that interaction. Sample budgets, selected bytes, and navigation
@@ -145,16 +149,19 @@ The built-in 32-byte factor retains its 8-bit quantization. Halo reads extend pa
 the selection within the source, clipping at file edges. Normalization uses the
 requested window's achievable entropy, up to eight bits.
 
-## Remaining performance work
+## Performance boundaries
 
-Sampling bounds prepared marks, not full-window provider storage or tuple discovery.
-Sparse byte/entropy paging, incremental tuple representative discovery, finer
-provider timings, dependency-specific color/size buffers, generic dirty-region
-raster updates, and GPU projection remain useful next steps. Restore no removed
-shortcut without making its applicability and numerical/coverage contracts explicit.
+[Current measurements and accounting](performance.md) cover bounded source and
+entropy pages, incremental histograms/low-cardinality tuple representatives,
+shared-worker analysis, exact radix sorting, dependency reuse, density allocation
+and optional GPU execution. High-cardinality tuple discovery still uses the
+simpler scan. Unrelated heavy graphs can contend in the shared worker; independent
+worker factories trade shared buffers for parallel CPU execution.
 
 FFT working buffers can exceed input size, especially for Bluestein lengths;
-the spectrum cache copies only one-sided coefficients so padded buffers can be
-released. Triple maps can approach one key per tuple. Overview detailed pages are
-bounded to 64 × 65,536-byte prefix arrays per bar (roughly 16 MiB), with coarse
-page totals retained separately. Multiple bars/workers still duplicate caches.
+only one-sided results survive preparation. Distinct triple maps still grow with
+actual cardinality. Overview detail and source/spectrum caches have explicit
+per-source budgets; there is no universal process-memory cap. Physical GPU,
+Firefox/Safari and WGSL validation remain unavailable. Pipeline fusion is excluded
+from the current performance pass; WebGPU and dirty-region raster execution remain
+separate workload-driven extensions.

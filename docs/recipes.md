@@ -437,7 +437,8 @@ const { source, bindings } = emitRecipeShader(program, "wgsl"); // or 'glsl'
 ```
 
 The result is a **function library**, not a complete shader module with a stage
-entry point or a configured GPU pipeline. It provides
+entry point. The optional [WebGL execution backend](gpu-execution.md) supplies that
+stage and supported provider textures; other descriptors retain CPU fallback. The library provides
 `evaluateRecipes(sourceFactors, pointOffset, selectionLength, grid, pointIndex, pointCount)` returning a
 `RecipeResult` whose fields match the requested roots. The built-in source array
 has the canonical factor-slot layout; only `program.required` slots need values.

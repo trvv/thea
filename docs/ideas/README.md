@@ -17,6 +17,9 @@ it does not exclusively own a family of factors. Future optimizations should
 follow the requested operations and shared pipeline stages rather than preset
 names.
 
+See [remaining proposed work](REMAINING-WORK.md) for a consolidated, current list
+and [the performance follow-up](PERFORMANCE-PLAN.md) for the active implementation.
+
 ## Analysis proposals
 
 | Idea                                                      | Main question                                                       | Initial implementation boundary                                                                  |

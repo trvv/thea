@@ -28,9 +28,12 @@ geometry or color providers. Density rasterization currently uses CPU, including
 when WebGL is requested; preparation keeps normal local/worker routing. No GPU
 density parity or automatic acceleration is claimed.
 
-Four Float64 accumulation arrays and image storage require 36 bytes per pixel.
-Percentile references add 8 bytes per pixel; Front Layer adds 1 byte per pixel.
-These optional buffers are released when disabled, and active buffers are reused. Density has a default 256 MiB budget;
+Unweighted accumulation uses exact Uint32 quarter-probe sums when the mark count
+cannot overflow; other cases retain Float64. Default percentile/all storage is
+24 bytes per pixel, or 20 with a fixed reference. Front ownership adds one byte.
+Weighted-opacity and oversized all-contribution paths use 44/36 bytes per pixel
+plus optional ownership. Unused buffers are released and active buffers reused.
+Density has a default 256 MiB budget;
 Memory Budget (MiB) zero removes that dedicated cap. A configured provider budget
 can be tighter. Rejection occurs before allocation and preserves the preceding
 displayed frame; resolution is never silently changed to satisfy the budget.

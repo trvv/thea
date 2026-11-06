@@ -1,3 +1,4 @@
+import { pointCompute } from "./point-compute.js";
 /**
  * General point path with CPU providers and CPU/WebGL rasterization. Prepared geometry and colors survive camera/quality changes;
  * rasterization still runs for each presented frame.
@@ -16,6 +17,7 @@ import { paintDensity, assertDensityStorage } from "./density.js";
 import {
   createProviderDiagnostics,
   retainedProviderStorage,
+  retainedRenderStorage,
 } from "./provider-diagnostics.js";
 
 // Requested providers yield normalized factors for position and appearance. Prepared points survive camera changes in either renderer thread.
@@ -35,6 +37,11 @@ export async function preparePoints(job, cache, current) {
     job.appearance ||
     defaultAppearance(region, job.shaders, job.frequencyOpacity);
   const signature = job.preparationKey ?? preparationKey(job);
+  if (!config.gpuRecipes && !config.gpuProjection && cache.pointCompute) {
+    cache.pointCompute.dispose();
+    delete cache.pointCompute;
+  } else if (!config.gpuRecipes && cache.pointCompute)
+    cache.pointCompute.releaseProviders();
   let prepared = cache.preparedPoints;
   let geometryReused = true;
   if (
@@ -84,14 +91,14 @@ export async function preparePoints(job, cache, current) {
     const text =
       job.shaders.includes("hex") || job.shaders.includes("character");
     /** Evaluate into synthetic slots before geometry/color conversion. Copy prepared values now because the provider reuses its input vector for the next sample. */
-    const emit = (factors, label, context) => {
+    const emit = (factors, label, context, evaluated = false) => {
       const index = ordinal++;
       if (
         geometry &&
         (size >= geometry.size || geometry.indices[size] !== index)
       )
         return;
-      evaluate(factors, context);
+      if (!evaluated) evaluate(factors, context);
       if (!geometry && !position(factors, xyz)) return;
       const p = size * 3;
       if (!geometry) {
@@ -128,7 +135,29 @@ export async function preparePoints(job, cache, current) {
       visit.grid.dimensions,
     );
     const evaluationStarted = diagnostics ? performance.now() : 0;
-    visit(emit);
+    let computed;
+    if (config.gpuRecipes) {
+      try {
+        computed = pointCompute(cache, job.sourceId ?? job.source)?.evaluate(
+          program,
+          visit,
+          job,
+        );
+      } catch {
+        cache.pointCompute?.dispose?.();
+        cache.pointCompute = false;
+      }
+    }
+    if (computed) {
+      const factors = new Float64Array(program.factorCount);
+      for (let index = 0; index < visit.count; index++) {
+        for (let channel = 0; channel < computed.names.length; channel++)
+          factors[program.bindings[computed.names[channel]]] =
+            computed.values[index * 8 + channel];
+        emit(factors, computed.labels?.[index], null, true);
+      }
+    } else visit(emit);
+    cache.recipeBackend = computed ? "webgl" : "cpu";
     if (diagnostics) {
       diagnostics.evaluation.milliseconds =
         performance.now() - evaluationStarted;
@@ -178,13 +207,20 @@ export async function renderPoints(canvas, job, cache, current) {
     job.appearance ||
     defaultAppearance(job.region, job.shaders, job.frequencyOpacity);
   if (appearance.density)
-    assertDensityStorage(job, width, height, appearance.density);
+    assertDensityStorage(job, width, height, appearance.density, prepared.size);
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
   const context = canvas.getContext("2d"),
     scratch = (cache.pointRaster ||= {});
   if (!appearance.density) delete scratch.density;
-  const projection = projectPoints(prepared, job, scratch);
+  const projection = projectPoints(
+    prepared,
+    job,
+    scratch,
+    config.gpuProjection
+      ? pointCompute(cache, job.sourceId ?? job.source)
+      : null,
+  );
   const { projected, order, spatial, cellWidth, cellHeight } = projection;
   const rasterStarted = performance.now();
   const density = appearance.density
@@ -232,6 +268,7 @@ export async function renderPoints(canvas, job, cache, current) {
     projection,
     density,
   };
+  if (diagnostics) diagnostics.memory = retainedRenderStorage(cache);
   return {
     duration: performance.now() - started,
     dimensions: prepared.grid.dimensions,

@@ -226,3 +226,15 @@ the prior planning state and are superseded by this decision and delivery.
 The regression set now contains 52 Bun scripts and 29 executed GLSL fixtures.
 Physical-GPU, other-browser and WGSL-device limits remain explicitly recorded,
 without changing the CPU default or claiming unavailable validation.
+
+### Performance follow-up
+
+The user requested the remaining performance work, excluding pipeline fusion.
+[The performance checklist](PERFORMANCE-PLAN.md) and [current measurements](../performance.md)
+record incremental tuple reuse, sparse range reuse, interruptible FFTs, shared
+immutable worker analysis, smaller density buffers, engine/memory diagnostics,
+and optional WebGL recipe/projection execution. These supersede earlier pending
+entries for those delivered slices. GPU eligibility and software-device limits
+are documented in [GPU execution](../gpu-execution.md); no physical-device or
+WebGPU performance claim is made. [Remaining proposals](REMAINING-WORK.md) separates
+further extensions from current behavior.

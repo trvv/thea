@@ -1,3 +1,4 @@
+import { selectRank } from "./select-rank.js";
 /** Coverage-aware accumulation shared by every configuration, independent of presets. */
 import { assertProviderBudget } from "./provider-budget.js";
 
@@ -98,7 +99,17 @@ export function densityColor(
   return out;
 }
 
-export function assertDensityStorage(job, width, height, settings) {
+const integerDensity = (settings, marks) =>
+  !settings.opacityWeight &&
+  (settings.mode === "front" || marks <= Math.floor(0xffffffff / 1020));
+
+export function assertDensityStorage(
+  job,
+  width,
+  height,
+  settings,
+  marks = Infinity,
+) {
   settings = validateDensity(settings);
   const limit = Math.min(
     job.configuration.providerBudget ?? Infinity,
@@ -108,8 +119,9 @@ export function assertDensityStorage(job, width, height, settings) {
     { configuration: { providerBudget: limit === Infinity ? null : limit } },
     width *
       height *
-      (36 +
-        (settings.reference === "percentile" ? 8 : 0) +
+      (4 +
+        (integerDensity(settings, marks) ? 4 : 8) *
+          (4 + (settings.reference === "percentile" ? 1 : 0)) +
         (settings.mode === "front" ? 1 : 0)),
     "Density raster storage",
   );
@@ -126,22 +138,32 @@ export function paintDensity(
   settings = validateDensity(settings);
   const { width, height, order } = projection;
   const length = width * height;
-  assertDensityStorage(job, width, height, settings);
+  assertDensityStorage(job, width, height, settings, prepared.size);
+  const ArrayType = integerDensity(settings, prepared.size)
+    ? Uint32Array
+    : Float64Array;
+  const unit = ArrayType === Uint32Array ? 4 : 1;
   let data = scratch.density;
-  if (!data || data.width !== width || data.height !== height)
+  if (
+    !data ||
+    data.width !== width ||
+    data.height !== height ||
+    data.unit !== unit
+  )
     data = scratch.density = {
       width,
       height,
-      count: new Float64Array(length),
-      red: new Float64Array(length),
-      green: new Float64Array(length),
-      blue: new Float64Array(length),
+      unit,
+      count: new ArrayType(length),
+      red: new ArrayType(length),
+      green: new ArrayType(length),
+      blue: new ArrayType(length),
 
       image: context.createImageData(width, height),
     };
   data.sorted =
     settings.reference === "percentile"
-      ? data.sorted || new Float64Array(length)
+      ? data.sorted || new ArrayType(length)
       : null;
   data.covered =
     settings.mode === "front" ? data.covered || new Uint8Array(length) : null;
@@ -176,7 +198,7 @@ export function paintDensity(
         }
         if (!mask) continue;
         const weight =
-          (covered(mask) / 4) *
+          ((covered(mask) * unit) / 4) *
           (settings.opacityWeight ? prepared.colors[q + 3] / 255 : 1);
         data.count[pixel] += weight;
         data.red[pixel] += weight * prepared.colors[q];
@@ -190,22 +212,21 @@ export function paintDensity(
       if (settings.reference === "percentile") data.sorted[occupied] = count;
       occupied++;
     }
-  if (settings.reference === "percentile" && occupied)
-    data.sorted.subarray(0, occupied).sort();
   const reference =
     settings.reference === "fixed"
       ? settings.value
       : occupied
-        ? data.sorted[
-            Math.max(0, Math.ceil(settings.percentile * occupied) - 1)
-          ]
+        ? selectRank(
+            data.sorted.subarray(0, occupied),
+            Math.max(0, Math.ceil(settings.percentile * occupied) - 1),
+          ) / unit
         : 0;
   for (let i = 0; i < length; i++)
     densityColor(
-      data.count[i],
-      data.red[i],
-      data.green[i],
-      data.blue[i],
+      data.count[i] / unit,
+      data.red[i] / unit,
+      data.green[i] / unit,
+      data.blue[i] / unit,
       reference,
       settings,
       data.image.data,

@@ -1,7 +1,8 @@
 # Bounded exact scans and tuple representatives
 
 Tuple population discovery and histogram preparation can consume the root Blob
-in 64 KiB chunks. They carry the last bytes/key across chunk boundaries, so pairs
+in bounded 64 KiB reads. Full scans carry tuple state or bounded overlapping
+halos across chunk boundaries, so pairs
 and triples that cross a page remain exact. Supplying an already prepared selected
 byte buffer remains supported, without forcing an additional source read. A low
 render sample count never changes which tuples exist or their exact counts.
@@ -49,3 +50,10 @@ the result itself has constant memory.
 maps, covers boundary-crossing and overlapping tuples, first/last ordering,
 actual task-based cancellation, atomic histogram deltas, explicit budget failures
 and truncated sources. Existing trigraph and scroll fixtures remain references.
+
+Low-cardinality tuple discovery retains first/last/count entries and updates edge
+changes for small overlapping moves. It repairs invalidated representatives with
+bounded growing reads and merges changed first addresses into population order.
+Above 4,096 distinct pair/triple keys, the lower-overhead full scan is retained.
+Both paths preserve exact membership, order, counts and cancellation publication.
+See [the performance follow-up](performance.md#performance-follow-up-shared-work-cancellation-and-density).

@@ -5,7 +5,7 @@ import { spaces } from "./spaces.js";
 
 export const projectedPointSize = (depth) => (1.5 * 3.5) / (3.5 - depth);
 
-export function projectPoints(prepared, job, scratch) {
+export function projectPoints(prepared, job, scratch, compute = null) {
   const { configuration: config, columns: width, rows: height } = job;
   const spatial = spaces[config.space].length === 3;
   const { yaw, pitch } = job.rotation || { yaw: -0.6, pitch: 0.45 };
@@ -38,6 +38,7 @@ export function projectPoints(prepared, job, scratch) {
     spatial ? pitch : 0,
     scale,
     grid,
+    Boolean(compute),
   ]);
   if (scratch.geometry === prepared.geometry && scratch.key === key)
     return { ...scratch.projection, state: scratch.projection, reused: true };
@@ -52,7 +53,17 @@ export function projectPoints(prepared, job, scratch) {
   }
   const projected = scratch.projected,
     focal = Math.max(0, Math.min(width - 1, height - 1)) * 0.8;
-  for (let i = 0; i < prepared.size; i++) {
+  let computed;
+  if (spatial && compute) {
+    try {
+      computed = compute.project(prepared, job, { grid, cellSpan });
+    } catch {
+      compute.failed = true;
+      computed = null;
+    }
+  }
+  if (computed) projected.set(computed);
+  for (let i = 0; !computed && i < prepared.size; i++) {
     const p = i * 3,
       q = i * 4,
       x = prepared.positions[p],
@@ -103,6 +114,7 @@ export function projectPoints(prepared, job, scratch) {
     width,
     height,
     spatial,
+    backend: computed ? "webgl" : "cpu",
     cellWidth,
     cellHeight,
   };

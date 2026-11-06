@@ -30,9 +30,9 @@ const context = canvas.getContext("2d"),
   job = { configuration: {} };
 let settings = validateDensity({});
 const all = paintDensity(context, prepared, projection, scratch, settings, job);
-assert.equal(scratch.density.count[4], 2);
+assert.equal(scratch.density.count[4] / scratch.density.unit, 2);
 assert.equal(scratch.density.covered, null);
-assert.ok(scratch.density.sorted instanceof Float64Array);
+assert.ok(scratch.density.sorted instanceof Uint32Array);
 assert.equal(all.referenceValue, 2);
 assert.deepEqual([...canvas.pixels.slice(16, 20)], [128, 0, 128, 255]);
 assert.equal(
@@ -49,7 +49,7 @@ const front = paintDensity(
   settings,
   job,
 );
-assert.equal(scratch.density.count[4], 1);
+assert.equal(scratch.density.count[4] / scratch.density.unit, 1);
 assert.deepEqual([...canvas.pixels.slice(16, 20)], [0, 0, 255, 255]);
 assert.equal(
   inspectDensity(prepared, projection, 1, 1, settings, front.referenceValue)
@@ -122,7 +122,10 @@ for (const shape of ["square", "circle"])
             expected +=
               (mode === "front" ? Math.min(1, hits.length) : hits.length) / 4;
           }
-        assert.equal(scratch.density.count[y * 3 + x], expected);
+        assert.equal(
+          scratch.density.count[y * 3 + x] / scratch.density.unit,
+          expected,
+        );
       }
   }
 

@@ -23,8 +23,10 @@ Their meaning does not change merely because sparse execution is ineligible.
 Ranges are source/scope/request keyed in a single immutable completed cache entry.
 Cancelled reads do not publish partial entries. Switching to sparse preparation
 releases dense byte/entropy cache entries. Camera-only frames reuse prepared
-marks; unchanged provider requests reuse their sparse ranges. Distinct new
-requests currently rebuild ranges rather than maintaining a cross-job page LRU.
+marks; equivalent provider address requests reuse sparse data even when consuming
+expressions change. New requests reuse covered ranges through a linear merge,
+reading only uncovered spans. This is bounded single-entry reuse, not an unbounded
+cross-job range history.
 
 `diagnostics: true` reports source reads and retained backing buffers, including
 sparse ranges and entropy Map entry counts. With 256 representative marks over

@@ -32,7 +32,7 @@ suite. Run from the repository root:
 for test in tests/*.js
 do
   case "$test" in
-    tests/browser-smoke.js|tests/render-canvas.js|tests/render-thread.js|tests/provider-benchmark.js|tests/scroll-benchmark.js) continue ;;
+    tests/browser-smoke.js|tests/render-canvas.js|tests/render-thread.js|tests/provider-benchmark.js|tests/scroll-benchmark.js|tests/performance-benchmark.js) continue ;;
   esac
   bun "$test" || exit 1
 done

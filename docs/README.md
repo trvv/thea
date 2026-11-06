@@ -86,6 +86,7 @@ for actual acceleration/browser coverage.
 - [Ideas index](ideas/README.md): analysis proposals, recipe experiments, and future pipeline work.
 - [Recipe experiments](recipe-experiments.md): reusable differences, delayed coordinates and entropy contrast with ordinary expressions.
 - [Multibyte encoding ideas](<ideas/MULTIBYTE ENCODING IDEAS.md>): implemented bounded UTF-8 inspection and proposed wider text interpretations.
+- [Optional GPU execution](gpu-execution.md): flags, supported recipes, fallback and measured limits.
 - [Rendering and performance](rendering.md): worker protocol, stale frames,
   caches, particle rasterization, quality feedback, and memory costs.
 - [Recipes and shader contract](recipes.md): the expression format, types,

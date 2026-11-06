@@ -49,6 +49,8 @@ export function presetConfiguration(
             : "bytes",
     backend: "cpu",
     adaptiveResolution: false,
+    gpuRecipes: false,
+    gpuProjection: false,
     footprint: ["linear", "hilbert", "hilbert3d"].includes(region)
       ? "grid"
       : "point",
@@ -124,6 +126,12 @@ export function validateConfiguration(configuration) {
   const adaptiveResolution = configuration.adaptiveResolution ?? false;
   if (typeof adaptiveResolution !== "boolean")
     throw new TypeError("Adaptive resolution must be a boolean");
+  for (const flag of ["gpuRecipes", "gpuProjection"])
+    if (
+      configuration[flag] !== undefined &&
+      typeof configuration[flag] !== "boolean"
+    )
+      throw new TypeError(`${flag} must be a boolean`);
   const backend = configuration.backend ?? "cpu";
   if (!["cpu", "webgl"].includes(backend))
     throw new TypeError("Unknown point backend");
@@ -175,6 +183,8 @@ export function validateConfiguration(configuration) {
   return {
     backend,
     adaptiveResolution,
+    gpuRecipes: configuration.gpuRecipes ?? false,
+    gpuProjection: configuration.gpuProjection ?? false,
     ...(providerBudget === undefined ? {} : { providerBudget }),
     population,
     ...recordParameters,

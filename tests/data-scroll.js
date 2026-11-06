@@ -208,7 +208,7 @@ if (
     ["Bars", "Sample Limit", "Footprint", "Backend"].includes(item.label),
   ) ||
   String(menu.at(-1).items.map((item) => item.label)) !==
-    "Source Metadata,References,Bookmarks,Open File,Comparison View,Undo,Redo,Edit Profile JSON,Bars,Sample Limit,Provider Budget (MiB),Footprint,Adaptive Resolution,Backend"
+    "Source Metadata,References,Bookmarks,Open File,Comparison View,Undo,Redo,Edit Profile JSON,Bars,Sample Limit,Provider Budget (MiB),Footprint,GPU Execution,Adaptive Resolution,Backend"
 )
   throw Error("Advanced controls are misplaced");
 bars().action(2);

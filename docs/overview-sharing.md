@@ -31,10 +31,10 @@ are dropped or approximated to meet a raster budget. File-truncated reads reject
 instead of publishing an incomplete total. Empty subpixel bins retain the preceding
 value, as before.
 
-Separate workers own separate WeakMaps. A cloned source in another worker does
-not share these summaries, and this increment introduces no cross-worker service,
-SharedArrayBuffer or worker pool. Repeated snapshots inside one bar can reuse its
-canonical immutable source when an engine's stable source ID survives Blob cloning.
+Default engine leases share one render-worker context and canonicalize source
+Blobs across canvases, so their WeakMaps can actually share summaries. Independent
+custom workers still own separate WeakMaps. Local and worker contexts remain
+separate; this does not introduce SharedArrayBuffer or a cross-process cache.
 
 `bun tests/overview-sharing.js` verifies concurrent sharing, exact clipped sums,
 canceled waiters, retry, source identity, detail eviction and coarse-total reuse.

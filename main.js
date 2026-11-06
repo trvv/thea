@@ -2913,6 +2913,14 @@ export class DataScroll extends HTMLElement {
             (footprint) => change({ footprint }),
           ),
           {
+            label: "GPU Execution",
+            items: ["gpuProjection", "gpuRecipes"].map((flag) => ({
+              label: flag === "gpuProjection" ? "Projection" : "Recipes",
+              checked: config[flag],
+              action: () => change({ [flag]: !config[flag] }),
+            })),
+          },
+          {
             label: "Adaptive Resolution",
             checked: config.adaptiveResolution,
             action: () =>
