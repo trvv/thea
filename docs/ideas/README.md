@@ -20,6 +20,10 @@ names.
 See [remaining proposed work](REMAINING-WORK.md) for a consolidated, current list
 and [the performance follow-up](PERFORMANCE-PLAN.md) for the active implementation.
 
+See [workflow and interface design](workflow-interface.md) for pane ownership,
+cross-highlighting, selections, portable files, tabs/drop handling, search and
+structured editing.
+
 ## Analysis proposals
 
 | Idea                                                      | Main question                                                       | Initial implementation boundary                                                                  |
