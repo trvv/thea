@@ -5,7 +5,7 @@ import {
   saveBookmark,
   deleteBookmark,
   storageKey,
-} from "../bookmarks.js";
+} from "../src/presets/bookmarks.js";
 const values = new Map();
 const storage = {
   getItem: (key) => values.get(key) ?? null,

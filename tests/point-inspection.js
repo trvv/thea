@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
-import { executeRender } from "../rendering.js";
-import { inspectPoint, hitPoint } from "../point-inspection.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
-import { compileRecipes, constant, hilbert3DCoordinate } from "../recipes.js";
-import { entropyShading } from "../entropy.js";
+import { executeRender } from "../src/render/rendering.js";
+import { inspectPoint, hitPoint } from "../src/inspection/point-inspection.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
+import {
+  compileRecipes,
+  constant,
+  hilbert3DCoordinate,
+} from "../src/recipes/recipes.js";
+import { entropyShading } from "../src/analysis/entropy.js";
 import { RenderCanvas } from "./render-canvas.js";
 const data = Uint8Array.from({ length: 256 }, (_, i) => (i * 37 + i * i) % 251),
   source = new Blob([data]);

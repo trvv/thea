@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { populationOffsets } from "../populations.js";
-import { windowCounts } from "../histograms.js";
-import { createProviderDiagnostics } from "../provider-diagnostics.js";
-import { scanChunkSize } from "../scan.js";
+import { populationOffsets } from "../src/data/populations.js";
+import { windowCounts } from "../src/analysis/histograms.js";
+import { createProviderDiagnostics } from "../src/data/provider-diagnostics.js";
+import { scanChunkSize } from "../src/data/scan.js";
 
 const data = Uint8Array.from(
   { length: scanChunkSize * 3 + 17 },

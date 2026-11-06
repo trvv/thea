@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { executeRender } from "../rendering.js";
-import { pointFactors } from "../point-factors.js";
-import { inspectPoint } from "../point-inspection.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
-import { factorIndices } from "../factor-catalog.js";
+import { executeRender } from "../src/render/rendering.js";
+import { pointFactors } from "../src/data/point-factors.js";
+import { inspectPoint } from "../src/inspection/point-inspection.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
+import { factorIndices } from "../src/recipes/factor-catalog.js";
 import { RenderCanvas } from "./render-canvas.js";
 
 const data = Uint8Array.from(

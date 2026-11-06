@@ -1,16 +1,22 @@
 import assert from "node:assert/strict";
-import { pointFactors } from "../point-factors.js";
-import { factorIndices as slots, requiredFactors } from "../factors.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance, occurrenceFactor } from "../appearance.js";
+import { pointFactors } from "../src/data/point-factors.js";
+import {
+  factorIndices as slots,
+  requiredFactors,
+} from "../src/recipes/factors.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import {
+  defaultAppearance,
+  occurrenceFactor,
+} from "../src/recipes/appearance.js";
 import {
   entropyShading,
   byteCharacter,
   hilbertCells,
   executeRender,
   renderCost,
-} from "../rendering.js";
-import { fourierSpectrum } from "../fourier.js";
+} from "../src/render/rendering.js";
+import { fourierSpectrum } from "../src/analysis/fourier.js";
 import { RenderCanvas } from "./render-canvas.js";
 let reads = 0;
 class Source extends Blob {

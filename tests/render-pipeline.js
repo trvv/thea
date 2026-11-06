@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { executeRender } from "../rendering.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
-import { RenderEngine } from "../render-engine.js";
+import { executeRender } from "../src/render/rendering.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
+import { RenderEngine } from "../src/render/render-engine.js";
 import { RenderCanvas } from "./render-canvas.js";
 let reads = 0;
 class Source extends Blob {

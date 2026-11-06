@@ -1,0 +1,134 @@
+/* The same stylesheet is linked by the page and each component shadow root. */
+:host(ui-popup),
+:host(context-menu),
+:host(point-popup) {
+  position: fixed;
+  margin: 0;
+  padding: 4px;
+  color: CanvasText;
+  background: Canvas;
+  border: 1px solid ButtonBorder;
+  border-radius: 4px;
+  font: 13px system-ui;
+  min-width: 200px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 16px);
+  overflow: auto;
+  box-sizing: border-box;
+  box-shadow: 0 2px 6px #0002;
+}
+
+:host(point-popup) {
+  max-width: min(640px, calc(100vw - 16px));
+}
+
+:host(data-scroll-view),
+:host(data-scroll-bar) {
+  display: block;
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+:host(data-scroll-view) canvas,
+:host(data-scroll-bar) canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+:host(data-scroll) {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+:host(data-scroll) data-scroll-view,
+:host(data-scroll) .bars {
+  height: 100%;
+  min-height: 0;
+}
+
+:host(data-scroll) .bars {
+  display: flex;
+}
+
+:host(data-scroll) data-scroll-bar {
+  width: 48px;
+  height: 100%;
+}
+
+.thea-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px 4px 28px;
+  min-height: 24px;
+}
+
+.thea-menu-field {
+  font: inherit;
+  margin-left: auto;
+  width: 64px;
+}
+
+.thea-menu-button {
+  display: grid;
+  grid-template-columns: 12px 1fr auto 12px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 2px;
+  padding: 4px 8px;
+  cursor: default;
+}
+
+.thea-menu-detail {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.65;
+}
+
+.thea-selection {
+  position: absolute;
+  left: 0;
+  right: 0;
+  outline: 1px solid #b89700;
+  outline-offset: -1px;
+  background: #ffdf0040;
+  pointer-events: none;
+  min-height: 3px;
+}
+
+.point-inspection table {
+  border-collapse: collapse;
+}
+
+.point-inspection th {
+  text-align: left;
+  vertical-align: top;
+}
+
+.point-inspection th,
+.point-inspection td {
+  padding: 2px 4px;
+}
+
+.point-inspection td {
+  overflow-wrap: anywhere;
+}
+
+.point-inspection summary {
+  cursor: pointer;
+}

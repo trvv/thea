@@ -3,8 +3,8 @@ import {
   compilePosition,
   presetConfiguration,
   resolveViewJob,
-} from "../point-configuration.js";
-import { executeRender } from "../rendering.js";
+} from "../src/recipes/point-configuration.js";
+import { executeRender } from "../src/render/rendering.js";
 import { RenderCanvas } from "./render-canvas.js";
 const value = new Float64Array(3),
   out = new Float64Array(3);

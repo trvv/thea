@@ -4,11 +4,11 @@ import {
   constant,
   recipeLabel,
   validateRecipe,
-} from "../recipes.js";
-import { recipeMenu } from "../recipe-menu.js";
-import { factorIndices } from "../factor-catalog.js";
-import { validateProfile } from "../profiles.js";
-import { presetConfiguration } from "../point-configuration.js";
+} from "../src/recipes/recipes.js";
+import { recipeMenu } from "../src/ui/recipe-menu.js";
+import { factorIndices } from "../src/recipes/factor-catalog.js";
+import { validateProfile } from "../src/presets/profiles.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
 
 const normalize = (input, max) => ({ op: "normalize", input, min: 0, max });
 const byte = (offset) => ({ op: "byte", offset: constant(offset) });

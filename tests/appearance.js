@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
-import { compileAppearance, defaultAppearance } from "../appearance.js";
-import { executeRender } from "../rendering.js";
+import {
+  compileAppearance,
+  defaultAppearance,
+} from "../src/recipes/appearance.js";
+import { executeRender } from "../src/render/rendering.js";
 import { RenderCanvas, cellColor } from "./render-canvas.js";
-import { RenderEngine } from "../render-engine.js";
+import { RenderEngine } from "../src/render/render-engine.js";
 const base = {
   kind: "view",
   source: new Blob([Uint8Array.from({ length: 256 }, (_, i) => i)]),

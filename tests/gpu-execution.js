@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { executeRender } from "../rendering.js";
+import { executeRender } from "../src/render/rendering.js";
 import {
   presetConfiguration,
   validateConfiguration,
-} from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
-import { preparationKey, geometryKey } from "../render-identity.js";
+} from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
+import { preparationKey, geometryKey } from "../src/render/render-identity.js";
 import { RenderCanvas } from "./render-canvas.js";
 const configuration = presetConfiguration("trigraph");
 assert.equal(configuration.gpuRecipes, false);

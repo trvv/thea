@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
-import { byteFrequencyTable } from "../byte-frequency.js";
-import { populationOffsets, recordPopulation } from "../populations.js";
-import { executeRender } from "../rendering.js";
+import { byteFrequencyTable } from "../src/presets/byte-frequency.js";
+import {
+  populationOffsets,
+  recordPopulation,
+} from "../src/data/populations.js";
+import { executeRender } from "../src/render/rendering.js";
 import { RenderCanvas } from "./render-canvas.js";
-import { parseProfile, serializeProfile } from "../profiles.js";
+import { parseProfile, serializeProfile } from "../src/presets/profiles.js";
 
 const data = Uint8Array.from([99, 65, 0, 65, 255, 0, 65, 66, 65, 88]);
 const source = new Blob([data]);

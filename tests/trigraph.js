@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { trigraphCounts } from "../histograms.js";
-import { projectedPointSize } from "../point-projection.js";
-import { executeRender } from "../rendering.js";
+import { trigraphCounts } from "../src/analysis/histograms.js";
+import { projectedPointSize } from "../src/render/point-projection.js";
+import { executeRender } from "../src/render/rendering.js";
 import { RenderCanvas } from "./render-canvas.js";
 
 const packed = (x, y, z) => x * 65536 + y * 256 + z;

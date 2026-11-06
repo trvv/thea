@@ -5,24 +5,24 @@ import {
   reference,
   hilbertCoordinate,
   validateRecipe,
-} from "../recipes.js";
-import { emitRecipeShader } from "../recipe-shaders.js";
-import { recipeMenu } from "../recipe-menu.js";
-import { pointFactors, windowEntropy } from "../point-factors.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
+} from "../src/recipes/recipes.js";
+import { emitRecipeShader } from "../src/recipes/recipe-shaders.js";
+import { recipeMenu } from "../src/ui/recipe-menu.js";
+import { pointFactors, windowEntropy } from "../src/data/point-factors.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
 import {
   factorCount,
   factorIndices as slots,
   requiredFactors,
-} from "../factors.js";
+} from "../src/recipes/factors.js";
 import {
   entropyShading,
   hilbertCells,
   byteCharacter,
   executeRender,
   renderCost,
-} from "../rendering.js";
+} from "../src/render/rendering.js";
 import { RenderCanvas } from "./render-canvas.js";
 const next = {
   op: "normalize",

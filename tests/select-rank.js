@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { selectRank } from "../select-rank.js";
+import { selectRank } from "../src/math/select-rank.js";
 let seed = 17;
 for (const size of [1, 2, 3, 32, 4097, 100000]) {
   for (const mode of ["random", "constant", "ascending", "descending"]) {

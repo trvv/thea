@@ -6,7 +6,7 @@ these flags choose where earlier arithmetic runs, including when CPU rasterizati
 is used. Unsupported execution retains the same CPU providers and evaluator.
 Pipeline fusion is not involved.
 
-`point-compute.js` uses WebGL2 transform feedback, not WebGPU. It captures shader
+`src/render/point-compute.js` uses WebGL2 transform feedback, not WebGPU. It captures shader
 outputs in buffers, then reads them back for the existing coordinate/appearance,
 depth ordering, raster and inspection stages. Projection uploads immutable world
 geometry once; camera uniforms change independently. Recipe execution uploads

@@ -9,15 +9,15 @@ work from [next steps](next-steps.md) and new CantorDust research with these sta
 
 ## What already exists
 
-`recipes.js` validates serializable expressions and compiles a shared DAG with
+`src/recipes/recipes.js` validates serializable expressions and compiles a shared DAG with
 `f32`, exact `index`, `vec2` and `vec3` nodes. It already supports byte lookups,
 parameterized entropy, global spectrum components, arithmetic, named references,
 and explicit Hilbert coordinates. Only active channels contribute provider
-requirements. `recipe-shaders.js` emits GLSL/WGSL libraries; actual provider reads
+requirements. `src/recipes/recipe-shaders.js` emits GLSL/WGSL libraries; actual provider reads
 and recipe execution in the renderer currently remain on CPU. An operation should
 have consistent emitter semantics without requiring a new GPU renderer first.
 
-`point-factors.js` supplies population inputs and lookup contexts. It currently
+`src/data/point-factors.js` supplies population inputs and lookup contexts. It currently
 reads a selection-sized byte buffer, entropy halos, and dense entropy results.
 Byte and explicit entropy lookup addresses are selection-relative; entropy's
 neighborhood uses root-source context. Outside-selection lookup results currently
@@ -25,8 +25,8 @@ return zero. Tuple populations use their first occurrence, and bin points have a
 byte correspondence. These are relationships, not restrictions on which analysis
 may shade which population.
 
-`point-inspection.js` replays the same recipe evaluation for the hit mark and
-attaches on-demand descriptions from `point-provenance.js`. `inspection-content.js`
+`src/inspection/point-inspection.js` replays the same recipe evaluation for the hit mark and
+attaches on-demand descriptions from `src/inspection/point-provenance.js`. `src/inspection/inspection-content.js`
 renders these descriptions as text in collapsed sections. No new analysis should
 attach a large provenance object to every prepared mark.
 
@@ -94,9 +94,9 @@ in 0–255, with an explicit policy for noninteger/out-of-range arithmetic input
 Do not let JavaScript's signed 32-bit coercion accidentally establish the policy.
 Bit indices are constant integer parameters in 0–7 initially.
 
-Touch `recipes.js` validation, node interning, evaluator and `recipeLabel`;
-`recipe-menu.js` transformation/parameter controls; and `recipe-shaders.js`
-GLSL/WGSL generation. Arithmetic-only nodes need no `factor-catalog.js` slot and
+Touch `src/recipes/recipes.js` validation, node interning, evaluator and `recipeLabel`;
+`src/ui/recipe-menu.js` transformation/parameter controls; and `src/recipes/recipe-shaders.js`
+GLSL/WGSL generation. Arithmetic-only nodes need no `src/recipes/factor-catalog.js` slot and
 no statistical provider. Hamming change composes XOR and population count over
 two ordinary byte reads; normalize the raw count by eight explicitly.
 
@@ -116,7 +116,7 @@ values above U+10FFFF and truncated sequences. A genuine encoded replacement
 character is a valid result; decoder-generated replacement is not.
 
 Integrate the bounded asynchronous read after hit resolution in
-`point-inspection.js`, retaining `current()` checks before publishing a result.
+`src/inspection/point-inspection.js`, retaining `current()` checks before publishing a result.
 Keep the pure decoding independent from DOM and Blob. Return encoding, scalar,
 exact half-open span, source bytes and within-sequence byte index; render through
 existing collapsed inspection sections. Do not change ASCII fields or gate valid
@@ -157,8 +157,8 @@ raw bits and value. A nonfinite value must remain distinguishable from a measure
 zero despite the terminal output guard. Keep float64 and integer64 deferred until
 raw precision, normalization and serialization have an agreed contract.
 
-Extend provider requirements/context in `recipes.js` and `point-factors.js`, and
-add exact-byte descriptions in `point-provenance.js`/`point-inspection.js`. A pure
+Extend provider requirements/context in `src/recipes/recipes.js` and `src/data/point-factors.js`, and
+add exact-byte descriptions in `src/inspection/point-provenance.js`/`src/inspection/point-inspection.js`. A pure
 numeric helper can serve inspection and provider evaluation. Save only definition
 parameters, never DataView/runtime instances. Test all integer endpoints, endian
 orders, unaligned/page-crossing reads, incomplete words, float subnormals and
@@ -172,7 +172,7 @@ and probability/surprise/validity projections. Fit only transitions wholly insid
 the selection. Preserve raw bits because observed surprise can exceed eight;
 normalization/capping belongs to an explicit display expression.
 
-`histograms.js` already computes raw pair counts and can be reused when scope and
+`src/analysis/histograms.js` already computes raw pair counts and can be reused when scope and
 ownership agree. Keep immutable prepared model data separate from mutable
 incremental histogram scratch. Derive 256 row totals from the 65,536 pair cells;
 reuse one model across channels and points. Float64 counters cost about 512 KiB
@@ -254,7 +254,7 @@ large exact distances. Inspection should expose both real matching spans.
 
 ## 10. Local spectra as factors
 
-Reuse `fourier.js` for an explicit local transform; do not route through the
+Reuse `src/analysis/fourier.js` for an explicit local transform; do not route through the
 global selection-spectrum cache with different semantics. Define frame length,
 hop/origin, window convention, detrending, scope, edge policy and cycles-per-byte
 band endpoints before implementing the first band-energy/validity outputs.

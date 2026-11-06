@@ -4,27 +4,27 @@ import {
   gridCoordinates,
   resolveDimensions,
   validateDimensions,
-} from "../dimensions.js";
+} from "../src/recipes/dimensions.js";
 import {
   presetConfiguration,
   validateConfiguration,
   compilePosition,
-} from "../point-configuration.js";
-import { compileRecipes, recipeRoots } from "../recipes.js";
-import { pointFactors } from "../point-factors.js";
-import { defaultAppearance } from "../appearance.js";
-import { factorIndices as slots } from "../factor-catalog.js";
+} from "../src/recipes/point-configuration.js";
+import { compileRecipes, recipeRoots } from "../src/recipes/recipes.js";
+import { pointFactors } from "../src/data/point-factors.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
+import { factorIndices as slots } from "../src/recipes/factor-catalog.js";
 import {
   entropyShading,
   hilbertCells,
   byteCharacter,
   executeRender,
-} from "../rendering.js";
+} from "../src/render/rendering.js";
 import {
   validateProfile,
   serializeProfile,
   parseProfile,
-} from "../profiles.js";
+} from "../src/presets/profiles.js";
 import { RenderCanvas } from "./render-canvas.js";
 const shape = { columns: 16, rows: 16, aspect: 1 },
   base = presetConfiguration("linear");

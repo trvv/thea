@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import * as references from "../reference-models.js";
-import { executeRender } from "../rendering.js";
-import { inspectPoint } from "../point-inspection.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
+import * as references from "../src/analysis/reference-models.js";
+import { executeRender } from "../src/render/rendering.js";
+import { inspectPoint } from "../src/inspection/point-inspection.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
 import { RenderCanvas } from "./render-canvas.js";
-import { RenderEngine } from "../render-engine.js";
+import { RenderEngine } from "../src/render/render-engine.js";
 
 const low = await references.trainReference({
   bytes: Uint8Array.from({ length: 512 }, (_, i) => i % 4),

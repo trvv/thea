@@ -5,7 +5,7 @@ import {
   utf32At,
   inspectUtf8,
   inspectEncodings,
-} from "../byte-interpretation.js";
+} from "../src/analysis/byte-interpretation.js";
 
 const encoder = new TextEncoder();
 for (const scalar of [

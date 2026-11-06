@@ -52,7 +52,7 @@ shared bounded reads and stale replies.
 ## Bounded UTF-8 grapheme preview
 
 `inspectUTF8Grapheme(source, offset, { radius = 64 }, current)` in
-`grapheme-inspection.js` can group a locally valid UTF-8 run with native
+`src/analysis/grapheme-inspection.js` can group a locally valid UTF-8 run with native
 `Intl.Segmenter`. It reads at most 255 root bytes (radius 3–127), retains every
 contributing scalar and its original byte span, and reports a candidate cluster
 without normalizing the source. Pure `utf8GraphemeAt` accepts an existing context

@@ -22,7 +22,7 @@ mixed, dimension-scaled or edited normally. The last selected template restores
 on refresh. There is no new renderer or global Layout setting.
 
 ```js
-import { hCurveCoordinate } from "./recipes.js";
+import { hCurveCoordinate } from "./src/recipes/recipes.js";
 view.pointConfiguration = {
   ...view.pointConfiguration,
   position: [hCurveCoordinate(0), hCurveCoordinate(1), "none"],

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { AdaptiveResolution } from "../adaptive-resolution.js";
+import { AdaptiveResolution } from "../src/render/adaptive-resolution.js";
 import { RenderCanvas } from "./render-canvas.js";
 
 const adaptive = new AdaptiveResolution();
@@ -70,7 +70,7 @@ globalThis.ResizeObserver = class {
 globalThis.customElements = { define() {} };
 globalThis.document = { addEventListener() {} };
 globalThis.devicePixelRatio = 2;
-const { DataScrollView } = await import("../main.js");
+const { DataScrollView } = await import("../src/main.js");
 const view = new DataScrollView();
 const jobs = [];
 view.renderer.render = async (job) => {

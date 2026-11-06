@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { compileRecipes } from "../recipes.js";
-import { pointFactors } from "../point-factors.js";
-import { sampleProvenance } from "../point-provenance.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
-import { analysisParameters } from "../analysis-parameters.js";
+import { compileRecipes } from "../src/recipes/recipes.js";
+import { pointFactors } from "../src/data/point-factors.js";
+import { sampleProvenance } from "../src/inspection/point-provenance.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
+import { analysisParameters } from "../src/analysis/analysis-parameters.js";
 
 const close = (a, b, message) =>
   assert(Math.abs(a - b) < 1e-9, `${message}: ${a} != ${b}`);

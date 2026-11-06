@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { providerPages } from "../provider-pages.js";
-import { sharedAnalysisFor } from "../shared-analysis.js";
-import { prepareSpectrum } from "../spectrum.js";
-import { createProviderDiagnostics } from "../provider-diagnostics.js";
+import { providerPages } from "../src/data/provider-pages.js";
+import { sharedAnalysisFor } from "../src/data/shared-analysis.js";
+import { prepareSpectrum } from "../src/analysis/spectrum.js";
+import { createProviderDiagnostics } from "../src/data/provider-diagnostics.js";
 const bytes = Uint8Array.from({ length: 200000 }, (_, i) => (i * 71) & 255);
 const source = new Blob([bytes]);
 const sharedAnalysis = sharedAnalysisFor(source);

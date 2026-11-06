@@ -16,5 +16,5 @@ self.postMessage = (message) => {
 };
 const queued = [];
 self.onmessage = (event) => queued.push(event);
-await import("../render-worker.js");
+await import("../src/render/render-worker.js");
 for (const event of queued) self.onmessage(event);

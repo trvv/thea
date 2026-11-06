@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { depthOrder } from "../depth-order.js";
-import { providerPages } from "../provider-pages.js";
-import { windowEntropy } from "../entropy.js";
+import { depthOrder } from "../src/render/depth-order.js";
+import { providerPages } from "../src/data/provider-pages.js";
+import { windowEntropy } from "../src/analysis/entropy.js";
 
 const projected = new Float32Array(65536 * 4);
 let seed = 123;

@@ -44,7 +44,7 @@ a preset with zero bars selects the whole current source.
 
 ## Storage and copying
 
-`preset-library.js` owns the versioned `thea.presets` localStorage key:
+`src/presets/preset-library.js` owns the versioned `thea.presets` localStorage key:
 
 ```text
 version: 1

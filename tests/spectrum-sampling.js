@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import {
   sampleSpectrum,
   describeSpectrumSample,
-} from "../spectrum-sampling.js";
-import { spectrumComponents } from "../spectrum.js";
-import { compileRecipes } from "../recipes.js";
-import { pointFactors } from "../point-factors.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
+} from "../src/analysis/spectrum-sampling.js";
+import { spectrumComponents } from "../src/analysis/spectrum.js";
+import { compileRecipes } from "../src/recipes/recipes.js";
+import { pointFactors } from "../src/data/point-factors.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
 
 const length = 4;
 const spectrum = spectrumComponents(

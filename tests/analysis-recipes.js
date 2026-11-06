@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
-import { analysisKinds, analysisParameters } from "../analysis-parameters.js";
-import { compileRecipes, recipeLabel } from "../recipes.js";
-import { recipeMenu } from "../recipe-menu.js";
-import { emitRecipeShader } from "../recipe-shaders.js";
-import { validateProfile } from "../profiles.js";
-import { presetConfiguration } from "../point-configuration.js";
+import {
+  analysisKinds,
+  analysisParameters,
+} from "../src/analysis/analysis-parameters.js";
+import { compileRecipes, recipeLabel } from "../src/recipes/recipes.js";
+import { recipeMenu } from "../src/ui/recipe-menu.js";
+import { emitRecipeShader } from "../src/recipes/recipe-shaders.js";
+import { validateProfile } from "../src/presets/profiles.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
 
 const offset = { op: "offset" };
 for (const [family, kinds] of Object.entries(analysisKinds)) {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { paintCPU } from "../point-raster.js";
+import { paintCPU } from "../src/render/point-raster.js";
 import { RenderCanvas } from "./render-canvas.js";
 // Independent, deliberately slow four-probe reference. This locks down all optimized paths.
 function reference(prepared, projection) {

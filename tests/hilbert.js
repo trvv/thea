@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { hilbert3D } from "../hilbert.js";
+import { hilbert3D } from "../src/math/hilbert.js";
 import {
   compileRecipes,
   constant,
@@ -7,17 +7,17 @@ import {
   hilbert3DCoordinate,
   recipeLabel,
   validateRecipe,
-} from "../recipes.js";
-import { recipeMenu } from "../recipe-menu.js";
-import { pointFactors } from "../point-factors.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
+} from "../src/recipes/recipes.js";
+import { recipeMenu } from "../src/ui/recipe-menu.js";
+import { pointFactors } from "../src/data/point-factors.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
 import {
   entropyShading,
   hilbertCells,
   byteCharacter,
   executeRender,
-} from "../rendering.js";
+} from "../src/render/rendering.js";
 import { RenderCanvas } from "./render-canvas.js";
 
 // Lock the Skilling orientation at order 1 independently of CPU/shader parity.

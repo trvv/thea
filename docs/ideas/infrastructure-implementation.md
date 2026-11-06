@@ -29,16 +29,16 @@ these stage boundaries rather than create another execution model.
 
 The principal remaining constraints are concrete:
 
-- `point-factors.js` reads a whole selected window whenever byte-backed work is
+- `src/data/point-factors.js` reads a whole selected window whenever byte-backed work is
   reachable, including default entropy shading. Sampling limits prepared marks,
   not that read or the entropy result arrays.
-- `populations.js` discovers every distinct tuple and retains its first address
+- `src/data/populations.js` discovers every distinct tuple and retains its first address
   before sampling; a low sample limit does not bound distinct tuple discovery.
-- `overview.js` retains up to 64 prefix pages per bar/cache, plus page totals.
+- `src/render/overview.js` retains up to 64 prefix pages per bar/cache, plus page totals.
   Several bars and workers can duplicate the same source summaries.
-- `point-renderer.js` reports broad preparation, projection, sorting and raster
+- `src/render/point-renderer.js` reports broad preparation, projection, sorting and raster
   timings. Provider preparation and recipe evaluation are not distinguished.
-- `point-webgl.js` rebuilds an interleaved instance buffer and uploads projected
+- `src/render/point-webgl.js` rebuilds an interleaved instance buffer and uploads projected
   marks each draw. Providers, evaluation, camera projection and order stay on CPU.
 - Cancellation checks follow awaited reads. Long synchronous loops do not become
   interruptible merely because a newer request exists.
@@ -250,7 +250,7 @@ snippets can begin as ordinary functions producing recipe objects, without a DSL
 
 File import/export is an optional extension to current clipboard transfer: read
 one user-selected JSON file, validate first, resolve its name explicitly and save
-through `preset-library.js`; export a Blob download with the existing JSON shape.
+through `src/presets/preset-library.js`; export a Blob download with the existing JSON shape.
 Source bookmarks are distinct from reusable presets. If implemented, specify
 source identity and unavailable-source behavior rather than saving arbitrary
 local file paths or source contents in localStorage.

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { windowCounts } from "../histograms.js";
-import { executeRender } from "../rendering.js";
-import { occurrenceFactor } from "../appearance.js";
+import { windowCounts } from "../src/analysis/histograms.js";
+import { executeRender } from "../src/render/rendering.js";
+import { occurrenceFactor } from "../src/recipes/appearance.js";
 import { RenderCanvas } from "./render-canvas.js";
 const source = new Blob([Uint8Array.from([99, 1, 2, 1, 2, 3, 88])]),
   cache = {};

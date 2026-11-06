@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
-import { analysisParameters } from "../analysis-parameters.js";
+import { analysisParameters } from "../src/analysis/analysis-parameters.js";
 import {
   prepareOccurrence,
   countReference,
   occurrenceResult,
   describeOccurrence,
-} from "../occurrence-analysis.js";
-import { compileRecipes } from "../recipes.js";
-import { pointFactors } from "../point-factors.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
+} from "../src/analysis/occurrence-analysis.js";
+import { compileRecipes } from "../src/recipes/recipes.js";
+import { pointFactors } from "../src/data/point-factors.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
 
 const data = Uint8Array.from([
   0, 1, 2, 0, 1, 2, 0, 1, 2, 255, 255, 255, 255, 0, 0, 0,

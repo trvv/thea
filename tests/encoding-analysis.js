@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
-import { encodingCandidate, encodingResult } from "../encoding-analysis.js";
-import { executeRender } from "../rendering.js";
-import { inspectPoint } from "../point-inspection.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
+import {
+  encodingCandidate,
+  encodingResult,
+} from "../src/analysis/encoding-analysis.js";
+import { executeRender } from "../src/render/rendering.js";
+import { inspectPoint } from "../src/inspection/point-inspection.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
 import { RenderCanvas } from "./render-canvas.js";
 for (const [encoding, bytes] of [
   ["utf8", [0xf0, 0x9f, 0x98, 0x80]],

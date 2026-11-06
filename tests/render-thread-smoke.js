@@ -1,9 +1,12 @@
-import { hilbert3DCoordinate } from "../recipes.js";
-import { spaces, presetConfiguration } from "../point-configuration.js";
+import { hilbert3DCoordinate } from "../src/recipes/recipes.js";
+import {
+  spaces,
+  presetConfiguration,
+} from "../src/recipes/point-configuration.js";
 import assert from "node:assert/strict";
-import { RenderEngine } from "../render-engine.js";
-import { executeRender } from "../rendering.js";
-import { defaultAppearance } from "../appearance.js";
+import { RenderEngine } from "../src/render/render-engine.js";
+import { executeRender } from "../src/render/rendering.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
 import { RenderCanvas } from "./render-canvas.js";
 
 const job = {

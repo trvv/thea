@@ -3,16 +3,16 @@ import {
   byteDifferences,
   laggedCoordinates,
   entropyContrast,
-} from "../recipe-experiments.js";
-import { compileRecipes, recipeRoots } from "../recipes.js";
-import { pointFactors, windowEntropy } from "../point-factors.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
+} from "../src/recipes/recipe-experiments.js";
+import { compileRecipes, recipeRoots } from "../src/recipes/recipes.js";
+import { pointFactors, windowEntropy } from "../src/data/point-factors.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
 import {
   validateProfile,
   parseProfile,
   serializeProfile,
-} from "../profiles.js";
+} from "../src/presets/profiles.js";
 
 const close = (actual, expected, message) =>
   assert(

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import * as library from "../preset-library.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
-import { validateProfile } from "../profiles.js";
+import * as library from "../src/presets/preset-library.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
+import { validateProfile } from "../src/presets/profiles.js";
 const values = new Map(),
   storage = {
     getItem: (key) => values.get(key) ?? null,

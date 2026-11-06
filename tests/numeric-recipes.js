@@ -6,14 +6,14 @@ import {
   numericResult,
   interpretNumber,
   spanAvailable,
-} from "../numeric-interpretation.js";
-import { compileRecipes } from "../recipes.js";
-import { emitRecipeShader } from "../recipe-shaders.js";
-import { recipeMenu } from "../recipe-menu.js";
-import { validateProfile } from "../profiles.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
-import { pointFactors } from "../point-factors.js";
+} from "../src/analysis/numeric-interpretation.js";
+import { compileRecipes } from "../src/recipes/recipes.js";
+import { emitRecipeShader } from "../src/recipes/recipe-shaders.js";
+import { recipeMenu } from "../src/ui/recipe-menu.js";
+import { validateProfile } from "../src/presets/profiles.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
+import { pointFactors } from "../src/data/point-factors.js";
 
 const fixtures = {
   uint16: [0, 1, 255, 256, 32768, 65534, 65535],

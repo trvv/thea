@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {
   validateSourceMetadata,
   describeSourceOffset,
-} from "../source-metadata.js";
+} from "../src/data/source-metadata.js";
 const source = {
   segments: [
     {

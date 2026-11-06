@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { fourierStorage, fourierSpectrum } from "../fourier.js";
-import { prepareSpectrum } from "../spectrum.js";
-import { assertProviderBudget } from "../provider-budget.js";
+import { fourierStorage, fourierSpectrum } from "../src/analysis/fourier.js";
+import { prepareSpectrum } from "../src/analysis/spectrum.js";
+import { assertProviderBudget } from "../src/data/provider-budget.js";
 import {
   presetConfiguration,
   validateConfiguration,
-} from "../point-configuration.js";
+} from "../src/recipes/point-configuration.js";
 
 const base = presetConfiguration("dft");
 for (const invalid of [-1, 0, 0.1, NaN, Infinity, "100"])

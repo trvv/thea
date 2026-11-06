@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
-import { compileRecipes, mortonCoordinate, constant } from "../recipes.js";
-import { emitRecipeShader } from "../recipe-shaders.js";
-import { recipeMenu } from "../recipe-menu.js";
+import {
+  compileRecipes,
+  mortonCoordinate,
+  constant,
+} from "../src/recipes/recipes.js";
+import { emitRecipeShader } from "../src/recipes/recipe-shaders.js";
+import { recipeMenu } from "../src/ui/recipe-menu.js";
 
 for (const dimensions of [2, 3]) {
   for (const order of [1, 2, 3]) {

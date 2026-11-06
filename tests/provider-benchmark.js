@@ -1,7 +1,7 @@
 // Non-gating provider report. Timings are observations, never pass/fail thresholds.
-import { executeRender } from "../rendering.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
+import { executeRender } from "../src/render/rendering.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
 import { RenderCanvas } from "./render-canvas.js";
 
 let seed = 123;

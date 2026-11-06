@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { trigraphCounts } from "../histograms.js";
-import { overviewValues } from "../overview.js";
+import { trigraphCounts } from "../src/analysis/histograms.js";
+import { overviewValues } from "../src/render/overview.js";
 import { RenderCanvas } from "./render-canvas.js";
 
 const data = Uint8Array.from(

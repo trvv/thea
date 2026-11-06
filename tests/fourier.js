@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { fourierSpectrum } from "../fourier.js";
-import { spectrumComponents } from "../spectrum.js";
-import { executeRender, renderCost } from "../rendering.js";
+import { fourierSpectrum } from "../src/analysis/fourier.js";
+import { spectrumComponents } from "../src/analysis/spectrum.js";
+import { executeRender, renderCost } from "../src/render/rendering.js";
 import { RenderCanvas } from "./render-canvas.js";
 
 // Compare both FFT paths against the defining DFT sum, including prime lengths.

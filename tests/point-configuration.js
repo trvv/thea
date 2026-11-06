@@ -6,9 +6,9 @@ import {
   presetConfiguration,
   validateConfiguration,
   factorIndices,
-} from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
-import { executeRender } from "../rendering.js";
+} from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
+import { executeRender } from "../src/render/rendering.js";
 import { RenderCanvas } from "./render-canvas.js";
 const byteSource = new Blob([
   Uint8Array.from({ length: 2048 }, (_, i) => (i * 71 + (i >>> 3)) % 256),

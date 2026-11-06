@@ -75,6 +75,7 @@ for actual acceleration/browser coverage.
 
 ## Read next
 
+- [Source directories](../src/README.md): application entry points and folder responsibilities.
 - [Architecture and source map](architecture.md): ownership, element APIs,
   configuration boundaries, events, and a configuration example.
 - [Dimensions and coordinate mappings](dimensions.md): ranges, cells, Scale/Truncate,
@@ -102,6 +103,6 @@ for actual acceleration/browser coverage.
 See [pipeline contracts](pipeline.md) for populations, sampling, profiles, precision,
 and backend boundaries.
 
-For a first source pass, read `main.js`'s `DataScroll.updateLevels`, then
-`DataScrollView.render`, `render-engine.js`, and `rendering.js`'s `executeRender`.
-For recipes, follow `recipes.js` → `point-factors.js` → `point-renderer.js`.
+For a first source pass, read `src/main.js`'s `DataScroll.updateLevels`, then
+`DataScrollView.render`, `src/render/render-engine.js`, and `src/render/rendering.js`'s `executeRender`.
+For recipes, follow `src/recipes/recipes.js` → `src/data/point-factors.js` → `src/render/point-renderer.js`.

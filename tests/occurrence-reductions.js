@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
-import { analysisParameters } from "../analysis-parameters.js";
+import { analysisParameters } from "../src/analysis/analysis-parameters.js";
 import {
   prepareReduction,
   reductionResult,
   reductionValues,
-} from "../occurrence-reductions.js";
-import { windowEntropy } from "../entropy.js";
-import { compileRecipes } from "../recipes.js";
-import { pointFactors } from "../point-factors.js";
-import { sampleProvenance } from "../point-provenance.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
+} from "../src/analysis/occurrence-reductions.js";
+import { windowEntropy } from "../src/analysis/entropy.js";
+import { compileRecipes } from "../src/recipes/recipes.js";
+import { pointFactors } from "../src/data/point-factors.js";
+import { sampleProvenance } from "../src/inspection/point-provenance.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
 
 const parameters = (values) =>
   analysisParameters({ family: "reduction", ...values });

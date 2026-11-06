@@ -51,19 +51,19 @@ edits preserve the selected byte interval. Rendering errors use a bubbling, comp
 
 ## Entry point and source loading
 
-`index.html` imports `bootstrap.js`, which imports the components, mounts a
+`index.html` imports `src/bootstrap.js`, which imports the components, mounts a
 full-screen `DataScroll`, and installs the fragment loader. A new fragment aborts
 the previous fetch; a failed replacement leaves the previous Blob visible.
 
-Importing `main.js` registers components and never mounts the demo, regardless of
+Importing `src/main.js` registers components and never mounts the demo, regardless of
 DOMContentLoaded timing. The bootstrap handles both early and late imports.
-Pure recipe/rendering modules can be imported without a DOM; importing `main.js`
+Pure recipe/rendering modules can be imported without a DOM; importing `src/main.js`
 in tests still requires DOM stubs.
 
 A minimal programmatic instance is:
 
 ```js
-const { DataScroll } = await import("./main.js");
+const { DataScroll } = await import("./src/main.js");
 const response = await fetch("./examples/cat");
 if (!response.ok) throw new Error(`HTTP ${response.status}`);
 const scroll = new DataScroll(await response.blob(), 4096);
@@ -137,35 +137,49 @@ changing one channel. All channel assignments are validated before replacement;
 use setters and `setFactor`, rather than mutating returned objects in place. Public configuration, appearance,
 axis, and shader getters return owned snapshots.
 
+## Source organization
+
+Application modules live in `src/`, grouped by analysis, data preparation, recipes,
+rendering, inspection, presets, UI and shared math. See the
+[source directory map](../src/README.md) for responsibilities and the main execution path.
+`index.html` and `styles.css` stay at the repository root.
+
+The unified stylesheet is linked inside each component shadow root. Host rules
+are scoped to component tags, and light-DOM controls use named classes. Popovers
+also install the stylesheet in their containing root when embedded independently.
+Initial view/bar measurements wait for the relevant stylesheet links to settle,
+so CSS loading does not establish an incorrect initial sample layout. Runtime
+positions, selected ranges and interaction state remain inline DOM properties.
+
 ## Module map
 
-| Module                                                                | Why it exists                                                                      |
-| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `main.js`, `bootstrap.js`                                             | Reusable DOM components and separate demo loader.                                  |
-| `dimensions.js`                                                       | Per-axis ranges, natural defaults, grid cells, Scale/Truncate, and Fit.            |
-| `populations.js`, `profiles.js`                                       | Point populations/sample budgets and versioned profile JSON.                       |
-| `render-identity.js`                                                  | Shared preparation/presentation/quality setting identity.                          |
-| `histograms.js`, `spectrum.js`                                        | Incremental counts and selection-scoped spectral providers.                        |
-| `render-engine.js`, `render-worker.js`                                | Scheduling, transfer protocol, presentation order, thread-local cache lifetime.    |
-| `rendering.js`                                                        | Shared view dispatcher, structural cost estimation, and overview painting.         |
-| `overview.js`                                                         | Exact overview averaging without rereading every nested scope.                     |
-| `fourier.js`                                                          | Selection-length FFT/Bluestein spectrum.                                           |
-| `entropy.js`, `text.js`                                               | Shared entropy windows and byte glyph decoding.                                    |
-| `factor-catalog.js`, `factors.js`                                     | Stable factor-slot ABI and reachability/cost planning.                             |
-| `recipes.js`                                                          | Validation, named references, shared typed IR, CPU evaluator compilation.          |
-| `point-factors.js`                                                    | Lazy source/window providers and sampled byte-offset contexts.                     |
-| `provider-diagnostics.js`                                             | Optional provider read/timing/cache and retained-buffer accounting.                |
-| `recipe-experiments.js`                                               | Parameterized factories returning ordinary serializable analysis expressions.      |
-| `byte-interpretation.js`                                              | Strict bounded UTF-8 scalar interpretation independent of DOM/rendering.           |
-| `spaces.js`, `point-configuration.js`                                 | Shared positional channels, preset intent, mapping validation, geometry transform. |
-| `appearance.js`                                                       | Default channel mappings, HSL conversion, and exact conditional color tables.      |
-| `point-inspection.js`, `point-provenance.js`, `inspection-content.js` | On-demand picking, source/recipe descriptions, and plain DOM popup content.        |
-| `point-renderer.js`                                                   | Shared recipe preparation with separate geometry and appearance invalidation.      |
-| `point-projection.js`                                                 | Camera projection and cached depth ordering.                                       |
-| `point-raster.js`, `point-webgl.js`                                   | Shared CPU coverage and optional WebGL rasterization.                              |
-| `recipe-menu.js`                                                      | DOM-independent descriptors for expression edits.                                  |
-| `recipe-shaders.js`                                                   | GLSL/WGSL function-library generation from validated IR.                           |
-| `adaptive-resolution.js`                                              | Measured interaction-quality feedback independent of source selection.             |
+| Module                                                                                                             | Why it exists                                                                      |
+| ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| `src/main.js`, `src/bootstrap.js`                                                                                  | Reusable DOM components and separate demo loader.                                  |
+| `src/recipes/dimensions.js`                                                                                        | Per-axis ranges, natural defaults, grid cells, Scale/Truncate, and Fit.            |
+| `src/data/populations.js`, `src/presets/profiles.js`                                                               | Point populations/sample budgets and versioned profile JSON.                       |
+| `src/render/render-identity.js`                                                                                    | Shared preparation/presentation/quality setting identity.                          |
+| `src/analysis/histograms.js`, `src/analysis/spectrum.js`                                                           | Incremental counts and selection-scoped spectral providers.                        |
+| `src/render/render-engine.js`, `src/render/render-worker.js`                                                       | Scheduling, transfer protocol, presentation order, thread-local cache lifetime.    |
+| `src/render/rendering.js`                                                                                          | Shared view dispatcher, structural cost estimation, and overview painting.         |
+| `src/render/overview.js`                                                                                           | Exact overview averaging without rereading every nested scope.                     |
+| `src/analysis/fourier.js`                                                                                          | Selection-length FFT/Bluestein spectrum.                                           |
+| `src/analysis/entropy.js`, `src/ui/text.js`                                                                        | Shared entropy windows and byte glyph decoding.                                    |
+| `src/recipes/factor-catalog.js`, `src/recipes/factors.js`                                                          | Stable factor-slot ABI and reachability/cost planning.                             |
+| `src/recipes/recipes.js`                                                                                           | Validation, named references, shared typed IR, CPU evaluator compilation.          |
+| `src/data/point-factors.js`                                                                                        | Lazy source/window providers and sampled byte-offset contexts.                     |
+| `src/data/provider-diagnostics.js`                                                                                 | Optional provider read/timing/cache and retained-buffer accounting.                |
+| `src/recipes/recipe-experiments.js`                                                                                | Parameterized factories returning ordinary serializable analysis expressions.      |
+| `src/analysis/byte-interpretation.js`                                                                              | Strict bounded UTF-8 scalar interpretation independent of DOM/rendering.           |
+| `src/recipes/spaces.js`, `src/recipes/point-configuration.js`                                                      | Shared positional channels, preset intent, mapping validation, geometry transform. |
+| `src/recipes/appearance.js`                                                                                        | Default channel mappings, HSL conversion, and exact conditional color tables.      |
+| `src/inspection/point-inspection.js`, `src/inspection/point-provenance.js`, `src/inspection/inspection-content.js` | On-demand picking, source/recipe descriptions, and plain DOM popup content.        |
+| `src/render/point-renderer.js`                                                                                     | Shared recipe preparation with separate geometry and appearance invalidation.      |
+| `src/render/point-projection.js`                                                                                   | Camera projection and cached depth ordering.                                       |
+| `src/render/point-raster.js`, `src/render/point-webgl.js`                                                          | Shared CPU coverage and optional WebGL rasterization.                              |
+| `src/ui/recipe-menu.js`                                                                                            | DOM-independent descriptors for expression edits.                                  |
+| `src/recipes/recipe-shaders.js`                                                                                    | GLSL/WGSL function-library generation from validated IR.                           |
+| `src/render/adaptive-resolution.js`                                                                                | Measured interaction-quality feedback independent of source selection.             |
 
 The names `region`, `shaders`, and `coordinateSystem` in jobs are historical.
 `shaders` is also the compatibility array for entropy/brightness/text flags; it

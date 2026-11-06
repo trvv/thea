@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { populationOffsets } from "../populations.js";
-import { createProviderDiagnostics } from "../provider-diagnostics.js";
+import { populationOffsets } from "../src/data/populations.js";
+import { createProviderDiagnostics } from "../src/data/provider-diagnostics.js";
 let seed = 91;
 for (const repeated of [false, true]) {
   const data = Uint8Array.from({ length: 200000 }, (_, i) => {

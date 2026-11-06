@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
-import { executeRender, renderCost } from "../rendering.js";
-import { RenderEngine } from "../render-engine.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
+import { executeRender, renderCost } from "../src/render/rendering.js";
+import { RenderEngine } from "../src/render/render-engine.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
 import {
   createProviderDiagnostics,
   retainedProviderStorage,
   retainedRenderStorage,
-} from "../provider-diagnostics.js";
-import { windowCounts } from "../histograms.js";
+} from "../src/data/provider-diagnostics.js";
+import { windowCounts } from "../src/analysis/histograms.js";
 import { RenderCanvas } from "./render-canvas.js";
 
 const bytes = Uint8Array.from({ length: 256 }, (_, i) => (i * 17) % 251);

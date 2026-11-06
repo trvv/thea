@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { prepareRepetition } from "../repetition.js";
-import { analysisParameters } from "../analysis-parameters.js";
-import { compileRecipes } from "../recipes.js";
-import { pointFactors } from "../point-factors.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
+import { prepareRepetition } from "../src/analysis/repetition.js";
+import { analysisParameters } from "../src/analysis/analysis-parameters.js";
+import { compileRecipes } from "../src/recipes/recipes.js";
+import { pointFactors } from "../src/data/point-factors.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
 
 const direct = (bytes, index, parameters) => {
   let previous = -1;

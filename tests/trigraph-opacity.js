@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
-import { executeRender } from "../rendering.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance, occurrenceFactor } from "../appearance.js";
-import { constant } from "../recipes.js";
+import { executeRender } from "../src/render/rendering.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import {
+  defaultAppearance,
+  occurrenceFactor,
+} from "../src/recipes/appearance.js";
+import { constant } from "../src/recipes/recipes.js";
 import { RenderCanvas } from "./render-canvas.js";
 const configuration = {
   ...presetConfiguration("linear"),

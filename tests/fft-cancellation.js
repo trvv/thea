@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
-import { fourierSpectrum, fourierSpectrumAsync } from "../fourier.js";
-import { prepareSpectrum } from "../spectrum.js";
+import {
+  fourierSpectrum,
+  fourierSpectrumAsync,
+} from "../src/analysis/fourier.js";
+import { prepareSpectrum } from "../src/analysis/spectrum.js";
 for (const length of [0, 1, 7, 1024, 32768, 32771]) {
   const bytes = Uint8Array.from({ length }, (_, i) => (i * 71) & 255);
   assert.deepEqual(await fourierSpectrumAsync(bytes), fourierSpectrum(bytes));

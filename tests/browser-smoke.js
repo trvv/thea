@@ -120,14 +120,14 @@ try {
     await Bun.sleep(25);
   const result = await evaluate(`(async()=>{
   const assert=(value,message)=>{if(!value)throw Error(message);};
-  const {DataScroll}=await import('/main.js');
+  const {DataScroll}=await import('/src/main.js');
   assert(document.querySelectorAll('data-scroll').length===0,'Component import mounted the demo');
   const source=await(await fetch('/fixture.bin')).blob();
-  const {executeRender}=await import('/rendering.js');
-  const {presetConfiguration}=await import('/point-configuration.js');
-  const {defaultAppearance}=await import('/appearance.js');
-  const {hilbert3DCoordinate}=await import('/recipes.js');
-  const {recipeMenu}=await import('/recipe-menu.js');
+  const {executeRender}=await import('/src/render/rendering.js');
+  const {presetConfiguration}=await import('/src/recipes/point-configuration.js');
+  const {defaultAppearance}=await import('/src/recipes/appearance.js');
+  const {hilbert3DCoordinate}=await import('/src/recipes/recipes.js');
+  const {recipeMenu}=await import('/src/ui/recipe-menu.js');
   const gpuCache={};
   const cpu=document.createElement('canvas'),gpu=document.createElement('canvas');
   const spec={kind:'view',source,offset:0,length:128,region:'linear',columns:96,rows:72,width:96,height:72,
@@ -196,7 +196,7 @@ try {
   await new Promise(resolve=>setTimeout(resolve,50));
   await executeRender(gpu,{...spec,configuration:{...spec.configuration,backend:'webgl'}},gpuCache);
   assert(gpuCache.pointBackend==='cpu','Context loss did not fall back');
-  const {RenderEngine}=await import('/render-engine.js');
+  const {RenderEngine}=await import('/src/render/render-engine.js');
   const sharedSource=new Blob([Uint8Array.from({length:262144},(_,i)=>(i*71)&255)]);
   const sharedJob={...spec,source:sharedSource,length:131072,diagnostics:true,sampleLayout:{columns:256,rows:256},
    configuration:{...spec.configuration,position:['phase','value','byte2'],sampling:'representative'},
@@ -232,7 +232,11 @@ try {
   }
   const scroll=new DataScroll(source,4096);document.body.append(scroll);
   const view=scroll.view;
+  const {pendingStyles}=await import('/src/ui/styles.js');
+  await pendingStyles(view);
   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  assert(getComputedStyle(scroll).position==='fixed','Host stylesheet did not load');
+  assert(getComputedStyle(view.canvas).imageRendering==='pixelated','Canvas stylesheet did not load inside the shadow root');
   view.renderer.budget=0;
   view.applyPreset('trigraph');
   const before=view.pointConfiguration.population;
@@ -318,7 +322,7 @@ try {
   assert(repeated.view.dimensionRanges.width.end===1,'Resolved range feedback used selected-byte count instead of actual tuple count');
   repeated.remove();
   // Actual click popups must work in both execution threads and describe the displayed source.
-  const {hitPoint}=await import('/point-inspection.js');
+  const {hitPoint}=await import('/src/inspection/point-inspection.js');
   for(const backend of ['local','worker']) {
    const inspectScroll=new DataScroll(new Blob([Uint8Array.from({length:16},(_,i)=>i*11)]),16);
    inspectScroll.barCount=0;
@@ -352,7 +356,7 @@ try {
    assert(popup.textContent.includes('0 (0x00, ASCII NUL)'),'Byte inspection lacks hex/control representation');
    const origin=popup.querySelector('details');origin.open=true;
    assert(getComputedStyle(origin.querySelector('th')).textAlign==='left','Inspection field names are not left aligned');
-   const {inspectionContent}=await import('/inspection-content.js');
+   const {inspectionContent}=await import('/src/inspection/inspection-content.js');
    const representations=inspectionContent({point:{population:'bytes',index:0,sourceOffset:0,byteValue:65,tuple:[10,32,127,255]},traits:[],nodes:[],rendering:{}});
    assert(representations.textContent.includes('65 (0x41, ASCII "A")')&&representations.textContent.includes('0x0A, ASCII LF')
     &&representations.textContent.includes('0x20, ASCII " "')&&representations.textContent.includes('0x7F, ASCII DEL')
@@ -375,13 +379,15 @@ try {
   return {sourceBytes:source.size,population:before,...(computeBenchmarks.length?{computeBenchmarks}:{})};
  })()`);
   await evaluate(`(async()=>{
-    const {DataScroll}=await import('/main.js');
-    const {packedPixels}=await import('/packed-pixels.js');
-    const {byteFrequencyTable}=await import('/byte-frequency.js');
-    const {executeRender}=await import('/rendering.js');
+    const {DataScroll}=await import('/src/main.js');
+    const {packedPixels}=await import('/src/presets/packed-pixels.js');
+    const {byteFrequencyTable}=await import('/src/presets/byte-frequency.js');
+    const {executeRender}=await import('/src/render/rendering.js');
     const assert=(condition,message)=>{if(!condition)throw Error(message)};
     const host=new DataScroll(new Blob([Uint8Array.from([255,0,0,255,0,255,0,255,0,0,255,255,255,255,255,255])]),16);
     host.barCount=0;document.body.append(host);
+    const {pendingStyles}=await import('/src/ui/styles.js');
+    await pendingStyles(host.view);
     await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
     for(const [label,operation] of [['H-Curve','hcurve'],['Morton','morton'],['Morton 3D','morton']]){
       const load=host.contextItems().find(item=>item.label==='Preset').items.find(item=>item.label==='Load');
@@ -422,7 +428,7 @@ try {
     assert(left.width>0&&right.width>0&&right.left>=left.right-1,'Comparison panes overlap');
     host.source=new Blob([new Uint8Array(512).fill(65)]);await Promise.all([host.view.render(),comparison.render()]);
     assert(comparison.source===host.view.source&&comparison.length===host.view.length,'Comparison replacement source mismatch');
-    const refs=await import('/reference-models.js'),previousPrompt=window.prompt;
+    const refs=await import('/src/analysis/reference-models.js'),previousPrompt=window.prompt;
     try{
       window.prompt=()=> 'Browser Reference';
       await host.referenceItems()[0].items[0].action();
@@ -437,7 +443,7 @@ try {
   })()`);
   // Real pointer input verifies that capture/preventDefault still allows stationary 3D clicks.
   const pointLocation = await evaluate(`(async()=>{
-  const {DataScroll}=await import('/main.js'),{executeRender}=await import('/rendering.js'),{hitPoint}=await import('/point-inspection.js');
+  const {DataScroll}=await import('/src/main.js'),{executeRender}=await import('/src/render/rendering.js'),{hitPoint}=await import('/src/inspection/point-inspection.js');
   const fixture=window.inspectionFixture=new DataScroll(new Blob([Uint8Array.from({length:64},(_,i)=>i*3)]),64);
   fixture.barCount=0;fixture.view.applyPreset('hilbert3d');fixture.view.renderer.budget=0;document.body.append(fixture);
   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));await fixture.view.render();
@@ -515,8 +521,8 @@ try {
   );
   const persisted = await evaluate(`(async()=>{
     const assert=(value,message)=>{if(!value)throw Error(message);};
-    const {DataScroll}=await import('/main.js');
-    const {storageKey,readLibrary}=await import('/preset-library.js');
+    const {DataScroll}=await import('/src/main.js');
+    const {storageKey,readLibrary}=await import('/src/presets/preset-library.js');
     localStorage.removeItem(storageKey);
     const host=new DataScroll(new Blob([Uint8Array.from({length:256},(_,i)=>i%251)]),64);
     host.barCount=3;host.view.applyPreset('hilbert3d');

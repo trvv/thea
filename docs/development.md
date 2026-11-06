@@ -115,12 +115,12 @@ never reappear. Canvas-double tests are a useful complement, not a substitute.
 ### Add an expression operation
 
 1. Define its type, inputs, range/units, and behavior at empty/out-of-range data.
-2. Add validation, interning parameters, and CPU instructions in `recipes.js`.
+2. Add validation, interning parameters, and CPU instructions in `src/recipes/recipes.js`.
 3. If it needs selected-window data, declare that provider dependency explicitly;
-   prepare/cache it in `point-factors.js`. Do not put an FFT or histogram build
+   prepare/cache it in `src/data/point-factors.js`. Do not put an FFT or histogram build
    inside a per-point instruction.
-4. Emit equivalent GLSL/WGSL in `recipe-shaders.js`, with any provider descriptors.
-5. Add menu descriptors in `recipe-menu.js` and document the expression format.
+4. Emit equivalent GLSL/WGSL in `src/recipes/recipe-shaders.js`, with any provider descriptors.
+5. Add menu descriptors in `src/ui/recipe-menu.js` and document the expression format.
 6. Test numerical results, type/cycle rejection, identical-expression sharing,
    unused-provider laziness, structured cloning, and local/worker parity. Extend
    shader execution fixtures when the operation can be exercised there.
@@ -133,10 +133,10 @@ shader source inputs together. All configurations use the same factor layout.
 ### Add a space or change projection
 
 Update space channels, validation/geometry, menu labels, and 2D/3D interaction
-classification. `spaces.js` supplies channel counts to recipes, controls, and
-geometry; add the corresponding transform in `point-configuration.js`. Preserve axis
+classification. `src/recipes/spaces.js` supplies channel counts to recipes, controls, and
+geometry; add the corresponding transform in `src/recipes/point-configuration.js`. Preserve axis
 conventions, angular seams, normalized bounds, and continuous perspective size.
-Update `point-projection.js` and the projection/raster invalidation tests when
+Update `src/render/point-projection.js` and the projection/raster invalidation tests when
 changing camera or footprint behavior.
 
 ### Add a setting

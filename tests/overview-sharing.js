@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { overviewValues, overviewSummaryStats } from "../overview.js";
+import {
+  overviewValues,
+  overviewSummaryStats,
+} from "../src/render/overview.js";
 
 const PAGE_SIZE = 65536;
 const data = Uint8Array.from(

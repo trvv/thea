@@ -1,15 +1,26 @@
-import { fourierSpectrum, fourierSpectrumAsync } from "../fourier.js";
+import {
+  fourierSpectrum,
+  fourierSpectrumAsync,
+} from "../src/analysis/fourier.js";
 // Non-gating before/after tuple measurements. Optional checkout path supplies the reference.
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { populationOffsets } from "../populations.js";
-import { createProviderDiagnostics } from "../provider-diagnostics.js";
-const reference = process.argv[2]
-  ? (
-      await import(
-        new URL("populations.js", pathToFileURL(resolve(process.argv[2]) + "/"))
-      )
-    ).populationOffsets
+import { populationOffsets } from "../src/data/populations.js";
+import { createProviderDiagnostics } from "../src/data/provider-diagnostics.js";
+const referenceRoot = process.argv[2]
+  ? pathToFileURL(resolve(process.argv[2]) + "/")
+  : null;
+async function referenceModule(path, legacy) {
+  const current = new URL(path, referenceRoot);
+  return import(
+    (await Bun.file(current).exists())
+      ? current.href
+      : new URL(legacy, referenceRoot).href
+  );
+}
+const reference = referenceRoot
+  ? (await referenceModule("src/data/populations.js", "populations.js"))
+      .populationOffsets
   : null;
 let seed = 123;
 const random = Uint8Array.from({ length: 1048576 }, () => {
@@ -63,12 +74,9 @@ for (const repeated of [false, true]) {
 }
 
 // Include cooperative scheduling overhead rather than timing only synchronous FFT kernels.
-const referenceFFT = process.argv[2]
-  ? (
-      await import(
-        new URL("fourier.js", pathToFileURL(resolve(process.argv[2]) + "/"))
-      )
-    ).fourierSpectrum
+const referenceFFT = referenceRoot
+  ? (await referenceModule("src/analysis/fourier.js", "fourier.js"))
+      .fourierSpectrum
   : null;
 for (const length of [4096, 65536, 65537, 1048576]) {
   const samples = Uint8Array.from({ length }, (_, index) => index & 255);

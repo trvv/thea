@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
-import { hCurve } from "../hcurve.js";
-import { hCurveCoordinate, compileRecipes, constant } from "../recipes.js";
-import { curveTemplate } from "../curve-templates.js";
-import { recipeMenu } from "../recipe-menu.js";
-import { emitRecipeShader } from "../recipe-shaders.js";
-import { executeRender } from "../rendering.js";
-import { inspectPoint } from "../point-inspection.js";
+import { hCurve } from "../src/math/hcurve.js";
+import {
+  hCurveCoordinate,
+  compileRecipes,
+  constant,
+} from "../src/recipes/recipes.js";
+import { curveTemplate } from "../src/presets/curve-templates.js";
+import { recipeMenu } from "../src/ui/recipe-menu.js";
+import { emitRecipeShader } from "../src/recipes/recipe-shaders.js";
+import { executeRender } from "../src/render/rendering.js";
+import { inspectPoint } from "../src/inspection/point-inspection.js";
 import { RenderCanvas } from "./render-canvas.js";
 
 const point = new Float64Array(2);

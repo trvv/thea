@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { utf8GraphemeAt, inspectUTF8Grapheme } from "../grapheme-inspection.js";
+import {
+  utf8GraphemeAt,
+  inspectUTF8Grapheme,
+} from "../src/analysis/grapheme-inspection.js";
 
 const encoder = new TextEncoder();
 for (const [text, start, end, codePoints] of [

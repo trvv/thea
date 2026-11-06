@@ -4,11 +4,23 @@ import { pathToFileURL } from "node:url";
 const root = process.argv[2]
   ? pathToFileURL(resolve(process.argv[2]) + "/")
   : new URL("../", import.meta.url);
-const { executeRender } = await import(new URL("rendering.js", root));
-const { presetConfiguration } = await import(
-  new URL("point-configuration.js", root)
+// Resolve both this source layout and historical flat checkouts.
+async function sourceURL(path, legacy) {
+  const current = new URL(path, root);
+  return (await Bun.file(current).exists()) ? current : new URL(legacy, root);
+}
+const { executeRender } = await import(
+  await sourceURL("src/render/rendering.js", "rendering.js")
 );
-const { defaultAppearance } = await import(new URL("appearance.js", root));
+const { presetConfiguration } = await import(
+  await sourceURL(
+    "src/recipes/point-configuration.js",
+    "point-configuration.js",
+  )
+);
+const { defaultAppearance } = await import(
+  await sourceURL("src/recipes/appearance.js", "appearance.js")
+);
 const { RenderCanvas } = await import(new URL("tests/render-canvas.js", root));
 let seed = 123;
 const bytes = Uint8Array.from({ length: 2 ** 19 }, () => {

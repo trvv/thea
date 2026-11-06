@@ -82,7 +82,7 @@ globalThis.CustomEvent = class {
     Object.assign(this, options);
   }
 };
-const { DataScroll } = await import("../main.js");
+const { DataScroll } = await import("../src/main.js");
 const source = new Blob([
   Uint8Array.from({ length: 40000 }, (_, i) => i % 251),
 ]);
@@ -811,7 +811,8 @@ const storageAlerts = [];
 globalThis.prompt = () => prompts.shift() ?? null;
 globalThis.alert = (message) => storageAlerts.push(message);
 try {
-  const { storageKey, readLibrary } = await import("../preset-library.js");
+  const { storageKey, readLibrary } =
+    await import("../src/presets/preset-library.js");
   const persistent = new DataScroll(source, 101);
   persistent.view.isConnected = true;
   persistent.barCount = 3;
@@ -1022,7 +1023,7 @@ if (
   throw Error("Comparison seek drifted");
 editor.activeView = comparison;
 editor.applyTemplate(
-  (await import("../byte-frequency.js")).byteFrequencyTable(),
+  (await import("../src/presets/byte-frequency.js")).byteFrequencyTable(),
 );
 if (
   comparison.pointConfiguration.population !== "symbols" ||

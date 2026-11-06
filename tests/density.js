@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
-import { paintDensity, inspectDensity, validateDensity } from "../density.js";
-import { executeRender } from "../rendering.js";
-import { inspectPoint } from "../point-inspection.js";
-import { RenderEngine } from "../render-engine.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance, validateAppearance } from "../appearance.js";
+import {
+  paintDensity,
+  inspectDensity,
+  validateDensity,
+} from "../src/render/density.js";
+import { executeRender } from "../src/render/rendering.js";
+import { inspectPoint } from "../src/inspection/point-inspection.js";
+import { RenderEngine } from "../src/render/render-engine.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import {
+  defaultAppearance,
+  validateAppearance,
+} from "../src/recipes/appearance.js";
 import { RenderCanvas } from "./render-canvas.js";
 
 const prepared = {

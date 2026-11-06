@@ -110,7 +110,7 @@ depth-tested quads cannot be assumed equivalent to the current blend order.
   [measurement contracts and results](../performance.md#provider-diagnostics).
   Engine lifecycle counters, enqueue latency and transient peak memory remain
   later instrumentation increments; no claim of complete memory accounting.
-- **Step 2 delivered:** `recipe-experiments.js` factories for byte differences,
+- **Step 2 delivered:** `src/recipes/recipe-experiments.js` factories for byte differences,
   delayed coordinates and bit-scaled entropy contrast. See
   [API examples](../recipe-experiments.md). These are importable recipe factories;
   no additional menu presets or parameterized-editor UI were added.

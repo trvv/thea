@@ -88,7 +88,7 @@ render scheduling/calibration or present a bitmap.
 
 Each engine permits one active worker inspection and one replaceable pending
 inspection. Worker inspection messages are serialized with renders. Only the clicked point's
-description crosses the thread boundary. `point-inspection.js` reuses the displayed
+description crosses the thread boundary. `src/inspection/point-inspection.js` reuses the displayed
 frame's prepared/projected data when available; an older snapshot can rebuild its
 preparation/projection without rasterizing or replacing the visible canvas.
 Inspection borrows immutable byte/entropy/spectrum buffers, while mutable

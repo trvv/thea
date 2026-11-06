@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
-import { inspectPoint } from "../point-inspection.js";
-import { RenderEngine } from "../render-engine.js";
-import { executeRender, entropyShading, hilbertCells } from "../rendering.js";
+import { inspectPoint } from "../src/inspection/point-inspection.js";
+import { RenderEngine } from "../src/render/render-engine.js";
+import {
+  executeRender,
+  entropyShading,
+  hilbertCells,
+} from "../src/render/rendering.js";
 import { RenderCanvas, cellColor } from "./render-canvas.js";
 
 class TestWorker {

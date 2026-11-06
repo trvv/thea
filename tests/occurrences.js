@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
-import { findOccurrences, inspectByteContext } from "../occurrences.js";
-import { scanChunkSize } from "../scan.js";
+import {
+  findOccurrences,
+  inspectByteContext,
+} from "../src/analysis/occurrences.js";
+import { scanChunkSize } from "../src/data/scan.js";
 
 const data = Uint8Array.from([9, 1, 2, 1, 2, 1, 2, 8, 1, 2, 1]);
 const source = new Blob([data]);

@@ -2,7 +2,7 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
-import { factorCount, factorIndices } from "../factor-catalog.js";
+import { factorCount, factorIndices } from "../src/recipes/factor-catalog.js";
 import {
   compileRecipes,
   constant,
@@ -10,11 +10,11 @@ import {
   hilbert3DCoordinate,
   mortonCoordinate,
   hCurveCoordinate,
-} from "../recipes.js";
-import { emitRecipeShader } from "../recipe-shaders.js";
-import { numericResult } from "../numeric-interpretation.js";
-import { sampleSpectrum } from "../spectrum-sampling.js";
-import { spectrumComponents } from "../spectrum.js";
+} from "../src/recipes/recipes.js";
+import { emitRecipeShader } from "../src/recipes/recipe-shaders.js";
+import { numericResult } from "../src/analysis/numeric-interpretation.js";
+import { sampleSpectrum } from "../src/analysis/spectrum-sampling.js";
+import { spectrumComponents } from "../src/analysis/spectrum.js";
 const fixtures = [];
 const cases = {
   exactHilbert2D: {

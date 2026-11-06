@@ -131,7 +131,7 @@ globalThis.document = {
 globalThis.customElements = { define() {} };
 globalThis.innerWidth = 800;
 globalThis.innerHeight = 600;
-const { ContextMenu } = await import("../main.js");
+const { ContextMenu } = await import("../src/main.js");
 const root = new ContextMenu();
 root.isConnected = true;
 root.connectedCallback();

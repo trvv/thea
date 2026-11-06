@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { packedPixels } from "../packed-pixels.js";
-import { executeRender } from "../rendering.js";
-import { inspectPoint } from "../point-inspection.js";
-import { validateProfile } from "../profiles.js";
+import { packedPixels } from "../src/presets/packed-pixels.js";
+import { executeRender } from "../src/render/rendering.js";
+import { inspectPoint } from "../src/inspection/point-inspection.js";
+import { validateProfile } from "../src/presets/profiles.js";
 import { RenderCanvas } from "./render-canvas.js";
 
 async function render(bytes, parameters) {

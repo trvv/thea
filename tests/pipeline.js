@@ -4,18 +4,18 @@ import {
   entropyShading,
   hilbertCells,
   byteCharacter,
-} from "../rendering.js";
-import { pointFactors } from "../point-factors.js";
-import { windowCounts } from "../histograms.js";
-import { overviewValues } from "../overview.js";
-import { compileRecipes, constant } from "../recipes.js";
+} from "../src/render/rendering.js";
+import { pointFactors } from "../src/data/point-factors.js";
+import { windowCounts } from "../src/analysis/histograms.js";
+import { overviewValues } from "../src/render/overview.js";
+import { compileRecipes, constant } from "../src/recipes/recipes.js";
 import {
   presetConfiguration,
   validateConfiguration,
-} from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
-import { factorIndices as slots } from "../factors.js";
-import { limitedSampleLayout } from "../populations.js";
+} from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
+import { factorIndices as slots } from "../src/recipes/factors.js";
+import { limitedSampleLayout } from "../src/data/populations.js";
 import { RenderCanvas } from "./render-canvas.js";
 
 let reads = 0;

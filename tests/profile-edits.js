@@ -4,10 +4,10 @@ import {
   deleteFactor,
   rememberEdit,
   restoreEdit,
-} from "../profile-edits.js";
-import { validateProfile } from "../profiles.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
+} from "../src/presets/profile-edits.js";
+import { validateProfile } from "../src/presets/profiles.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
 
 const recipes = {
   Value: "value",

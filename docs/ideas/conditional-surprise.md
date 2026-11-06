@@ -92,7 +92,7 @@ must remain within the exact integer range.
 Build once per source/scope/model revision; all points and channels using that
 model share it. Camera and appearance changes should reuse it. Sliding scopes
 can update entering/leaving valid pair starts using the same staged-cancellation
-principle as [histograms](../../histograms.js). A separate model per point would
+principle as [histograms](../../src/analysis/histograms.js). A separate model per point would
 be far more expensive and should not be an implicit upgrade.
 
 ## Inspection and first increment

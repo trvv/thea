@@ -3,13 +3,13 @@ import {
   numericParameters,
   numericResult,
   interpretNumber,
-} from "../numeric-interpretation.js";
-import { compileRecipes } from "../recipes.js";
-import { emitRecipeShader } from "../recipe-shaders.js";
-import { recipeMenu } from "../recipe-menu.js";
-import { pointFactors } from "../point-factors.js";
-import { presetConfiguration } from "../point-configuration.js";
-import { defaultAppearance } from "../appearance.js";
+} from "../src/analysis/numeric-interpretation.js";
+import { compileRecipes } from "../src/recipes/recipes.js";
+import { emitRecipeShader } from "../src/recipes/recipe-shaders.js";
+import { recipeMenu } from "../src/ui/recipe-menu.js";
+import { pointFactors } from "../src/data/point-factors.js";
+import { presetConfiguration } from "../src/recipes/point-configuration.js";
+import { defaultAppearance } from "../src/recipes/appearance.js";
 
 for (const [format, getter, values] of [
   [

@@ -72,7 +72,7 @@ view.importProfile(localStorage.getItem("thea-profile"));
 
 The Preset menu provides a named localStorage library, JSON copying/import, and
 restoration of the last selected preset. Saved snapshots also include bar count.
-See [saved presets](presets.md). `profiles.js` separately exports `serializeProfile`
+See [saved presets](presets.md). `src/presets/profiles.js` separately exports `serializeProfile`
 and `parseProfile` for host-managed raw view profiles. Version 3 includes dimension ranges/flags, population, sample
 policy, geometry, appearance, definitions, text/compatibility settings, camera, and backend. Source
 URLs and selected ranges are session state and excluded. Imports validate before
@@ -83,10 +83,10 @@ raster differences documented in [dimensions](dimensions.md#hilbert-and-profiles
 
 ## Execution boundaries
 
-`histograms.js` provides incremental counts for all configurations.
-`spectrum.js` shares selection-scoped coefficients and lazy phase/amplitude arrays.
+`src/analysis/histograms.js` provides incremental counts for all configurations.
+`src/analysis/spectrum.js` shares selection-scoped coefficients and lazy phase/amplitude arrays.
 Cancellation is checked after awaited reads and before histogram mutation.
-`render-identity.js` centralizes setting identity; camera/raster changes retain
+`src/render/render-identity.js` centralizes setting identity; camera/raster changes retain
 prepared points, while population/sample/provider changes invalidate them.
 
 CPU recipe indices preserve safe-integer addressing. Visual arithmetic retains

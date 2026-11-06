@@ -68,7 +68,7 @@ constructors are not implemented.
 ### Three-dimensional Hilbert coordinates
 
 ```js
-import { hilbert3DCoordinate } from "./recipes.js";
+import { hilbert3DCoordinate } from "./src/recipes/recipes.js";
 view.pointConfiguration = {
   ...view.pointConfiguration,
   space: "cube",
@@ -108,7 +108,7 @@ providers. Existing explicit 2D Hilbert expressions retain their conventions. Th
 
 ## Built-in sources
 
-The public choices come from `factor-catalog.js` and feed the same pool for all
+The public choices come from `src/recipes/factor-catalog.js` and feed the same pool for all
 position and appearance channels:
 
 | Source                                  | Normalized meaning                                                                                                                    |

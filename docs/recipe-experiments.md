@@ -1,6 +1,6 @@
 # Reusable recipe experiments
 
-`recipe-experiments.js` exports three factories that return ordinary serializable
+`src/recipes/recipe-experiments.js` exports three factories that return ordinary serializable
 expression data. They add no population, provider family, preset painter or menu
 entry. Their outputs compile, inspect and save through the existing recipe/profile
 pipeline. The analysis proposals remain in [ideas](ideas/README.md); the factories
@@ -9,7 +9,7 @@ below are implemented.
 ## Byte differences
 
 ```js
-import { byteDifferences } from "./recipe-experiments.js";
+import { byteDifferences } from "./src/recipes/recipe-experiments.js";
 
 const { signed, magnitude, valid } = byteDifferences({ lag: 16 });
 const appearance = view.effectiveAppearance;
@@ -44,7 +44,7 @@ silently discarded; hue and lightness are deliberately replaced.
 ## Lagged coordinates
 
 ```js
-import { laggedCoordinates } from "./recipe-experiments.js";
+import { laggedCoordinates } from "./src/recipes/recipe-experiments.js";
 
 const { position, valid } = laggedCoordinates({ lag: 16, dimensions: 3 });
 view.pointConfiguration = {
@@ -85,7 +85,7 @@ intrinsic DFT coefficients. Sample limits do not renumber source addresses.
 ## Entropy contrast in bits
 
 ```js
-import { entropyContrast } from "./recipe-experiments.js";
+import { entropyContrast } from "./src/recipes/recipe-experiments.js";
 
 const { small, large, contrast, magnitude } = entropyContrast({
   smallWindow: 32,
