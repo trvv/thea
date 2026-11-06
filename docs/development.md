@@ -29,7 +29,7 @@ Tests are executable Bun scripts using assertions, not a `bun test` discovery
 suite. Run from the repository root:
 
 ```sh
-for test in recipes recipe-shaders hilbert dimensions pipeline point-factors point-configuration appearance \
+for test in recipes bit-recipes recipe-experiments recipe-shaders byte-interpretation provider-diagnostics hilbert dimensions pipeline point-factors point-configuration appearance \
   data-scroll context-menu render-engine render-thread-smoke render-pipeline rasterization point-inspection preset-library trigraph \
   trigraph-opacity coordinates adaptive-resolution scroll-performance digraph fourier
 do
@@ -49,6 +49,7 @@ fixtures. `tests/scroll-benchmark.js` is a separate, non-gating CPU benchmark:
 
 ```sh
 bun tests/scroll-benchmark.js
+bun tests/provider-benchmark.js
 ```
 
 The real-browser integration suite needs Chromium (no npm dependency). It serves
@@ -79,6 +80,9 @@ permission to launch processes and bind a local port in restricted environments.
 | `dimensions`                         | Ranges/cell counts, Scale/Truncate, independent Fit, Cartesian/radial domains, coordinate presets, and profile migration.                                 |
 | `hilbert`                            | True 3D Hilbert orientation, exhaustive small-cube uniqueness/adjacency, exact large indices, vec3 sharing, menu deduplication, and population semantics. |
 | `recipes`                            | Typed DAGs, sharing, named references, cycle/type limits, menu edits, configurable entropy, serialization, shader emission.                               |
+| `bit-recipes`, `recipe-experiments`  | Exhaustive byte/pair bit semantics, menu parameters, profile round trips, difference/lag validity and entropy contrasts.                                  |
+| `byte-interpretation`                | Strict UTF-8 scalar decoding, all byte positions, clipped bounded reads, fatal-decoder reference and canceled replies.                                    |
+| `provider-diagnostics`               | Opt-in pixel parity, exact reads, cold/warm provider reuse, backing-buffer deduplication and real worker metrics.                                         |
 | `recipe-shaders`                     | Representative generated GLSL compiled, linked, executed, and compared against CPU results; WGSL structural generation checks.                            |
 | `appearance`, `scroll-performance`   | Color parity, source/cache reuse and bounded overview storage.                                                                                            |
 | `preset-library`                     | Persistent CRUD, selection, copying/import, migrations, collisions and storage failure atomicity.                                                         |

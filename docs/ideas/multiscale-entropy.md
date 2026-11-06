@@ -4,6 +4,9 @@ Experiment using existing configurable entropy lookups and arithmetic. Comparing
 several neighborhood sizes requires no new provider family, but the meaning of
 the normalization needs care.
 
+The bit-scaled experiment is now available as an implemented factory; see
+[reusable recipe experiments](../recipe-experiments.md#entropy-contrast-in-bits).
+
 ## Question and expected patterns
 
 Is a small neighborhood more or less varied than its surrounding region? A short

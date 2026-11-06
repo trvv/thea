@@ -9,6 +9,7 @@ import { resolveViewJob, spaces } from "./point-configuration.js";
 import { dimensionCoordinate, dimensionNames } from "./dimensions.js";
 import { frameKey } from "./render-identity.js";
 import { sampleProvenance } from "./point-provenance.js";
+import { inspectUtf8 } from "./byte-interpretation.js";
 
 /** Same footprint/probe rules as the CPU and WebGL rasterizers; later/deeper marks win overlap. */
 export function hitPoint(prepared, projection, x, y) {
@@ -290,5 +291,21 @@ export async function inspectPoint(
     if (!current()) return null;
     result.point.byteValue = bytes[0];
   }
+  const byteOrigin = result.point.byteCorrespondence || result.point;
+  const utf8 = await inspectUtf8(job.source, byteOrigin.sourceOffset, current);
+  if (!current()) return null;
+  if (utf8)
+    byteOrigin.utf8 = {
+      ...utf8,
+      sourceOffset: byteOrigin.sourceOffset,
+      relationship:
+        result.point.population === "bins"
+          ? "byte correspondence"
+          : result.point.sampleRange
+            ? "sample representative byte"
+            : result.point.population === "bytes"
+              ? "source byte"
+              : "first occurrence byte",
+    };
   return result;
 }

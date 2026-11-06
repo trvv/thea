@@ -120,6 +120,50 @@ cases.largeIndex = {
   z: constant(0),
   w: constant(1),
 };
+const scaled = (input, max) => ({ op: "normalize", input, min: 0, max });
+const read = (offset) => ({ op: "byte", offset });
+const offset = { op: "offset" };
+const raw = { op: "multiply", a: "value", b: constant(255) };
+cases.bits = {
+  x: { op: "bit", input: raw, bit: 7 },
+  y: scaled({ op: "popcount", input: raw }, 8),
+  z: scaled({ op: "xor", a: raw, b: constant(128) }, 255),
+  w: scaled(
+    { op: "popcount", input: { op: "xor", a: raw, b: constant(128) } },
+    8,
+  ),
+};
+cases.bitClamp = {
+  x: scaled(
+    {
+      op: "popcount",
+      input: { op: "multiply", a: offset, b: constant(1000000) },
+    },
+    8,
+  ),
+  y: scaled({ op: "xor", a: constant(-3.7), b: constant(511.9) }, 255),
+  z: { op: "bit", input: constant(127.99), bit: 7 },
+  w: scaled({ op: "popcount", input: constant(254.99) }, 8),
+};
+cases.bitNonfinite = {
+  x: scaled({ op: "popcount", input: "value" }, 8),
+  y: scaled({ op: "xor", a: "value", b: constant(255) }, 255),
+  z: { op: "bit", input: "value", bit: 3 },
+  w: scaled({ op: "popcount", input: { op: "abs", input: "value" } }, 8),
+};
+cases.bitReads = {
+  x: scaled(
+    {
+      op: "xor",
+      a: read(offset),
+      b: read({ op: "add", a: offset, b: constant(1) }),
+    },
+    255,
+  ),
+  y: scaled({ op: "popcount", input: read(offset) }, 8),
+  z: { op: "bit", input: read(offset), bit: 2 },
+  w: constant(1),
+};
 for (const [name, roots] of Object.entries(cases)) {
   const large = name === "largeIndex" || name === "hilbert3DLarge";
   const offsetBase = large ? 2 ** 24 : 0,
@@ -141,7 +185,7 @@ out vec4 color;
 void main(){
  float offset=gl_FragCoord.x-0.5;
  float factors[${factorCount}];for(int i=0;i<${factorCount};i++)factors[i]=0.0;
- factors[0]=offset/64.0;factors[2]=offset/64.0;
+ factors[0]=${name === "bitNonfinite" ? "uintBitsToFloat(int(offset) % 4 == 0 ? 0x7fc00000u : int(offset) % 4 == 1 ? 0x7f800000u : int(offset) % 4 == 2 ? 0xff800000u : 0x437fe666u)" : "offset/64.0"};factors[2]=offset/64.0;
  factors[${factorIndices.column}]=mod(offset,4.0)/4.0;factors[${factorIndices.row}]=mod(floor(offset/4.0),4.0)/4.0;factors[${factorIndices.slice}]=floor(offset/16.0)/4.0;
  RecipeResult result=evaluateRecipes(factors,int(offset)+${offsetBase},${selectionLength},vec2(8.0,8.0),int(offset),64);
  color=vec4(result.x,result.y,result.z,result.w);
@@ -150,7 +194,10 @@ void main(){
     factors = new Float64Array(program.factorCount),
     expected = [];
   for (let i = 0; i < 64; i++) {
-    factors[0] = i / 64;
+    factors[0] =
+      name === "bitNonfinite"
+        ? [NaN, Infinity, -Infinity, 255.9][i % 4]
+        : i / 64;
     factors[2] = i / 64;
     factors[factorIndices.column] = (i % 4) / 4;
     factors[factorIndices.row] = (Math.floor(i / 4) % 4) / 4;

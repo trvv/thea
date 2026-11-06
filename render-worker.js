@@ -18,14 +18,11 @@ async function process(data) {
       self.postMessage({ inspection, point });
       return;
     }
-    const { duration, work, dimensions, timings, reused } = await executeRender(
-      canvas,
-      job,
-      cache,
-    );
+    const { duration, work, dimensions, timings, reused, diagnostics } =
+      await executeRender(canvas, job, cache);
     const bitmap = canvas.transferToImageBitmap();
     self.postMessage(
-      { id, bitmap, duration, work, dimensions, timings, reused },
+      { id, bitmap, duration, work, dimensions, timings, reused, diagnostics },
       [bitmap],
     );
   } catch (error) {

@@ -3,9 +3,11 @@ import { recipeLabel } from "./recipes.js";
 import { factorOptions } from "./factor-catalog.js";
 const labels = new Map(factorOptions.map(({ value, label }) => [value, label]));
 const title = (value) =>
-  value
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/^./, (letter) => letter.toUpperCase());
+  value === "utf8"
+    ? "UTF-8"
+    : value
+        .replace(/([a-z])([A-Z])/g, "$1 $2")
+        .replace(/^./, (letter) => letter.toUpperCase());
 const format = (value) =>
   Array.isArray(value) ? value.map(format).join(", ") : String(value);
 const controls = [

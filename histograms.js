@@ -1,3 +1,5 @@
+import { readProviderBytes } from "./provider-diagnostics.js";
+
 /** Incremental selected-window byte/pair/triple histograms, shared by painters and factors. */
 /**
  * Operate on half-open ranges of valid tuple starts, not byte coverage; a tuple can include trailing bytes
@@ -24,6 +26,7 @@ export async function windowCounts(
   width,
   current = () => true,
   selectedBytes,
+  diagnostics,
 ) {
   const cacheKey = ["", "byteHistogram", "pairHistogram", "trigraph"][width];
   if (!cacheKey) throw new TypeError("Expected a tuple width from 1 to 3");
@@ -68,10 +71,11 @@ export async function windowCounts(
     ])
       for (const [start, limit] of ranges) {
         for (let offset = start; offset < limit; offset += 65536) {
-          const bytes = new Uint8Array(
-            await job.source
-              .slice(offset, Math.min(limit, offset + 65536) + width - 1)
-              .arrayBuffer(),
+          const bytes = await readProviderBytes(
+            job.source,
+            offset,
+            Math.min(limit, offset + 65536) + width - 1,
+            diagnostics,
           );
           if (!current()) return null;
           changes.push({ bytes, delta });
@@ -123,10 +127,11 @@ export async function windowCounts(
           offset - job.offset,
           Math.min(offset - job.offset + 65536, job.length),
         )
-      : new Uint8Array(
-          await job.source
-            .slice(offset, Math.min(offset + 65536, job.offset + job.length))
-            .arrayBuffer(),
+      : await readProviderBytes(
+          job.source,
+          offset,
+          Math.min(offset + 65536, job.offset + job.length),
+          diagnostics,
         );
     if (!current()) return null;
     if (!bytes.length)

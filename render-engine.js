@@ -34,6 +34,7 @@ import { executeRender, renderCost } from "./rendering.js";
  * @property {object} [appearance] Scalar mappings or recipe expressions.
  * @property {string[]} [shaders] Compatibility color/text flags, not GPU programs.
  * @property {{yaw:number, pitch:number}} [rotation] Camera angles in radians.
+ * @property {boolean} [diagnostics] Opt in to serializable provider measurements, without page UI.
  * @property {boolean} [progressive] Allow compatible ordered intermediate frames.
  * @property {string} [appearanceKey] Engine-generated mapping/presentation identity.
  * @see docs/rendering.md
@@ -113,6 +114,7 @@ export class RenderEngine {
       dimensions: metrics?.dimensions,
       timings: metrics?.timings,
       reused: metrics?.reused,
+      ...(metrics?.diagnostics ? { diagnostics: metrics.diagnostics } : {}),
     };
     queueMicrotask(() => this.onFrame?.(frame));
   }
@@ -261,7 +263,17 @@ export class RenderEngine {
    * Present only compatible frames and close every transferred bitmap, including stale ones, before
    * starting the latest pending job.
    */
-  finish({ id, bitmap, duration, work, dimensions, timings, reused, error }) {
+  finish({
+    id,
+    bitmap,
+    duration,
+    work,
+    dimensions,
+    timings,
+    reused,
+    diagnostics,
+    error,
+  }) {
     if (error) {
       this.failed();
       return;
@@ -287,7 +299,7 @@ export class RenderEngine {
         this.presentedJob = request.job;
         this.presentedRemote = true;
         this.cancelInspection();
-        this.reportFrame(request, { dimensions, timings, reused });
+        this.reportFrame(request, { dimensions, timings, reused, diagnostics });
       }
       request.resolve(present);
     } catch (error) {

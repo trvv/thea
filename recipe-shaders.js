@@ -164,6 +164,42 @@ export function emitRecipeShader(program, language = "glsl") {
       case "fract":
         expression = `fract(${a})`;
         break;
+      case "xor":
+      case "bit":
+      case "popcount": {
+        helpers.set(
+          "byteOperand",
+          fn(
+            integer,
+            "recipeByteOperand",
+            [[scalar, "value"]],
+            `if (!(abs(value) <= 3.402823466e38)) { return 0; }\nreturn ${integer}(floor(clamp(value, 0.0, 255.0)));`,
+          ),
+        );
+        const byte = `recipeByteOperand(${a})`;
+        if (node.op === "xor")
+          expression = `${scalar}(${byte} ^ recipeByteOperand(${b}))`;
+        else if (node.op === "bit")
+          expression = `${scalar}((${byte} >> ${wgsl ? `u32(${node.bit})` : node.bit}) & 1)`;
+        else {
+          const bits = Array.from({ length: 8 }, (_, bit) =>
+            bit === 0
+              ? "(value & 1)"
+              : `((value >> ${wgsl ? `${bit}u` : bit}) & 1)`,
+          ).join(" + ");
+          helpers.set(
+            "popcount",
+            fn(
+              scalar,
+              "recipePopcount",
+              [[integer, "value"]],
+              `return ${scalar}(${bits});`,
+            ),
+          );
+          expression = `recipePopcount(${byte})`;
+        }
+        break;
+      }
       case "power":
         expression =
           node.exponent === 0

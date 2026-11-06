@@ -286,6 +286,11 @@ try {
     &&representations.textContent.includes('0x20, ASCII " "')&&representations.textContent.includes('0x7F, ASCII DEL')
     &&representations.textContent.includes('0xFF, non-ASCII'),'Byte representations are incorrect');
    assert(popup.getAttribute('role')==='dialog'&&inspectScroll.shadowRoot.activeElement===inspectedView,'Popup focus escaped the view');
+   inspectScroll.source=new Blob([new TextEncoder().encode('😀')]);await inspectedView.render();
+   popup=await clickPoint();
+   assert(popup.textContent.includes('UTF-8')&&popup.textContent.includes('U+1F600')&&popup.textContent.includes('😀'),'UTF-8 interpretation missing in '+backend+' popup');
+   assert(popup.textContent.includes('0xF0')&&popup.textContent.includes('Encoded Length'),'UTF-8 source bytes/span missing');
+   assert([...popup.querySelectorAll('details')].every(section=>!section.open),'UTF-8 details should start collapsed');
    inspectedView.applyPreset('dft');await inspectedView.render();
    assert(!popup.matches(':popover-open'),'Changed view retained an old popup');
    popup=await clickPoint();

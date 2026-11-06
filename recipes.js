@@ -49,6 +49,9 @@ export const hilbert3DCoordinate = (
   order = 0,
 ) => ({ op: "component", component, input: { op: "hilbert3d", input, order } });
 const clamp = (value) => Math.max(0, Math.min(1, value));
+// Bit operations consume raw byte units, never implicit normalized-factor values.
+const byteOperand = (value) =>
+  Number.isFinite(value) ? Math.floor(Math.max(0, Math.min(255, value))) : 0;
 const cache = new Map(),
   requests = new Map();
 
@@ -172,6 +175,18 @@ export function compileRecipes(roots, definitions = {}) {
       case "abs":
       case "floor":
       case "fract":
+        args = [scalar(child("input"))];
+        break;
+      case "xor":
+        args = [scalar(child("a")), scalar(child("b"))];
+        break;
+      case "bit":
+        params.bit = expression.bit;
+        if (!Number.isInteger(params.bit) || params.bit < 0 || params.bit > 7)
+          throw new TypeError("Bit index must be between 0 and 7");
+        args = [scalar(child("input"))];
+        break;
+      case "popcount":
         args = [scalar(child("input"))];
         break;
       case "power":
@@ -391,6 +406,21 @@ export function compileRecipes(roots, definitions = {}) {
             return () => {
               values[target] = values[a] - Math.floor(values[a]);
             };
+          case "xor":
+            return () => {
+              values[target] = byteOperand(values[a]) ^ byteOperand(values[b]);
+            };
+          case "bit":
+            return () => {
+              values[target] = (byteOperand(values[a]) >> node.bit) & 1;
+            };
+          case "popcount":
+            return () => {
+              let byte = byteOperand(values[a]);
+              byte -= (byte >> 1) & 0x55;
+              byte = (byte & 0x33) + ((byte >> 2) & 0x33);
+              values[target] = (byte + (byte >> 4)) & 0x0f;
+            };
           case "power":
             return () => {
               values[target] = Math.max(0, values[a]) ** node.exponent;
@@ -600,6 +630,12 @@ export function recipeLabel(expression) {
       return `Entropy(${expression.window}, ${recipeLabel(expression.offset)})`;
     case "spectrum":
       return `DFT ${expression.kind}(${input()})`;
+    case "bit":
+      return `Bit ${expression.bit}(${input()})`;
+    case "popcount":
+      return `Popcount(${input()})`;
+    case "xor":
+      return `XOR(${recipeLabel(expression.a)}, ${recipeLabel(expression.b)})`;
     case "normalize":
       return `Normalize(${input()})`;
     case "add":

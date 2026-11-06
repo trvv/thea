@@ -14,6 +14,21 @@ Actual byte fields and byte arrays show decimal, hex and ASCII representations.
 ASCII control bytes use their standard names; bytes above 127 are marked non-ASCII.
 Averaged numeric values are kept numeric rather than presented as characters.
 
+The Point section also shows a UTF-8 interpretation when the actual origin byte
+belongs to a well-formed scalar. Clicking a continuation byte resolves the same
+code point and byte span. The entry includes code point, character, exact bytes,
+absolute half-open range, encoded length and zero-based byte index. Controls and
+invisible separators use escapes. Invalid or incomplete sequences have no UTF-8
+entry; a genuinely encoded U+FFFD remains valid.
+
+This reads at most seven bytes from the root source on demand, including outside
+the selected interval. Averaged marks interpret their real representative byte,
+never their mean. Tuple marks use the first occurrence's first byte. For bins,
+the interpretation is nested under Byte Correspondence, separately from the
+coefficient. Other contributing recipe lookups do not each get a decoded entry.
+This is a local code-point interpretation, not a file encoding classifier or a
+grapheme decoder. All sections still start collapsed.
+
 The point summary identifies the population and exact unsampled ordinal. Byte
 points include their absolute source offset and raw byte. Averaged byte samples
 identify their full half-open source interval, sample count and mean rather than

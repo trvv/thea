@@ -129,6 +129,18 @@ export function recipeMenu(label, value, definitions, change, save, depth = 0) {
         }),
     })),
     {
+      label: "Bit",
+      action: () => set({ op: "bit", input: expression, bit: 0 }),
+    },
+    {
+      label: "Population Count",
+      action: () => set({ op: "popcount", input: expression }),
+    },
+    {
+      label: "Byte XOR",
+      action: () => set({ op: "xor", a: expression, b: constant(0) }),
+    },
+    {
       label: "Power",
       action: () => set({ op: "power", input: expression, exponent: 1 }),
     },
@@ -249,6 +261,8 @@ export function recipeMenu(label, value, definitions, change, save, depth = 0) {
           (kind) => set({ ...expression, kind }),
         ),
       );
+    if (expression.op === "bit")
+      parameters.push(parameter("Bit", "bit", 0, 7, 1));
     if (expression.op === "power")
       parameters.push(parameter("Exponent", "exponent", 0, 16));
     if (["normalize", "clamp"].includes(expression.op))

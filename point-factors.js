@@ -5,6 +5,7 @@
  * @see docs/recipes.md
  */
 import { byteCharacter } from "./text.js";
+import { recordProvider, readProviderBytes } from "./provider-diagnostics.js";
 import { windowEntropy, entropyShading } from "./entropy.js";
 export { windowEntropy } from "./entropy.js";
 import { pointGrid, gridCoordinates } from "./dimensions.js";
@@ -27,7 +28,14 @@ import { populationOffsets, defaultSampleLimit } from "./populations.js";
  * @returns {Promise<function|null>} Visitor that reuses its factor array and context; consumers
  *   must copy values they retain.
  */
-export async function pointFactors(job, appearance, cache, current, compiled) {
+export async function pointFactors(
+  job,
+  appearance,
+  cache,
+  current,
+  compiled,
+  diagnostics,
+) {
   const config = job.configuration;
   const program =
     compiled || compileRecipes(recipeRoots(config, appearance), config.recipes);
@@ -76,6 +84,8 @@ export async function pointFactors(job, appearance, cache, current, compiled) {
   let counts;
   const matches = (entry) => entry?.source === source && entry.key === key;
   if (needBytes) {
+    const readStarted = diagnostics ? performance.now() : 0;
+    let rebuilt = false;
     const start = Math.max(0, job.offset - padding);
     const end = Math.min(
       job.source.size,
@@ -83,9 +93,8 @@ export async function pointFactors(job, appearance, cache, current, compiled) {
     );
     let window = cache.factorWindow;
     if (!matches(window) || window.start > start || window.end < end) {
-      const data = new Uint8Array(
-        await job.source.slice(start, end).arrayBuffer(),
-      );
+      const data = await readProviderBytes(job.source, start, end, diagnostics);
+      rebuilt = true;
       if (!current()) return null;
       if (data.length < job.length + job.offset - start)
         throw new Error("Byte source ended before its declared size.");
@@ -95,8 +104,11 @@ export async function pointFactors(job, appearance, cache, current, compiled) {
       job.offset - window.start,
       job.offset - window.start + job.length,
     );
+    recordProvider(diagnostics, "bytes", readStarted, rebuilt);
     if (windows.has(32)) {
-      if (!matches(cache.factorEntropy))
+      const entropyStarted = diagnostics ? performance.now() : 0;
+      const entropyRebuilt = !matches(cache.factorEntropy);
+      if (entropyRebuilt)
         cache.factorEntropy = {
           source,
           key,
@@ -105,14 +117,22 @@ export async function pointFactors(job, appearance, cache, current, compiled) {
             job.offset - window.start + job.length,
           ),
         };
+      recordProvider(
+        diagnostics,
+        "entropy:32:quantized",
+        entropyStarted,
+        entropyRebuilt,
+      );
       metrics = cache.factorEntropy.values;
     }
   }
   if (windows.size) {
     if (!matches(cache.recipeEntropy))
       cache.recipeEntropy = { source, key, values: new Map() };
-    for (const size of windows)
-      if (!cache.recipeEntropy.values.has(size)) {
+    for (const size of windows) {
+      const started = diagnostics ? performance.now() : 0;
+      const rebuilt = !cache.recipeEntropy.values.has(size);
+      if (rebuilt) {
         if (size === 32)
           cache.recipeEntropy.values.set(
             size,
@@ -128,6 +148,8 @@ export async function pointFactors(job, appearance, cache, current, compiled) {
           );
         }
       }
+      recordProvider(diagnostics, `entropy:${size}`, started, rebuilt);
+    }
   }
 
   if (byteCounts || pairCounts || tripleCounts) {
@@ -139,25 +161,51 @@ export async function pointFactors(job, appearance, cache, current, compiled) {
       ["triple", 3, tripleCounts],
     ]) {
       if (!needed) continue;
-      const histogram = await windowCounts(job, cache, width, current, bytes);
+      const started = diagnostics ? performance.now() : 0;
+      const histogram = await windowCounts(
+        job,
+        cache,
+        width,
+        current,
+        bytes,
+        diagnostics,
+      );
       if (!histogram || !current()) return null;
+      recordProvider(diagnostics, `counts:${name}`, started, histogram.read);
       counts[name] = histogram.counts;
     }
   }
   const bins = job.length ? Math.floor(job.length / 2) + 1 : 0;
   if (phase || amplitude) {
-    spectrum = spectrumComponents(
-      prepareSpectrum(job, cache, bytes),
-      job.length,
-      phase,
-      amplitude,
+    const started = diagnostics ? performance.now() : 0;
+    const rebuilt = !matches(cache.factorSpectrum);
+    spectrum = prepareSpectrum(job, cache, bytes);
+    recordProvider(diagnostics, "spectrum", started, rebuilt);
+    const componentsStarted = diagnostics ? performance.now() : 0;
+    const componentsRebuilt =
+      (phase && !spectrum.phases) || (amplitude && !spectrum.amplitudes);
+    spectrumComponents(spectrum, job.length, phase, amplitude);
+    recordProvider(
+      diagnostics,
+      "spectrum:components",
+      componentsStarted,
+      componentsRebuilt,
     );
     phases = spectrum.phases;
     amplitudes = spectrum.amplitudes;
   }
   if (!current()) return null;
   const { columns, rows } = job.sampleLayout;
+  const populationStarted = diagnostics ? performance.now() : 0;
+  const previousPopulation = cache.population;
   const offsets = populationOffsets(job, bytes, cache);
+  if (tuples)
+    recordProvider(
+      diagnostics,
+      "population",
+      populationStarted,
+      cache.population !== previousPopulation,
+    );
   const available = offsets
     ? offsets.length
     : population === "bins"

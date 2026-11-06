@@ -12,6 +12,10 @@ import { paintCPU } from "./point-raster.js";
 import { paintWebGL } from "./point-webgl.js";
 import { preparationKey, geometryKey, frameKey } from "./render-identity.js";
 import { pointFactors } from "./point-factors.js";
+import {
+  createProviderDiagnostics,
+  retainedProviderStorage,
+} from "./provider-diagnostics.js";
 
 // Requested providers yield normalized factors for position and appearance. Prepared points survive camera changes in either renderer thread.
 /**
@@ -22,6 +26,8 @@ import { pointFactors } from "./point-factors.js";
  *   completed image.
  */
 export async function preparePoints(job, cache, current) {
+  const diagnostics = createProviderDiagnostics(job);
+  let preparationReused = true;
   const config = job.configuration,
     region = job.region;
   const appearance =
@@ -35,6 +41,7 @@ export async function preparePoints(job, cache, current) {
     prepared.source !== (job.sourceId ?? job.source) ||
     prepared.signature !== signature
   ) {
+    preparationReused = false;
     const coordinatesKey = geometryKey(job);
     const geometry =
       cache.pointGeometry?.source === (job.sourceId ?? job.source) &&
@@ -83,7 +90,14 @@ export async function preparePoints(job, cache, current) {
       if (text) labels.push(label);
       size++;
     };
-    const visit = await pointFactors(job, appearance, cache, current, program);
+    const visit = await pointFactors(
+      job,
+      appearance,
+      cache,
+      current,
+      program,
+      diagnostics,
+    );
     if (!visit || !current()) return null;
     positions = geometry?.positions || new Float32Array(visit.count * 3);
     indices = geometry?.indices || new Uint32Array(visit.count);
@@ -96,7 +110,13 @@ export async function preparePoints(job, cache, current) {
       },
       visit.grid.dimensions,
     );
+    const evaluationStarted = diagnostics ? performance.now() : 0;
     visit(emit);
+    if (diagnostics) {
+      diagnostics.evaluation.milliseconds =
+        performance.now() - evaluationStarted;
+      diagnostics.evaluation.samples = ordinal;
+    }
     const world = geometry || {
       source: job.sourceId ?? job.source,
       signature: coordinatesKey,
@@ -121,14 +141,18 @@ export async function preparePoints(job, cache, current) {
     };
   }
   if (!current()) return null;
-  return { prepared, geometryReused };
+  if (diagnostics) {
+    diagnostics.preparationReused = preparationReused;
+    diagnostics.retained = retainedProviderStorage(cache);
+  }
+  return { prepared, geometryReused, diagnostics };
 }
 
 export async function renderPoints(canvas, job, cache, current) {
   const started = performance.now(),
     result = await preparePoints(job, cache, current);
   if (!result || !current()) return null;
-  const { prepared, geometryReused } = result,
+  const { prepared, geometryReused, diagnostics } = result,
     config = job.configuration;
   const preparation = performance.now() - started;
   const { columns: width, rows: height } = job;
@@ -174,6 +198,7 @@ export async function renderPoints(canvas, job, cache, current) {
   return {
     duration: performance.now() - started,
     dimensions: prepared.grid.dimensions,
+    ...(diagnostics ? { diagnostics } : {}),
     timings: {
       preparation,
       projection: projection.projection || 0,

@@ -4,6 +4,13 @@ This folder collects proposals and experiments. It is not a list of implemented
 features. Current behavior is documented in the [main documentation](../README.md),
 [pipeline contracts](../pipeline.md), and [recipe reference](../recipes.md).
 
+The [sequential implementation plan](PLAN.md) combines all proposals below and
+the source-backed [CantorDust comparison](cantordust-comparison.md). It records
+delivery order, dependencies, acceptance gates and completed increments. The
+[analysis review](analysis-implementation.md) and
+[infrastructure review](infrastructure-implementation.md) provide implementation
+details for that single plan.
+
 The goal is to add useful measurements while keeping analysis sources freely
 mixable. A byte, tuple or frequency-bin population determines which marks exist;
 it does not exclusively own a family of factors. Future optimizations should
@@ -27,6 +34,11 @@ Each proposal discusses its meaning, parameters, boundaries, visualization uses,
 population relationships, performance, inspection and acceptance fixtures. Any
 API sketches in those documents are proposals unless explicitly marked as current
 recipe examples.
+
+Delivered first increments: compact bit operations, bounded UTF-8 origin
+inspection, and [parameterized recipe experiments](../recipe-experiments.md).
+The broader rolling/text/numeric/statistical proposals remain pending; consult
+[PLAN progress](PLAN.md#progress) rather than treating a whole proposal as done.
 
 ## Experiments using current recipes
 
@@ -84,6 +96,11 @@ on-demand inspection feature; plausible local matches are useful even without a
 file-wide encoding decision.
 
 ## Existing planning documents
+
+- [CantorDust comparison](cantordust-comparison.md): packed pixels, byte-frequency
+  population, coordinate curves, occurrence/address navigation, linked views,
+  content resemblance and density mapping, with pinned upstream source evidence.
+- [Sequential plan](PLAN.md): combined implementation order and current progress.
 
 - [Detailed next steps](next-steps.md): provider paging, instrumentation, overview
   sharing, selective GPU execution, occurrence relationships, editing and testing.

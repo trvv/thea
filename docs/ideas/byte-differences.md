@@ -3,6 +3,9 @@
 Experiment using existing recipes. No new statistical provider or built-in factor
 is required for the examples below.
 
+An implemented parameterized factory and usage examples now live in
+[reusable recipe experiments](../recipe-experiments.md#byte-differences).
+
 ## What to look for
 
 Compare a byte with a nearby byte to show change instead of absolute value.

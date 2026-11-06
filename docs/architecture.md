@@ -72,8 +72,9 @@ scroll.barCount = 2;
 scroll.seek(1024); // absolute root-source byte offset
 ```
 
-`DataScroll` also wraps non-Blob input in `new Blob([source])`. There is no file
-picker, persistence layer, server API, or live stream transport.
+`DataScroll` also wraps non-Blob input in `new Blob([source])`. Reusable presets
+persist in localStorage; source bytes do not. There is no file picker, server API,
+or live stream transport.
 
 ## Settings: profiles, compatibility, and raw configuration
 
@@ -154,6 +155,9 @@ axis, and shader getters return owned snapshots.
 | `factor-catalog.js`, `factors.js`                                     | Stable factor-slot ABI and reachability/cost planning.                             |
 | `recipes.js`                                                          | Validation, named references, shared typed IR, CPU evaluator compilation.          |
 | `point-factors.js`                                                    | Lazy source/window providers and sampled byte-offset contexts.                     |
+| `provider-diagnostics.js`                                             | Optional provider read/timing/cache and retained-buffer accounting.                |
+| `recipe-experiments.js`                                               | Parameterized factories returning ordinary serializable analysis expressions.      |
+| `byte-interpretation.js`                                              | Strict bounded UTF-8 scalar interpretation independent of DOM/rendering.           |
 | `spaces.js`, `point-configuration.js`                                 | Shared positional channels, preset intent, mapping validation, geometry transform. |
 | `appearance.js`                                                       | Default channel mappings, HSL conversion, and exact conditional color tables.      |
 | `point-inspection.js`, `point-provenance.js`, `inspection-content.js` | On-demand picking, source/recipe descriptions, and plain DOM popup content.        |

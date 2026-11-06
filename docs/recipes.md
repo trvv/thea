@@ -14,7 +14,8 @@ lookups and coordinate conversions live under Transform. **Save
 Factor** creates a named scalar definition; **Factors** edits definitions. A
 reference is explicit (`{op: 'ref', name: 'Neighbor'}`), so custom names cannot
 silently shadow built-in factor strings. Definitions remain available when
-switching presets, but currently live only in memory: reload loses them.
+switching presets and are included in saved presets. Unsaved changes remain in
+memory; explicitly save or update a preset to preserve them across reloads.
 
 ```js
 const neighbor = {
@@ -149,6 +150,9 @@ sentinel, not an arithmetic expression; use a constant inside a recipe.
 | `power`                                 | `input`, `exponent`   | `max(input, 0) ** exponent`; exponent 0 returns 1.                                           |
 | `normalize`                             | `input`, `min`, `max` | Clamp `(input - min) / (max - min)` to 0–1.                                                  |
 | `clamp`                                 | `input`, `min`, `max` | Clamp to the given interval.                                                                 |
+| `bit`                                   | `input`, `bit`        | Extract bit 0–7 (least significant first) from a converted raw byte.                         |
+| `popcount`                              | `input`               | Number of set bits in a converted raw byte, in 0–8.                                          |
+| `xor`                                   | `a`, `b`              | Byte-width exclusive OR of two converted raw bytes, in 0–255.                                |
 | `byte`                                  | `offset`              | Raw byte at a floored, selection-relative offset; outside the selection returns zero.        |
 | `entropy`                               | `offset`, `window`    | Local normalized entropy at an explicit byte offset.                                         |
 | `spectrum`                              | `input`, `kind`       | Sample normalized one-sided spectrum position; kind is `phase`, `frequency`, or `amplitude`. |
@@ -162,6 +166,19 @@ transforms are outside this expression language; recipe outputs supply their
 normalized channels.
 
 ### Local entropy boundaries
+
+Bit operations take raw byte units. Each operand is floored after clamping to
+0–255; nonfinite operands become zero. Conversion happens before integer bit
+coercion, so large exact index operands saturate instead of wrapping. Inputs
+still obey the existing float32 scalar arithmetic contract before conversion.
+A normalized `value` factor therefore needs multiplication by 255 if raw byte
+bits are intended; an explicit `byte(offset)` read already supplies raw units.
+`bit` produces zero or one, but `popcount` and `xor` require explicit display
+normalization by eight and 255 respectively. Hamming change composes
+`popcount(xor(byte(i), byte(j)))`; its two source lookups retain the usual
+selection-boundary behavior. Bit operations alone read no bytes and request no
+statistical providers. They are available under Transform as Bit, Population
+Count and Byte XOR, with the bit number editable from zero through seven.
 
 `entropy` uses surrounding root-file bytes where available, including outside the
 selected region. This is intentional context for a local statistic; a `byte`

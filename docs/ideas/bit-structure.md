@@ -4,6 +4,12 @@ Idea: expose relationships that disappear when a byte is treated only as an
 unsigned number. Single-bit extraction is already expressible with arithmetic
 recipes; compact bit operations and rolling bit statistics would be additions.
 
+Compact `bit`, `xor` and `popcount` operations are now implemented across the
+compiler, CPU evaluator, menus and emitted shaders. See the
+[recipe reference](../recipes.md). The rolling bias/entropy providers below
+remain proposals. Bit inputs use raw byte units with explicit clamp/floor
+conversion; normalization remains a separate expression.
+
 ## Why the representation matters
 
 A numeric difference and a change in bits answer different questions. Moving

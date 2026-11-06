@@ -3,6 +3,9 @@
 Experiment using existing byte lookup, arithmetic and normalization recipes.
 This is a configurable coordinate construction, not a new global Layout mode.
 
+An implemented two/three-dimensional factory is documented in
+[reusable recipe experiments](../recipe-experiments.md#lagged-coordinates).
+
 ## Basic construction
 
 Plot bytes separated by an explicit lag:

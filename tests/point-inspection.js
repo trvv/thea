@@ -287,6 +287,99 @@ assert.equal(
   textInfo.nodes.find((node) => node.name === "value").source.sourceOffset,
   21,
 );
+
+// UTF-8 interpretation is rooted in real bytes, even if a selection cuts a scalar.
+const unicodeSource = new Blob([new TextEncoder().encode("Aé€😀Z")]);
+for (let offset = 0; offset < unicodeSource.size; offset++) {
+  const unicodeJob = {
+    ...base,
+    source: unicodeSource,
+    sourceId: undefined,
+    offset,
+    length: 1,
+    shaders: [],
+    appearance: defaultAppearance("linear", []),
+    sampleLayout: { columns: 1, rows: 1 },
+  };
+  const unicodeCache = await rendered(unicodeJob);
+  const unicode = await inspectPoint(
+    unicodeJob,
+    unicodeCache,
+    ...location(unicodeCache),
+  );
+  const interpretation = unicode.point.utf8;
+  assert.equal(interpretation.sourceOffset, offset);
+  assert.equal(interpretation.relationship, "source byte");
+  assert(interpretation.sourceRange.start <= offset);
+  assert(interpretation.sourceRange.endExclusive > offset);
+  if (offset >= 6 && offset < 10) {
+    assert.equal(interpretation.codePoint, "U+1F600");
+    assert.equal(interpretation.byteIndex, offset - 6);
+    assert.deepEqual(interpretation.bytes, [0xf0, 0x9f, 0x98, 0x80]);
+  }
+}
+for (const population of ["bytes", "pairs", "bins"]) {
+  const relatedJob = {
+    ...base,
+    source: new Blob([new Uint8Array(32).fill(65)]),
+    sourceId: undefined,
+    offset: 0,
+    length: 32,
+    configuration: { ...base.configuration, population, sampleLimit: 4 },
+    sampleLayout: { columns: 2, rows: 2 },
+  };
+  const relatedCache = await rendered(relatedJob);
+  const related = await inspectPoint(
+    relatedJob,
+    relatedCache,
+    ...location(relatedCache),
+  );
+  const origin = related.point.byteCorrespondence || related.point;
+  assert.equal(origin.utf8.scalar, 65);
+  assert.equal(
+    origin.utf8.relationship,
+    {
+      bytes: "sample representative byte",
+      pairs: "first occurrence byte",
+      bins: "byte correspondence",
+    }[population],
+  );
+  if (population === "bins") assert.equal(related.point.utf8, undefined);
+}
+let unicodeCurrent = true;
+const staleSource = {
+  size: unicodeSource.size,
+  slice(start, end) {
+    return {
+      async arrayBuffer() {
+        const bytes = await unicodeSource.slice(start, end).arrayBuffer();
+        if (end - start === 7) unicodeCurrent = false;
+        return bytes;
+      },
+    };
+  },
+};
+const staleUnicodeJob = {
+  ...base,
+  source: staleSource,
+  sourceId: undefined,
+  offset: 6,
+  length: 1,
+  shaders: [],
+  appearance: defaultAppearance("linear", []),
+  sampleLayout: { columns: 1, rows: 1 },
+};
+const staleUnicodeCache = await rendered(staleUnicodeJob);
+assert.equal(
+  await inspectPoint(
+    staleUnicodeJob,
+    staleUnicodeCache,
+    ...location(staleUnicodeCache),
+    () => unicodeCurrent,
+  ),
+  null,
+);
+
 console.log(
-  "Inspection checks pass: byte/index, averaging, entropy halos, DFT coefficients, mixed/named recipes, tuple counts, old frames, hit coverage, exact trace parity.",
+  "Inspection checks pass: byte/index, averaging, entropy halos, DFT coefficients, mixed/named recipes, tuple counts, old frames, hit coverage, exact trace parity, bounded UTF-8 and stale decoding.",
 );

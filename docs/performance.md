@@ -1,5 +1,58 @@
 # Shared-pipeline measurements
 
+## Provider diagnostics
+
+Set `diagnostics: true` on a view render job to return an additional developer
+report from `executeRender`. `RenderEngine.onFrame` also receives it for local
+and worker frames. This flag is execution-only and is not saved in presets or
+shown on the page. Ordinary jobs omit the report.
+
+```js
+const result = await executeRender(
+  canvas,
+  { ...job, diagnostics: true },
+  cache,
+);
+console.log(result.diagnostics);
+```
+
+The report separates source read calls/bytes/wait time; byte-window, entropy,
+count, spectrum and tuple-population preparation/reuse; and the synchronous
+sample visitor. `evaluation` includes recipe evaluation, factor filling, sample
+reductions, coordinate/color mapping and the visitor callback, not just arithmetic
+instructions. Providers are timed in coarse blocks rather than per mark. Provider
+durations include their own reads, so do not add them to source wait time as if
+they were disjoint. Compilation/allocation, transfer and browser composition are
+not included in that visitor measurement.
+
+`retained.typedArrayBytes` counts distinct backing buffers in known provider
+caches, including the full backing allocation of a retained subarray. `buffers`
+and `views` expose aliasing; `mapEntries` counts distinct retained Map entries,
+not their engine-dependent byte overhead. This excludes prepared marks, rasters,
+GPU allocations, object/Map overhead and transient FFT peak storage. It is not
+process memory or a peak-allocation measurement. Old retained provider caches
+remain counted even if the current graph no longer consults them.
+
+Run a deterministic non-gating report with:
+
+```sh
+bun tests/provider-benchmark.js
+```
+
+It covers cold, repeated and appearance-edited frames, sparse selections at two
+sizes, multiple entropy windows, random/repeated tuples, and radix-2/prime FFTs.
+On this checkout, 256 representative marks with value/32-byte entropy retain
+393,246 provider bytes for a 64 KiB selection, and 6,291,456 for a 1 MiB selection.
+Warm frames issue no new reads. These counts establish the need for sparse
+provider preparation; this increment measures the cost and does not eliminate it.
+Default averaging needs its own exact strategy, rather than substituting one
+representative byte. See [the implementation plan](ideas/PLAN.md).
+
+Engine queue lifecycle counters, enqueue-to-composition latency, physical-GPU
+measurements and overview summary accounting remain future instrumentation work.
+
+## Earlier shared-renderer comparison
+
 Measurements made during the removal of preset-specific painters, comparing
 `e3a0727` with the replacement pipeline. These are Bun CPU timings with a canvas
 double on the same machine, not browser/GPU throughput or universal thresholds.
