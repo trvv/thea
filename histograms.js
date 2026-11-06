@@ -1,10 +1,9 @@
+/** Incremental selected-window byte/pair/triple histograms with atomic cache publication. */
 import { readProviderBytes } from "./provider-diagnostics.js";
+import { assertProviderBudget } from "./provider-budget.js";
+import { scanChunkSize, mapEntryEstimate, yieldScan } from "./scan.js";
 
-/** Incremental selected-window byte/pair/triple histograms, shared by painters and factors. */
-/**
- * Operate on half-open ranges of valid tuple starts, not byte coverage; a tuple can include trailing bytes
- * without starting another tuple.
- */
+/** Ranges describe valid tuple starts, not byte coverage. */
 function rangeDifference(start, end, otherStart, otherEnd) {
   const ranges = [];
   if (start < Math.min(end, otherStart))
@@ -14,11 +13,17 @@ function rangeDifference(start, end, otherStart, otherEnd) {
   return ranges;
 }
 
+const tupleKey = (bytes, index, width) =>
+  width === 1
+    ? bytes[index]
+    : width === 2
+      ? bytes[index] * 256 + bytes[index + 1]
+      : bytes[index] * 65536 + bytes[index + 1] * 256 + bytes[index + 2];
+
 /**
- * Reuse overlapping windows by subtracting outgoing tuples and adding incoming ones. Stage all
- * awaited reads before mutating counts so cancellation cannot poison later frames.
- * @returns {Promise<object|null>} Counts plus revision/changed keys; raster caches may apply only
- *   consecutive revisions.
+ * Source reads and delta calculation are bounded and yield between chunks. Incremental changes
+ * remain detached until one bounded synchronous commit; canceled scans never mutate live counts.
+ * @returns {Promise<object|null>} Exact counts/revision/changed keys, or null after supersession.
  */
 export async function windowCounts(
   job,
@@ -30,6 +35,7 @@ export async function windowCounts(
 ) {
   const cacheKey = ["", "byteHistogram", "pairHistogram", "trigraph"][width];
   if (!cacheKey) throw new TypeError("Expected a tuple width from 1 to 3");
+  if (!current()) return null;
   const cached = cache[cacheKey];
   const sameSource =
     cached &&
@@ -60,46 +66,62 @@ export async function windowCounts(
   const changed = cached
     ? oldEnd - cached.offset + end - job.offset - 2 * overlap
     : Infinity;
-  // For overlapping windows, remove outgoing tuples and add incoming tuples.
-  // Read all changes before mutation so a superseded request cannot corrupt the cache.
-  if (overlap && changed < end - job.offset && changed <= 1048576) {
-    const changes = [];
+  // Limit the final non-yielding commit to one scan chunk. Larger changes use a detached full scan.
+  if (overlap && changed < end - job.offset && changed <= scanChunkSize) {
+    const deltas = new Map();
     let bytesRead = 0;
+    let duration = 0;
+    const retained =
+      width === 3
+        ? cached.counts.size * mapEntryEstimate
+        : cached.counts.byteLength;
+    const inputBytes = Math.min(changed, scanChunkSize) + width - 1;
+    assertProviderBudget(job, retained + inputBytes, "Incremental histogram");
     for (const [ranges, delta] of [
       [rangeDifference(cached.offset, oldEnd, job.offset, end), -1],
       [rangeDifference(job.offset, end, cached.offset, oldEnd), 1],
-    ])
+    ]) {
       for (const [start, limit] of ranges) {
-        for (let offset = start; offset < limit; offset += 65536) {
+        for (let offset = start; offset < limit; offset += scanChunkSize) {
+          const blockEnd = Math.min(limit, offset + scanChunkSize);
           const bytes = await readProviderBytes(
             job.source,
             offset,
-            Math.min(limit, offset + 65536) + width - 1,
+            blockEnd + width - 1,
             diagnostics,
           );
           if (!current()) return null;
-          changes.push({ bytes, delta });
+          if (bytes.length !== blockEnd + width - 1 - offset)
+            throw new Error("Byte source ended before its declared size.");
           bytesRead += bytes.length;
+          const started = performance.now();
+          for (let i = 0; i + width <= bytes.length; i++) {
+            const key = tupleKey(bytes, i, width);
+            if (!deltas.has(key))
+              assertProviderBudget(
+                job,
+                retained +
+                  inputBytes +
+                  (deltas.size + 1) * mapEntryEstimate * 2,
+                "Incremental histogram deltas (estimated Map/Set storage)",
+              );
+            deltas.set(key, (deltas.get(key) || 0) + delta);
+          }
+          duration += performance.now() - started;
+          if (!(await yieldScan(current))) return null;
         }
       }
+    }
     if (!current()) return null;
     const started = performance.now();
-    const changedKeys = new Set();
-    for (const { bytes, delta } of changes)
-      for (let i = 0; i + width <= bytes.length; i++) {
-        const key =
-          width === 1
-            ? bytes[i]
-            : width === 2
-              ? bytes[i] * 256 + bytes[i + 1]
-              : bytes[i] * 65536 + bytes[i + 1] * 256 + bytes[i + 2];
-        if (width === 3) {
-          changedKeys.add(key);
-          const count = (cached.counts.get(key) || 0) + delta;
-          if (count) cached.counts.set(key, count);
-          else cached.counts.delete(key);
-        } else cached.counts[key] += delta;
-      }
+    const changedKeys = width === 3 ? new Set(deltas.keys()) : new Set();
+    for (const [key, delta] of deltas) {
+      if (width === 3) {
+        const count = (cached.counts.get(key) || 0) + delta;
+        if (count) cached.counts.set(key, count);
+        else cached.counts.delete(key);
+      } else cached.counts[key] += delta;
+    }
     Object.assign(cached, {
       source: job.source,
       offset: job.offset,
@@ -111,43 +133,59 @@ export async function windowCounts(
       counts: cached.counts,
       revision: cached.revision,
       changed: changedKeys,
-      duration: performance.now() - started,
+      duration: duration + performance.now() - started,
       read: true,
       bytesRead,
     };
   }
+
+  const inputBytes = selectedBytes ? 0 : Math.min(job.length, scanChunkSize);
+  const tableBytes =
+    width === 3
+      ? 0
+      : (width === 1 ? 256 : 65536) * Float64Array.BYTES_PER_ELEMENT;
+  assertProviderBudget(job, inputBytes + tableBytes, "Histogram scan");
+  const budget = job.configuration?.providerBudget ?? null;
+  const maxEntries =
+    budget === null
+      ? Infinity
+      : Math.floor((budget - inputBytes) / mapEntryEstimate);
   const counts =
     width === 3 ? new Map() : new Float64Array(width === 1 ? 256 : 65536);
-  let previous = 0,
-    seen = 0,
-    duration = 0;
+  let previous = 0;
+  let seen = 0;
+  let duration = 0;
+  let bytesRead = 0;
   for (let offset = job.offset; offset < job.offset + job.length;) {
+    const limit = Math.min(offset + scanChunkSize, job.offset + job.length);
     const bytes = selectedBytes
-      ? selectedBytes.subarray(
-          offset - job.offset,
-          Math.min(offset - job.offset + 65536, job.length),
-        )
-      : await readProviderBytes(
-          job.source,
-          offset,
-          Math.min(offset + 65536, job.offset + job.length),
-          diagnostics,
-        );
+      ? selectedBytes.subarray(offset - job.offset, limit - job.offset)
+      : await readProviderBytes(job.source, offset, limit, diagnostics);
     if (!current()) return null;
-    if (!bytes.length)
+    if (bytes.length !== limit - offset)
       throw new Error("Byte source ended before its declared size.");
+    if (!selectedBytes) bytesRead += bytes.length;
     const started = performance.now();
     for (const byte of bytes) {
       previous =
         ((previous << 8) | byte) &
         (width === 3 ? 0xffffff : width === 2 ? 0xffff : 0xff);
       if (seen === width - 1) {
-        if (width === 3) counts.set(previous, (counts.get(previous) || 0) + 1);
-        else counts[previous]++;
+        if (width === 3) {
+          if (!counts.has(previous) && counts.size >= maxEntries)
+            assertProviderBudget(
+              job,
+              inputBytes + (counts.size + 1) * mapEntryEstimate,
+              "Triple histogram (estimated Map storage)",
+            );
+          counts.set(previous, (counts.get(previous) || 0) + 1);
+        } else counts[previous]++;
       } else seen++;
     }
     duration += performance.now() - started;
-    offset += bytes.length;
+    offset = limit;
+    if (offset < job.offset + job.length && !(await yieldScan(current)))
+      return null;
   }
   if (!current()) return null;
   cache[cacheKey] = {
@@ -165,7 +203,7 @@ export async function windowCounts(
     changed: null,
     duration,
     read: true,
-    bytesRead: job.length,
+    bytesRead,
   };
 }
 

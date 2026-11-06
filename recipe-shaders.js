@@ -5,6 +5,7 @@
  * @see docs/recipes.md
  */
 import { factorIndices as indices, factorCount } from "./factor-catalog.js";
+import { numericFormats } from "./numeric-interpretation.js";
 // Shader libraries, not draw pipelines: the backend supplies source-factor
 // attributes and indexed provider functions using textures/storage buffers.
 /**
@@ -215,6 +216,45 @@ export function emitRecipeShader(program, language = "glsl") {
       case "byte":
         expression = `${provider("byte")}(${asIndex(node.args[0])}, selectionLength)`;
         break;
+      case "available":
+        expression = select(
+          `selectionLength >= ${node.width} && ${asIndex(node.args[0])} >= 0 && ${asIndex(node.args[0])} <= selectionLength - ${node.width}`,
+          "1.0",
+          "0.0",
+        );
+        break;
+      case "number": {
+        const name = `recipeReadNumber${node.id}`;
+        const width = numericFormats[node.format].width;
+        const { format, endian, kind, min, max } = node;
+        external.set(name, {
+          name,
+          kind: "number",
+          format,
+          endian,
+          projection: kind,
+          width,
+          ...(kind === "normalized" ? { min, max } : {}),
+          input: "i32",
+          output: "f32",
+          normalization: "decode and normalize before f32 conversion",
+        });
+        const wrapper = `recipeSampleNumber${node.id}`;
+        helpers.set(
+          wrapper,
+          fn(
+            scalar,
+            wrapper,
+            [
+              [integer, "offset"],
+              [integer, "length"],
+            ],
+            `if (length < ${width} || offset < 0 || offset > length - ${width}) { return 0.0; }\nreturn ${name}(offset);`,
+          ),
+        );
+        expression = `${wrapper}(${asIndex(node.args[0])}, selectionLength)`;
+        break;
+      }
       case "entropy":
         expression = `${provider("entropy", node.window)}(${asIndex(node.args[0])}, selectionLength)`;
         break;
@@ -241,6 +281,53 @@ export function emitRecipeShader(program, language = "glsl") {
           ),
         );
         expression = `recipeLinear(${a}, grid)`;
+        break;
+      }
+      case "morton": {
+        const dimensions = node.dimensions;
+        const resultType = dimensions === 3 ? vector3 : vector;
+        const axesType = wgsl ? `vec${dimensions}<i32>` : `ivec${dimensions}`;
+        const variable = (type, name, value) =>
+          wgsl
+            ? `var ${name}: ${type} = ${value};`
+            : `${type} ${name} = ${value};`;
+        const shift = (value) => (wgsl ? `u32(${value})` : value);
+        const name = `recipeMorton${dimensions}D`;
+        helpers.set(
+          name,
+          fn(
+            resultType,
+            name,
+            [
+              [integer, "index"],
+              [integer, "order"],
+            ],
+            `
+${variable(axesType, "axes", `${axesType}(0)`)}
+for (${variable(integer, "bit", "0")} bit < order; bit += 1) {
+ for (${variable(integer, "axis", "0")} axis < ${dimensions}; axis += 1) {
+  axes[axis] |= ((index >> ${shift(`(bit * ${dimensions} + axis)`)}) & 1) << ${shift("bit")};
+ }
+}
+return (${resultType}(axes) + ${resultType}(0.5)) / ${scalar}(1 << ${shift("order")});`,
+          ),
+        );
+        const exact = program.nodes[node.args[0]].type === "index";
+        const order = `mortonOrder${node.id}`;
+        statements.push(
+          declaration(
+            integer,
+            order,
+            node.order
+              ? String(node.order)
+              : `${integer}(min(${literal(Math.floor(30 / dimensions))}, ceil(log2(max(1.0, ${scalar}( ${exact ? "pointCount" : "selectionLength"}))) / ${literal(dimensions)})))`,
+          ),
+        );
+        const cells = `(1 << ${shift(`(${dimensions} * ${order})`)})`;
+        const index = exact
+          ? `clamp(r${node.args[0]}, 0, ${cells} - 1)`
+          : `min(${cells} - 1, ${integer}(floor(clamp(${a}, 0.0, 1.0) * ${scalar}(${cells}))))`;
+        expression = `${name}(${index}, ${order})`;
         break;
       }
       case "hilbert3d": {

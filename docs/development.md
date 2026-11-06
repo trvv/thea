@@ -29,7 +29,7 @@ Tests are executable Bun scripts using assertions, not a `bun test` discovery
 suite. Run from the repository root:
 
 ```sh
-for test in recipes bit-recipes recipe-experiments recipe-shaders byte-interpretation provider-diagnostics hilbert dimensions pipeline point-factors point-configuration appearance \
+for test in provider-budget sparse-providers numeric-recipes morton-recipes overview-sharing population-streaming profile-edits recipes bit-recipes recipe-experiments recipe-shaders byte-interpretation provider-diagnostics hilbert dimensions pipeline point-factors point-configuration appearance \
   data-scroll context-menu render-engine render-thread-smoke render-pipeline rasterization point-inspection preset-library trigraph \
   trigraph-opacity coordinates adaptive-resolution scroll-performance digraph fourier
 do

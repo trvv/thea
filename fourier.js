@@ -74,6 +74,16 @@ export function fourierCost(length) {
   );
 }
 
+/** Conservative live typed storage: input, transform workspace and one-sided result/components. */
+export function fourierStorage(length) {
+  if (!Number.isSafeInteger(length) || length < 0 || length > 2 ** 29)
+    throw new RangeError("Unsupported transform length");
+  if (!length) return 0;
+  const { size, radix2 } = transformSize(length);
+  const bins = Math.floor(length / 2) + 1;
+  return length + size * (radix2 ? 16 : 32) + bins * 32;
+}
+
 // Forward DFT with a negative exponent. Bluestein handles arbitrary selection
 // lengths without padding the signal or moving its frequency bins.
 /**

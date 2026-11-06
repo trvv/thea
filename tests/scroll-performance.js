@@ -78,7 +78,11 @@ const firstOverview = await overviewValues(
   { source, offset: 0, length: 65536, width: 48, height: 100 },
   {},
 );
-assert(firstOverview.bytesRead > 0);
+assert.equal(
+  firstOverview.bytesRead,
+  0,
+  "A new bar should reuse source pages prepared by another bar",
+);
 const hit = await overviewValues(
   { source, offset: 1, length: 65536, width: 48, height: 100 },
   overviewCache,

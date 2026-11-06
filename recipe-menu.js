@@ -4,11 +4,13 @@
  * @module recipe-menu
  */
 import { factorOptions } from "./factor-catalog.js";
+import { numericFormats, numericKinds } from "./numeric-interpretation.js";
 import {
   constant,
   reference,
   hilbertCoordinate,
   hilbert3DCoordinate,
+  mortonCoordinate,
   recipeLabel,
 } from "./recipes.js";
 
@@ -52,7 +54,10 @@ export function recipeMenu(label, value, definitions, change, save, depth = 0) {
   ];
   const componentOptions = axes.slice(
     0,
-    expression?.input?.op === "hilbert3d" ? 3 : 2,
+    expression?.input?.op === "hilbert3d" ||
+      (expression?.input?.op === "morton" && expression.input.dimensions === 3)
+      ? 3
+      : 2,
   );
   const sourceName =
     typeof value === "string"
@@ -158,6 +163,25 @@ export function recipeMenu(label, value, definitions, change, save, depth = 0) {
       action: () => set({ op: "byte", offset: expression }),
     },
     {
+      label: "Available Span",
+      action: () => set({ op: "available", offset: expression, width: 1 }),
+    },
+    {
+      label: "Read Number",
+      items: Object.keys(numericFormats).map((format) => ({
+        label: format,
+        action: () =>
+          set({
+            op: "number",
+            offset: expression,
+            format,
+            endian: "little",
+            kind: "normalized",
+            ...(format === "float32" ? { min: 0, max: 1 } : {}),
+          }),
+      })),
+    },
+    {
       label: "Local Entropy",
       action: () => set({ op: "entropy", offset: expression, window: 32 }),
     },
@@ -176,6 +200,14 @@ export function recipeMenu(label, value, definitions, change, save, depth = 0) {
         action: () => set(hilbert3DCoordinate(component, expression)),
       })),
     },
+    ...[2, 3].map((dimensions) => ({
+      label: `Morton ${dimensions}D`,
+      items: axes.slice(0, dimensions).map(({ value: component, label }) => ({
+        label,
+        action: () =>
+          set(mortonCoordinate(component, expression, 0, dimensions)),
+      })),
+    })),
     ...axes.slice(0, 2).map(({ value: component, label }) => ({
       label: `Linear ${label}`,
       action: () =>
@@ -216,18 +248,27 @@ export function recipeMenu(label, value, definitions, change, save, depth = 0) {
           (component) => set({ ...expression, component }),
         ),
       );
-      if (["hilbert", "hilbert3d"].includes(expression.input.op))
+      if (["hilbert", "hilbert3d", "morton"].includes(expression.input.op))
         parameters.push({
           label: "Order",
           input: "number",
           value: expression.input.order ?? 0,
           min: 0,
-          max: expression.input.op === "hilbert3d" ? 10 : 15,
+          max:
+            expression.input.op === "hilbert3d" ||
+            (expression.input.op === "morton" &&
+              expression.input.dimensions === 3)
+              ? 10
+              : 15,
           step: 1,
           action: (order) =>
             set({ ...expression, input: { ...expression.input, order } }),
         });
-      if (["hilbert", "hilbert3d", "linear"].includes(expression.input.op))
+      if (
+        ["hilbert", "hilbert3d", "linear", "morton"].includes(
+          expression.input.op,
+        )
+      )
         parameters.push(
           recipeMenu(
             "Input",
@@ -249,6 +290,69 @@ export function recipeMenu(label, value, definitions, change, save, depth = 0) {
       parameters.push(input("Input", "input"));
     if (expression.op === "entropy")
       parameters.push(parameter("Window", "window", 1, 4096, 1));
+    if (expression.op === "available")
+      parameters.push(parameter("Width", "width", 1, 8, 1));
+    if (expression.op === "number") {
+      const format = expression.format ?? "uint16";
+      const kind = expression.kind ?? "normalized";
+      parameters.push(
+        choose(
+          "Format",
+          format,
+          Object.keys(numericFormats).map((value) => ({ value, label: value })),
+          (format) =>
+            set({
+              ...expression,
+              format,
+              kind:
+                ["exponent", "fraction"].includes(kind) && format !== "float32"
+                  ? "normalized"
+                  : kind,
+              min: format === "float32" ? 0 : undefined,
+              max: format === "float32" ? 1 : undefined,
+            }),
+        ),
+        choose(
+          "Byte Order",
+          expression.endian ?? "little",
+          [
+            { value: "little", label: "Little Endian" },
+            { value: "big", label: "Big Endian" },
+          ],
+          (endian) => set({ ...expression, endian }),
+        ),
+        choose(
+          "Projection",
+          kind,
+          numericKinds
+            .filter(
+              (value) =>
+                format === "float32" ||
+                !["exponent", "fraction"].includes(value),
+            )
+            .map((value) => ({ value, label: value })),
+          (kind) =>
+            set({
+              ...expression,
+              kind,
+              ...(kind === "normalized" && format === "float32"
+                ? { min: expression.min ?? 0, max: expression.max ?? 1 }
+                : {}),
+            }),
+        ),
+      );
+      if (kind === "normalized") {
+        const min = expression.min ?? numericFormats[format].min;
+        const max = expression.max ?? numericFormats[format].max;
+        parameters.push(
+          {
+            ...parameter("Minimum", "min", -Number.MAX_VALUE, max),
+            value: min,
+          },
+          { ...parameter("Maximum", "max", min, Number.MAX_VALUE), value: max },
+        );
+      }
+    }
     if (expression.op === "spectrum")
       parameters.push(
         choose(

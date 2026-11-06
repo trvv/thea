@@ -1,5 +1,6 @@
 /** Selection-scoped spectrum shared by all point populations. */
-import { fourierSpectrum } from "./fourier.js";
+import { fourierSpectrum, fourierStorage } from "./fourier.js";
+import { assertProviderBudget } from "./provider-budget.js";
 
 export function matchingSpectrum(job, cache) {
   const spectrum = cache.factorSpectrum;
@@ -10,6 +11,7 @@ export function matchingSpectrum(job, cache) {
 }
 
 export function prepareSpectrum(job, cache, bytes) {
+  assertProviderBudget(job, fourierStorage(job.length), "DFT preparation");
   const cached = matchingSpectrum(job, cache);
   if (cached) return cached;
   const { real, imaginary } = fourierSpectrum(bytes);

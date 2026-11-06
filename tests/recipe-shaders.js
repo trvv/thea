@@ -8,8 +8,10 @@ import {
   constant,
   hilbertCoordinate,
   hilbert3DCoordinate,
+  mortonCoordinate,
 } from "../recipes.js";
 import { emitRecipeShader } from "../recipe-shaders.js";
+import { numericResult } from "../numeric-interpretation.js";
 const fixtures = [];
 const cases = {
   exactHilbert2D: {
@@ -164,6 +166,69 @@ cases.bitReads = {
   z: { op: "bit", input: read(offset), bit: 2 },
   w: constant(1),
 };
+cases.available = {
+  x: { op: "available", offset, width: 4 },
+  y: {
+    op: "available",
+    offset: { op: "subtract", a: offset, b: constant(1) },
+    width: 2,
+  },
+  z: {
+    op: "available",
+    offset: { op: "add", a: offset, b: constant(1) },
+    width: 8,
+  },
+  w: constant(1),
+};
+cases.numeric = {
+  x: {
+    op: "number",
+    offset,
+    format: "uint32",
+    min: 4294967294,
+    max: 4294967295,
+  },
+  y: { op: "number", offset, format: "uint16", endian: "big" },
+  z: { op: "number", offset, format: "int16" },
+  w: { op: "number", offset, format: "uint32", kind: "valid" },
+};
+cases.numericFloat = {
+  x: { op: "number", offset, format: "float32", kind: "finite" },
+  y: { op: "number", offset, format: "float32", kind: "nan" },
+  z: { op: "number", offset, format: "float32", kind: "negativeZero" },
+  w: { op: "number", offset, format: "float32", min: -2, max: 2 },
+};
+cases.morton2D = {
+  x: mortonCoordinate(0),
+  y: mortonCoordinate(1),
+  z: constant(0),
+  w: constant(1),
+};
+cases.morton3D = {
+  x: mortonCoordinate(0, { op: "pointIndex" }, 0, 3),
+  y: mortonCoordinate(1, { op: "pointIndex" }, 0, 3),
+  z: mortonCoordinate(2, { op: "pointIndex" }, 0, 3),
+  w: constant(1),
+};
+cases.mortonScalar = {
+  x: mortonCoordinate(0, "position", 3, 3),
+  y: mortonCoordinate(1, "position", 3, 3),
+  z: mortonCoordinate(2, "position", 3, 3),
+  w: constant(1),
+};
+const numericBytes = (format) => {
+  const bytes = new Uint8Array(64);
+  const view = new DataView(bytes.buffer);
+  for (let offset = 0; offset < 64; offset += 4)
+    if (format === "float32")
+      view.setFloat32(
+        offset,
+        [NaN, Infinity, -Infinity, -0, 0, 1, -1, 2 ** -149][(offset / 4) % 8],
+        true,
+      );
+    else view.setUint32(offset, 4294967294 + ((offset / 4) % 2), true);
+  return bytes;
+};
 for (const [name, roots] of Object.entries(cases)) {
   const large = name === "largeIndex" || name === "hilbert3DLarge";
   const offsetBase = large ? 2 ** 24 : 0,
@@ -171,10 +236,19 @@ for (const [name, roots] of Object.entries(cases)) {
   const program = compileRecipes(roots),
     shader = emitRecipeShader(program, "glsl");
   const bindings = shader.bindings
-    .map(
-      (binding) =>
-        `float ${binding.name}(int index) { return ${binding.kind === "byte" ? (large ? "float(index & 255)" : "float(index)") : binding.kind === "entropy" ? "float(index) / 64.0" : binding.component === "phase" ? "float(index) / 32.0" : "1.0 - float(index) / 32.0"}; }`,
-    )
+    .map((binding) => {
+      if (binding.kind === "number") {
+        const parameters = { ...binding, kind: binding.projection };
+        const bytes = numericBytes(binding.format);
+        const values = Array.from(
+          { length: 64 },
+          (_, index) =>
+            `if (index == ${index}) return ${Math.fround(numericResult(bytes, index, parameters)).toExponential(9)};`,
+        ).join("\n");
+        return `float ${binding.name}(int index) { ${values}\nreturn 0.0; }`;
+      }
+      return `float ${binding.name}(int index) { return ${binding.kind === "byte" ? (large ? "float(index & 255)" : "float(index)") : binding.kind === "entropy" ? "float(index) / 64.0" : binding.component === "phase" ? "float(index) / 32.0" : "1.0 - float(index) / 32.0"}; }`;
+    })
     .join("\n");
   const source = `#version 300 es
 precision highp float;
@@ -209,6 +283,8 @@ void main(){
       pointCount: 64,
       grid: [8, 8],
       byte: (index) => (large ? index & 255 : index < 64 ? index : 0),
+      number: (index, parameters) =>
+        numericResult(numericBytes(parameters.format), index, parameters),
       entropy: (index) => index / 64,
       spectrum: (kind, position) => {
         const index = Math.min(32, Math.floor(position * 33));

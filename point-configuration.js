@@ -102,6 +102,12 @@ export function validateConfiguration(configuration) {
     throw new TypeError("Unknown sampling policy");
   const dimensions = validateDimensions(configuration.dimensions);
   const population = configuration.population ?? "bytes";
+  const tupleRepresentative = configuration.tupleRepresentative;
+  if (
+    tupleRepresentative !== undefined &&
+    !["first", "last"].includes(tupleRepresentative)
+  )
+    throw new TypeError("Unknown tuple representative");
   const backend = configuration.backend ?? "cpu";
   if (!["cpu", "webgl"].includes(backend))
     throw new TypeError("Unknown point backend");
@@ -119,6 +125,13 @@ export function validateConfiguration(configuration) {
     configuration.sampleLimit === undefined
       ? defaultSampleLimit
       : configuration.sampleLimit;
+  const providerBudget = configuration.providerBudget;
+  if (
+    providerBudget !== undefined &&
+    providerBudget !== null &&
+    (!Number.isSafeInteger(providerBudget) || providerBudget < 1)
+  )
+    throw new TypeError("Provider budget must be positive bytes or null");
   if (!populations.includes(population))
     throw new TypeError("Unknown point population");
   if (!["grid", "point"].includes(footprint))
@@ -145,7 +158,9 @@ export function validateConfiguration(configuration) {
     throw new TypeError("Invalid position direction");
   return {
     backend,
+    ...(providerBudget === undefined ? {} : { providerBudget }),
     population,
+    ...(tupleRepresentative === undefined ? {} : { tupleRepresentative }),
     footprint,
     sampleLimit,
     sampling,

@@ -171,6 +171,8 @@ export class RenderEngine {
     job.presentationKey = presentationKey(job);
     const id = ++this.version;
     this.latest = job;
+    if (this.active && !this.canPresent(this.active))
+      this.worker?.postMessage({ cancel: this.active.id });
     // One running worker job and one replaceable pending job per canvas.
     this.pending?.resolve(false);
     this.pending = null;
@@ -272,9 +274,22 @@ export class RenderEngine {
     timings,
     reused,
     diagnostics,
+    canceled,
     error,
+    jobError,
   }) {
     if (error) {
+      if (jobError) {
+        const request = this.active;
+        if (!request || request.id !== id) return;
+        this.active = null;
+        if (request.id === this.version) request.reject(new Error(error));
+        else request.resolve(false);
+        const next = this.pending;
+        this.pending = null;
+        if (next) this.start(next);
+        return;
+      }
       this.failed();
       return;
     }
@@ -285,8 +300,8 @@ export class RenderEngine {
     }
     this.active = null;
     try {
-      this.measure(request.job, duration, work);
-      const present = this.canPresent(request);
+      if (!canceled) this.measure(request.job, duration, work);
+      const present = !canceled && this.canPresent(request);
       if (present) {
         if (this.canvas.width !== bitmap.width)
           this.canvas.width = bitmap.width;

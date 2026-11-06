@@ -208,7 +208,7 @@ if (
     ["Bars", "Sample Limit", "Footprint", "Backend"].includes(item.label),
   ) ||
   String(menu.at(-1).items.map((item) => item.label)) !==
-    "Bars,Sample Limit,Footprint,Backend"
+    "Undo,Redo,Edit Profile JSON,Bars,Sample Limit,Provider Budget (MiB),Footprint,Backend"
 )
   throw Error("Advanced controls are misplaced");
 bars().action(2);
@@ -960,4 +960,41 @@ try {
 }
 console.log(
   "Preset menu checks pass: save/load/update/duplicate/rename/delete/import/copy, collision errors, cancellation, snapshots, and startup restoration.",
+);
+
+// Real menu descriptors record profile edits, while bar/source navigation remains outside history.
+const editor = new DataScroll(source, 101);
+let editorMenu;
+Object.defineProperty(editor.menu, "items", {
+  set(value) {
+    editorMenu = value;
+  },
+});
+const advancedEdit = (label) =>
+  editorMenu
+    .find((item) => item.label === "Advanced")
+    .items.find((item) => item.label === label);
+editor.refreshMenu();
+const originalLimit = editor.view.pointConfiguration.sampleLimit;
+advancedEdit("Sample Limit").action(64);
+if (editor.view.editHistory.past.length !== 1)
+  throw Error("Menu edit was not recorded");
+if (advancedEdit("Undo").disabled) throw Error("Undo state did not refresh");
+advancedEdit("Undo").action();
+if (editor.view.pointConfiguration.sampleLimit !== originalLimit)
+  throw Error("Undo did not restore settings");
+advancedEdit("Redo").action();
+if (editor.view.pointConfiguration.sampleLimit !== 64)
+  throw Error("Redo did not restore settings");
+const historyCount = editor.view.editHistory.past.length;
+advancedEdit("Bars").action(0);
+if (editor.view.editHistory.past.length !== historyCount)
+  throw Error("Navigation entered profile history");
+editor.view.setFactor("Old", "value");
+editor.view.renameFactor("Old", "New");
+if (!Object.hasOwn(editor.view.pointConfiguration.recipes, "New"))
+  throw Error("Factor rename failed");
+editor.view.deleteFactor("New");
+console.log(
+  "Profile menu editing passes: bounded undo/redo, factor rename/delete and navigation isolation.",
 );

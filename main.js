@@ -6,6 +6,12 @@
  * @see docs/data-selection.md
  */
 import * as presetLibrary from "./preset-library.js";
+import {
+  renameFactor,
+  deleteFactor,
+  rememberEdit,
+  restoreEdit,
+} from "./profile-edits.js";
 import { inspectionContent } from "./inspection-content.js";
 import { dimensionNames, defaultDimension, pointGrid } from "./dimensions.js";
 import { validateProfile, parseProfile } from "./profiles.js";
@@ -882,6 +888,27 @@ export class DataScrollView extends ByteCanvas {
     else this._recipes = definitions;
   }
 
+  renameFactor(from, to) {
+    this.importProfile(renameFactor(this.exportProfile(), from, to));
+  }
+
+  deleteFactor(name) {
+    this.importProfile(deleteFactor(this.exportProfile(), name));
+  }
+
+  get editHistory() {
+    return (this._editHistory ||= { past: [], future: [] });
+  }
+
+  restoreEdit(direction) {
+    const profile = restoreEdit(
+      this.editHistory,
+      this.exportProfile(),
+      direction,
+    );
+    if (profile) this.importProfile(profile);
+  }
+
   /**
    * Use requested length, not the already-snapped result: recomputing from the result can select a
    * different grid and cause rounding oscillation.
@@ -1718,7 +1745,33 @@ export class DataScroll extends HTMLElement {
    * and definitions.
    */
   refreshMenu() {
-    this.menu.items = this.contextItems();
+    const wrap = (items) =>
+      items.map((item) => {
+        const next = { ...item };
+        if (item.items) next.items = wrap(item.items);
+        if (item.action && !item.historyAction)
+          next.action = (...args) => {
+            const before = this.view.exportProfile();
+            const result = item.action(...args);
+            const record = () => {
+              const changed = rememberEdit(
+                this.view.editHistory,
+                before,
+                this.view.exportProfile(),
+              );
+              if (changed) this.refreshMenu();
+            };
+            if (result?.then)
+              return result.then((value) => {
+                record();
+                return value;
+              });
+            record();
+            return result;
+          };
+        return next;
+      });
+    this.menu.items = wrap(this.contextItems());
   }
 
   /** Resolve snapshots through the same validated profile API used by JSON import. */
@@ -2101,8 +2154,8 @@ export class DataScroll extends HTMLElement {
         label: "Factors",
         items: [
           { label: "New Factor", action: () => save("value") },
-          ...Object.entries(definitions).map(([name, expression]) =>
-            recipeMenu(
+          ...Object.entries(definitions).map(([name, expression]) => {
+            const menu = recipeMenu(
               name,
               expression,
               definitions,
@@ -2114,8 +2167,24 @@ export class DataScroll extends HTMLElement {
                 this.refreshMenu();
               },
               save,
-            ),
-          ),
+            );
+            menu.items.push(
+              {
+                label: "Rename",
+                action: () =>
+                  this.presetAction(() => {
+                    const next = globalThis.prompt?.("Factor name", name);
+                    if (next !== null && next !== undefined)
+                      view.renameFactor(name, next.trim());
+                  }),
+              },
+              {
+                label: "Delete",
+                action: () => this.presetAction(() => view.deleteFactor(name)),
+              },
+            );
+            return menu;
+          }),
         ],
       },
       ...(text === "character"
@@ -2169,6 +2238,36 @@ export class DataScroll extends HTMLElement {
         label: "Advanced",
         items: [
           {
+            label: "Undo",
+            disabled: !view.editHistory.past.length,
+            historyAction: true,
+            action: () => {
+              view.restoreEdit("undo");
+              this.refreshMenu();
+            },
+          },
+          {
+            label: "Redo",
+            disabled: !view.editHistory.future.length,
+            historyAction: true,
+            action: () => {
+              view.restoreEdit("redo");
+              this.refreshMenu();
+            },
+          },
+          {
+            label: "Edit Profile JSON",
+            action: () =>
+              this.presetAction(() => {
+                const json = globalThis.prompt?.(
+                  "Profile JSON",
+                  JSON.stringify(view.exportProfile(), null, 2),
+                );
+                if (json !== null && json !== undefined)
+                  view.importProfile(json);
+              }),
+          },
+          {
             label: "Bars",
             input: "number",
             min: 0,
@@ -2185,6 +2284,25 @@ export class DataScroll extends HTMLElement {
             value: config.sampleLimit ?? 262144,
             action: (sampleLimit) => change({ sampleLimit }),
           },
+          {
+            label: "Provider Budget (MiB)",
+            input: "number",
+            min: 0,
+            step: 1,
+            value: (config.providerBudget ?? 0) / 1048576,
+            action: (value) =>
+              change({ providerBudget: value ? value * 1048576 : null }),
+          },
+          ...(["pairs", "triples", "symbols"].includes(config.population)
+            ? [
+                choose(
+                  "Tuple Representative",
+                  config.tupleRepresentative ?? "first",
+                  options(["first", "last"]),
+                  (tupleRepresentative) => change({ tupleRepresentative }),
+                ),
+              ]
+            : []),
           choose(
             "Footprint",
             config.footprint,

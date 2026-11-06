@@ -8,6 +8,7 @@ import { executeRender } from "./rendering.js";
 
 const canvas = new OffscreenCanvas(1, 1);
 const cache = {};
+let canceledThrough = 0;
 // Inspection can await source reads too. Serialize it with rendering so mutable provider caches
 // never have two concurrent owners. Only the clicked point's description crosses the thread boundary.
 async function process(data) {
@@ -18,8 +19,17 @@ async function process(data) {
       self.postMessage({ inspection, point });
       return;
     }
-    const { duration, work, dimensions, timings, reused, diagnostics } =
-      await executeRender(canvas, job, cache);
+    const result = await executeRender(
+      canvas,
+      job,
+      cache,
+      () => id > canceledThrough,
+    );
+    if (!result) {
+      self.postMessage({ id, canceled: true });
+      return;
+    }
+    const { duration, work, dimensions, timings, reused, diagnostics } = result;
     const bitmap = canvas.transferToImageBitmap();
     self.postMessage(
       { id, bitmap, duration, work, dimensions, timings, reused, diagnostics },
@@ -28,12 +38,16 @@ async function process(data) {
   } catch (error) {
     self.postMessage(
       inspection === undefined
-        ? { id, error: error.message }
+        ? { id, error: error.message, jobError: true }
         : { inspection, error: error.message },
     );
   }
 }
 let queue = Promise.resolve();
 self.onmessage = ({ data }) => {
+  if (data.cancel !== undefined) {
+    canceledThrough = Math.max(canceledThrough, data.cancel);
+    return;
+  }
   queue = queue.then(() => process(data));
 };

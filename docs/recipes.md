@@ -137,35 +137,38 @@ slots; appearance/position compilation consumes the program's bindings.
 A string factor name is shorthand for `{op: 'factor', name}`. `none` is a mapping
 sentinel, not an arithmetic expression; use a constant inside a recipe.
 
-| Operation                               | Fields                | Output / reason                                                                              |
-| --------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------- |
-| `constant`                              | `value`               | Scalar literal.                                                                              |
-| `factor`                                | `name`                | Scalar primitive source.                                                                     |
-| `ref`                                   | `name`                | Named scalar definition, expanded during compilation.                                        |
-| `offset`, `length`                      | none                  | Current compatibility byte offset or selected byte length, as an exact index.                |
-| `pointIndex`, `pointCount`              | none                  | Exact unsampled population ordinal/count, independent of byte addressing.                    |
-| `add`, `subtract`, `multiply`, `divide` | `a`, `b`              | Scalar arithmetic; division by zero returns zero.                                            |
-| `invert`                                | `input`               | `1 - input`.                                                                                 |
-| `abs`, `floor`, `fract`                 | `input`               | Absolute, floor, or input minus floor.                                                       |
-| `power`                                 | `input`, `exponent`   | `max(input, 0) ** exponent`; exponent 0 returns 1.                                           |
-| `normalize`                             | `input`, `min`, `max` | Clamp `(input - min) / (max - min)` to 0–1.                                                  |
-| `clamp`                                 | `input`, `min`, `max` | Clamp to the given interval.                                                                 |
-| `bit`                                   | `input`, `bit`        | Extract bit 0–7 (least significant first) from a converted raw byte.                         |
-| `popcount`                              | `input`               | Number of set bits in a converted raw byte, in 0–8.                                          |
-| `xor`                                   | `a`, `b`              | Byte-width exclusive OR of two converted raw bytes, in 0–255.                                |
-| `byte`                                  | `offset`              | Raw byte at a floored, selection-relative offset; outside the selection returns zero.        |
-| `entropy`                               | `offset`, `window`    | Local normalized entropy at an explicit byte offset.                                         |
-| `spectrum`                              | `input`, `kind`       | Sample normalized one-sided spectrum position; kind is `phase`, `frequency`, or `amplitude`. |
-| `linear`                                | `input`               | vec2 cell center from a normalized traversal input and current sample grid.                  |
-| `hilbert`                               | `input`, `order`      | vec2 cell center along a power-of-two Hilbert square.                                        |
-| `hilbert3d`                             | `input`, `order`      | vec3 cell center on a Hilbert cube; exact index or normalized scalar input.                  |
-| `component`                             | `input`, `component`  | Extract X (0), Y (1), or Z (2); Z requires vec3.                                             |
+| Operation                               | Fields                                                     | Output / reason                                                                              |
+| --------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `constant`                              | `value`                                                    | Scalar literal.                                                                              |
+| `factor`                                | `name`                                                     | Scalar primitive source.                                                                     |
+| `ref`                                   | `name`                                                     | Named scalar definition, expanded during compilation.                                        |
+| `offset`, `length`                      | none                                                       | Current compatibility byte offset or selected byte length, as an exact index.                |
+| `pointIndex`, `pointCount`              | none                                                       | Exact unsampled population ordinal/count, independent of byte addressing.                    |
+| `add`, `subtract`, `multiply`, `divide` | `a`, `b`                                                   | Scalar arithmetic; division by zero returns zero.                                            |
+| `invert`                                | `input`                                                    | `1 - input`.                                                                                 |
+| `abs`, `floor`, `fract`                 | `input`                                                    | Absolute, floor, or input minus floor.                                                       |
+| `power`                                 | `input`, `exponent`                                        | `max(input, 0) ** exponent`; exponent 0 returns 1.                                           |
+| `normalize`                             | `input`, `min`, `max`                                      | Clamp `(input - min) / (max - min)` to 0–1.                                                  |
+| `clamp`                                 | `input`, `min`, `max`                                      | Clamp to the given interval.                                                                 |
+| `bit`                                   | `input`, `bit`                                             | Extract bit 0–7 (least significant first) from a converted raw byte.                         |
+| `popcount`                              | `input`                                                    | Number of set bits in a converted raw byte, in 0–8.                                          |
+| `xor`                                   | `a`, `b`                                                   | Byte-width exclusive OR of two converted raw bytes, in 0–255.                                |
+| `byte`                                  | `offset`                                                   | Raw byte at a floored, selection-relative offset; outside the selection returns zero.        |
+| `available`                             | `offset`, `width`                                          | One if the complete selected byte span is available; zero otherwise, without reading bytes.  |
+| `number`                                | `offset`, `format`, `endian`, `kind`, optional `min`/`max` | Native numeric interpretation normalized/classified before float32 display conversion.       |
+| `entropy`                               | `offset`, `window`                                         | Local normalized entropy at an explicit byte offset.                                         |
+| `spectrum`                              | `input`, `kind`                                            | Sample normalized one-sided spectrum position; kind is `phase`, `frequency`, or `amplitude`. |
+| `linear`                                | `input`                                                    | vec2 cell center from a normalized traversal input and current sample grid.                  |
+| `hilbert`                               | `input`, `order`                                           | vec2 cell center along a power-of-two Hilbert square.                                        |
+| `hilbert3d`                             | `input`, `order`                                           | vec3 cell center on a Hilbert cube; exact index or normalized scalar input.                  |
+| `morton`                                | `input`, `order`, `dimensions`                             | vec2/vec3 Morton Z-order cell center; X consumes the least-significant interleaved bit.      |
+| `component`                             | `input`, `component`                                       | Extract X (0), Y (1), or Z (2); Z requires vec3.                                             |
 
 Vector inputs cannot be passed directly to scalar arithmetic. Shapes and camera
 transforms are outside this expression language; recipe outputs supply their
 normalized channels.
 
-### Local entropy boundaries
+### Byte bit operations
 
 Bit operations take raw byte units. Each operand is floored after clamping to
 0–255; nonfinite operands become zero. Conversion happens before integer bit
@@ -179,6 +182,81 @@ normalization by eight and 255 respectively. Hamming change composes
 selection-boundary behavior. Bit operations alone read no bytes and request no
 statistical providers. They are available under Transform as Bit, Population
 Count and Byte XOR, with the bit number editable from zero through seven.
+
+### Complete spans and numeric interpretations
+
+`available` floors its selection-relative offset, and accepts a constant width
+from one to eight bytes (default one). It returns one only if the complete span
+is inside the selected interval. It reads no bytes and does not change legacy
+`byte` zero-fill behavior. This can mask missing predecessors or trailing words
+without interpreting an unavailable value as a measured zero.
+
+```js
+const word = {
+  op: "number",
+  offset: { op: "offset" },
+  format: "uint32",
+  endian: "little",
+  kind: "normalized",
+  min: 4294967294,
+  max: 4294967295,
+};
+```
+
+`number` uses native DataView reads for `uint16`, `int16`, `uint32`, `int32` and
+`float32`, with `little` (default) or `big` byte order. Addresses are floored,
+selection-relative, and need no alignment. An incomplete span returns zero for
+every projection, including `valid`. Reading actual addressed bytes is separate
+from averaging a rendered sample's byte values. Numeric recipes currently use
+the dense byte provider; they do not add an FFT or histogram dependency.
+
+The default projection, `normalized`, computes the decoded Number's mapping to
+the given finite increasing bounds **before** float32 conversion. Integers default
+to their full type range. Float32 requires explicit bounds. Numeric bounds may
+exceed the ordinary expression parameter limit of one million; only this operation
+has that exception. The range difference must remain finite. Thus adjacent large
+uint32 values can map distinctly under a narrow range, rather than being rounded
+to the same raw float32 first. This operation does not expose a misleading raw
+uint32 scalar through the float32 arithmetic IR.
+
+Other projections are `valid`, `finite`, `nan`, `infinite`, `negativeZero` and
+`sign`. `valid` means a complete span, independently of whether its decoded float
+is finite. Float32 `sign` exposes its sign bit (including negative NaNs/zero);
+integer `sign` is one for a negative value. Float32 additionally exposes
+`exponent` (raw eight-bit exponent divided by 255) and `fraction` (raw 23-bit
+fraction divided by 8,388,607). Nonfinite `normalized` results are zero; their
+classification can control opacity independently. Inspection preserves exact
+integer values, special-float strings, raw bits and contributing bytes. Float64
+and integer64 remain separate future work.
+
+The menu exposes Available Span and Read Number under Transform. Numeric format,
+byte order, projection and normalization bounds remain ordinary expression data.
+
+### Morton coordinates
+
+`morton` has dimensions two (default) or three and an order of zero (automatic),
+one through 15 for 2D, or one through 10 for 3D. This keeps curve indices within
+30 bits. Order zero chooses `ceil(log2(max(1, count))/dimensions)`, capped at those
+limits; exact index input uses population count, normalized input uses selection
+length. A one-point curve is centered. X receives bit zero, Y bit one, Z bit two,
+then higher coordinate bits follow the same interleaving. Results are cell centers.
+
+```js
+import { mortonCoordinate } from "../recipes.js";
+view.pointConfiguration = {
+  ...view.pointConfiguration,
+  position: [mortonCoordinate(0), mortonCoordinate(1), "none"],
+};
+```
+
+The helper accepts `(component, input = pointIndex, order = 0, dimensions = 2)`.
+Integer inputs select exact clipped cells; normalized scalars span the curve with
+one reaching its final cell. The coordinate vector is shared across component
+expressions, independent of population, source order and other analyses. Morton
+does not preserve Hilbert's neighboring-cell adjacency. Menus expose Morton 2D/3D
+and editable order; H-curve remains deferred pending a complete algorithm contract.
+
+### Local entropy boundaries
 
 `entropy` uses surrounding root-file bytes where available, including outside the
 selected region. This is intentional context for a local statistic; a `byte`
@@ -290,17 +368,26 @@ The final two integer arguments describe the unsampled point population; they
 are distinct from byte-offset/selection-length inputs. The returned binding
 descriptors identify externally supplied functions:
 
-| Function                             | Required return value                                    |
-| ------------------------------------ | -------------------------------------------------------- |
-| `recipeReadByte(index)`              | Raw byte value as a float.                               |
-| `recipeReadEntropy<N>(index)`        | Normalized local entropy for that requested window size. |
-| `recipeReadSpectrumPhase(index)`     | Normalized one-sided phase.                              |
-| `recipeReadSpectrumAmplitude(index)` | Normalized one-sided amplitude.                          |
+| Function                             | Required return value                                                                            |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `recipeReadByte(index)`              | Raw byte value as a float.                                                                       |
+| `recipeReadEntropy<N>(index)`        | Normalized local entropy for that requested window size.                                         |
+| `recipeReadSpectrumPhase(index)`     | Normalized one-sided phase.                                                                      |
+| `recipeReadSpectrumAmplitude(index)` | Normalized one-sided amplitude.                                                                  |
+| `recipeReadNumber<ID>(index)`        | Numeric projection defined by that binding descriptor, decoded/normalized before f32 conversion. |
 
 Indices are signed integers. Generated wrappers bound-check byte/entropy offsets
 and turn normalized spectral positions into bin indices. Frequency-only sampling
 needs no provider binding. GLSL includes forward declarations; WGSL expects the
 provider implementations in the same linked source module.
+
+Numeric binding descriptors contain format, width, byte order, projection and
+normalization bounds. Their wrapper checks the entire span before invoking the
+provider. A GPU backend must honor the descriptor's pre-f32 normalization contract;
+converting raw uint32 to a float texture first would violate narrow-range behavior.
+Executed GLSL fixtures use independently prepared numeric provider results to
+test these interfaces and boundaries; this is not evidence of GPU-side DataView
+decoding or a numeric GPU analysis backend.
 
 A backend executing these functions must still provide storage bindings, source-factor values,
 camera/space transforms, appearance-to-color conversion, particle/text drawing,

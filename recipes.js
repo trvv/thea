@@ -6,6 +6,7 @@
  */
 import { hilbert3D, hilbert3DMaxOrder } from "./hilbert.js";
 import { spaces } from "./spaces.js";
+import { numericParameters, spanAvailable } from "./numeric-interpretation.js";
 import {
   appearanceChannels,
   factorIndices,
@@ -48,6 +49,17 @@ export const hilbert3DCoordinate = (
   input = { op: "pointIndex" },
   order = 0,
 ) => ({ op: "component", component, input: { op: "hilbert3d", input, order } });
+/** Morton/Z-order coordinates are independent explicit mappings, with X using the low bit. */
+export const mortonCoordinate = (
+  component,
+  input = { op: "pointIndex" },
+  order = 0,
+  dimensions = 2,
+) => ({
+  op: "component",
+  component,
+  input: { op: "morton", input, order, dimensions },
+});
 const clamp = (value) => Math.max(0, Math.min(1, value));
 // Bit operations consume raw byte units, never implicit normalized-factor values.
 const byteOperand = (value) =>
@@ -207,6 +219,22 @@ export function compileRecipes(roots, definitions = {}) {
         args = [scalar(child("offset"))];
         providers.byte = true;
         break;
+      case "available":
+        args = [scalar(child("offset"))];
+        params.width = expression.width ?? 1;
+        if (
+          !Number.isInteger(params.width) ||
+          params.width < 1 ||
+          params.width > 8
+        )
+          throw new TypeError("Span width must be between 1 and 8");
+        break;
+      case "number":
+        args = [scalar(child("offset"))];
+        params = numericParameters(expression);
+        providers.byte = true;
+        providers.numeric = true;
+        break;
       case "entropy":
         args = [scalar(child("offset"))];
         params.window = expression.window;
@@ -253,6 +281,20 @@ export function compileRecipes(roots, definitions = {}) {
           throw new TypeError(
             "3D Hilbert order must be between 0 (automatic) and 10",
           );
+        break;
+      case "morton":
+        args = [scalar(child("input"))];
+        params.dimensions = expression.dimensions ?? 2;
+        if (params.dimensions !== 2 && params.dimensions !== 3)
+          throw new TypeError("Morton dimensions must be 2 or 3");
+        params.order = expression.order ?? 0;
+        if (
+          !Number.isInteger(params.order) ||
+          params.order < 0 ||
+          params.order > Math.floor(30 / params.dimensions)
+        )
+          throw new TypeError("Morton order exceeds its 30-bit curve limit");
+        type = `vec${params.dimensions}`;
         break;
       case "component": {
         const input = child("input");
@@ -442,6 +484,20 @@ export function compileRecipes(roots, definitions = {}) {
             return (_, context) => {
               values[target] = context.byte(values[a]);
             };
+          case "available":
+            return (_, context) => {
+              values[target] = spanAvailable(
+                values[a],
+                node.width,
+                context.length,
+              )
+                ? 1
+                : 0;
+            };
+          case "number":
+            return (_, context) => {
+              values[target] = context.number(values[a], node);
+            };
           case "entropy":
             return (_, context) => {
               values[target] = context.entropy(values[a], node.window);
@@ -486,6 +542,39 @@ export function compileRecipes(roots, definitions = {}) {
                   ? Math.max(0, Math.min(cells - 1, values[a]))
                   : Math.min(cells - 1, Math.floor(clamp(values[a]) * cells));
               hilbert3D(index, order, values, target);
+            };
+          case "morton":
+            return (_, context) => {
+              if (Number.isNaN(values[a])) {
+                for (let axis = 0; axis < node.dimensions; axis++)
+                  values[target + axis] = NaN;
+                return;
+              }
+              const exact = nodes[node.args[0]].type === "index";
+              const count = exact
+                ? (context.pointCount ?? context.length)
+                : context.length;
+              const order =
+                node.order ||
+                Math.min(
+                  Math.floor(30 / node.dimensions),
+                  Math.ceil(Math.log2(Math.max(1, count)) / node.dimensions),
+                );
+              const side = 2 ** order;
+              const cells = side ** node.dimensions;
+              let index = exact
+                ? Math.max(0, Math.min(cells - 1, values[a]))
+                : Math.min(cells - 1, Math.floor(clamp(values[a]) * cells));
+              for (let axis = 0; axis < node.dimensions; axis++)
+                values[target + axis] = 0;
+              for (let bit = 0; bit < order; bit++) {
+                for (let axis = 0; axis < node.dimensions; axis++) {
+                  values[target + axis] += (index % 2) * 2 ** bit;
+                  index = Math.floor(index / 2);
+                }
+              }
+              for (let axis = 0; axis < node.dimensions; axis++)
+                values[target + axis] = (values[target + axis] + 0.5) / side;
             };
           case "hilbert":
             return (_, context) => {
@@ -620,12 +709,18 @@ export function recipeLabel(expression) {
       return `${input()}.${["X", "Y", "Z"][expression.component]}`;
     case "hilbert3d":
       return `Hilbert3D(${input()})`;
+    case "morton":
+      return `Morton${expression.dimensions ?? 2}D(${input()})`;
     case "hilbert":
       return `Hilbert(${input()})`;
     case "linear":
       return `Linear(${input()})`;
     case "byte":
       return `Byte(${recipeLabel(expression.offset)})`;
+    case "available":
+      return `Available(${expression.width ?? 1}, ${recipeLabel(expression.offset)})`;
+    case "number":
+      return `${expression.format ?? "uint16"} ${expression.kind ?? "normalized"}(${recipeLabel(expression.offset)})`;
     case "entropy":
       return `Entropy(${expression.window}, ${recipeLabel(expression.offset)})`;
     case "spectrum":

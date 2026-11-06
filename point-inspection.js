@@ -10,6 +10,7 @@ import { dimensionCoordinate, dimensionNames } from "./dimensions.js";
 import { frameKey } from "./render-identity.js";
 import { sampleProvenance } from "./point-provenance.js";
 import { inspectUtf8 } from "./byte-interpretation.js";
+import { interpretNumber } from "./numeric-interpretation.js";
 
 /** Same footprint/probe rules as the CPU and WebGL rasterizers; later/deeper marks win overlap. */
 export function hitPoint(prepared, projection, x, y) {
@@ -69,6 +70,7 @@ export async function inspectPoint(
     "pointGeometry",
     "factorWindow",
     "factorEntropy",
+    "factorSparse",
     "population",
   ])
     if (renderCache[key]) cache[key] = renderCache[key];
@@ -147,6 +149,22 @@ export async function inspectPoint(
         if (node.op === "linear") entry.grid = context.grid;
         if (node.op === "byte")
           entry.source = provenance.describeByte(nodes[node.args[0]].value);
+        if (node.op === "number") {
+          const offset = Math.floor(nodes[node.args[0]].value);
+          const interpreted = interpretNumber(
+            visit.provenance.bytes,
+            offset,
+            node,
+          );
+          entry.source = {
+            ...interpreted,
+            selectionOffset: offset,
+            sourceRange: {
+              start: job.offset + offset,
+              endExclusive: job.offset + offset + interpreted.width,
+            },
+          };
+        }
         if (node.op === "entropy")
           entry.source = provenance.describeEntropy(
             nodes[node.args[0]].value,
@@ -279,17 +297,25 @@ export async function inspectPoint(
     prepared.geometry.indices[index] + 1,
   );
   if (!result || !current()) return null;
-  if (
-    result.point.population === "bytes" &&
-    result.point.byteValue === undefined
-  ) {
+  const missingByte =
+    result.point.population === "bytes" && result.point.byteValue === undefined;
+  const missingTuple =
+    ["pairs", "triples"].includes(result.point.population) &&
+    !result.point.tuple;
+  if (missingByte || missingTuple) {
+    const width = missingTuple
+      ? result.point.population === "pairs"
+        ? 2
+        : 3
+      : 1;
     const bytes = new Uint8Array(
       await job.source
-        .slice(result.point.sourceOffset, result.point.sourceOffset + 1)
+        .slice(result.point.sourceOffset, result.point.sourceOffset + width)
         .arrayBuffer(),
     );
     if (!current()) return null;
-    result.point.byteValue = bytes[0];
+    if (missingTuple) result.point.tuple = [...bytes];
+    else result.point.byteValue = bytes[0];
   }
   const byteOrigin = result.point.byteCorrespondence || result.point;
   const utf8 = await inspectUtf8(job.source, byteOrigin.sourceOffset, current);

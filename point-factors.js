@@ -15,6 +15,9 @@ import { occurrenceFactor } from "./appearance.js";
 import { prepareSpectrum, spectrumComponents } from "./spectrum.js";
 import { windowCounts } from "./histograms.js";
 import { populationOffsets, defaultSampleLimit } from "./populations.js";
+import { prepareSparseProviders } from "./sparse-providers.js";
+import { numericResult } from "./numeric-interpretation.js";
+import { assertProviderBudget } from "./provider-budget.js";
 
 // Providers are selected from the active channels, including only visible axes.
 // Each cache holds one window; camera/style changes reuse the selected data.
@@ -69,7 +72,6 @@ export async function pointFactors(
     amplitude =
       used.has("amplitude") || program.providers.spectrum.has("amplitude");
   const needBytes =
-    tuples ||
     program.providers.byte ||
     windows.size > 0 ||
     phase ||
@@ -83,13 +85,66 @@ export async function pointFactors(
   let bytes, metrics, spectrum, amplitudes, phases;
   let counts;
   const matches = (entry) => entry?.source === source && entry.key === key;
-  if (needBytes) {
+  const text = job.shaders.includes("character") || job.shaders.includes("hex");
+  const earlyGrid =
+    population === "bytes"
+      ? pointGrid(config, job.length, job.sampleLayout)
+      : null;
+  const earlyCount = earlyGrid
+    ? Math.min(
+        job.length,
+        config.sampleLimit === null
+          ? Infinity
+          : (config.sampleLimit ?? defaultSampleLimit),
+        job.sampleLayout.columns * job.sampleLayout.rows,
+        earlyGrid.columns * earlyGrid.rows * earlyGrid.slices,
+      )
+    : 0;
+  const averagesBytes =
+    population === "bytes" &&
+    !text &&
+    config.sampling !== "representative" &&
+    job.length > earlyCount &&
+    (used.has("value") || entropy);
+  const sparse =
+    needBytes &&
+    population === "bytes" &&
+    !averagesBytes &&
+    !phase &&
+    !amplitude &&
+    !byteCounts &&
+    !pairCounts &&
+    !tripleCounts
+      ? await prepareSparseProviders(
+          job,
+          program,
+          used,
+          windows,
+          earlyCount,
+          cache,
+          current,
+          diagnostics,
+        )
+      : undefined;
+  if (sparse === null || !current()) return null;
+  if (needBytes && !sparse) {
+    delete cache.factorSparse;
     const readStarted = diagnostics ? performance.now() : 0;
     let rebuilt = false;
     const start = Math.max(0, job.offset - padding);
     const end = Math.min(
       job.source.size,
       job.offset + job.length + afterPadding,
+    );
+    const windowLength = Math.max(0, end - start);
+    const entropyStorage =
+      job.length * 4 * windows.size +
+      (windows.has(32) ? windowLength : 0) +
+      ([...windows].some((size) => size !== 32) ? windowLength * 4 : 0);
+    assertProviderBudget(
+      job,
+      windowLength + entropyStorage,
+      "Byte and entropy preparation",
     );
     let window = cache.factorWindow;
     if (!matches(window) || window.start > start || window.end < end) {
@@ -126,7 +181,7 @@ export async function pointFactors(
       metrics = cache.factorEntropy.values;
     }
   }
-  if (windows.size) {
+  if (windows.size && !sparse) {
     if (!matches(cache.recipeEntropy))
       cache.recipeEntropy = { source, key, values: new Map() };
     for (const size of windows) {
@@ -198,7 +253,14 @@ export async function pointFactors(
   const { columns, rows } = job.sampleLayout;
   const populationStarted = diagnostics ? performance.now() : 0;
   const previousPopulation = cache.population;
-  const offsets = populationOffsets(job, bytes, cache);
+  const offsets = await populationOffsets(
+    job,
+    bytes,
+    cache,
+    current,
+    diagnostics,
+  );
+  if (!current()) return null;
   if (tuples)
     recordProvider(
       diagnostics,
@@ -225,7 +287,20 @@ export async function pointFactors(
     grid.columns * grid.rows * grid.slices,
   );
   const layout = used.has("column") || used.has("row") || used.has("slice");
-  const text = job.shaders.includes("character") || job.shaders.includes("hex");
+  const readByte = sparse
+    ? sparse.byte
+    : (index) => {
+        index = Math.floor(index);
+        return index >= 0 && index < job.length ? bytes?.[index] : 0;
+      };
+  const readEntropy = sparse
+    ? sparse.entropy
+    : (index, size) => {
+        index = Math.floor(index);
+        return index >= 0 && index < job.length
+          ? cache.recipeEntropy.values.get(size)[index]
+          : 0;
+      };
   const values = new Float64Array(Math.max(factorCount, program.factorCount));
   const context = {
     offset: 0,
@@ -234,14 +309,13 @@ export async function pointFactors(
     pointCount,
     grid: [grid.columns, grid.rows, grid.slices],
     byte(index) {
-      index = Math.floor(index);
-      return index >= 0 && index < job.length ? bytes[index] : 0;
+      return readByte(index);
     },
     entropy(index, size) {
-      index = Math.floor(index);
-      return index >= 0 && index < job.length
-        ? cache.recipeEntropy.values.get(size)[index]
-        : 0;
+      return readEntropy(index, size);
+    },
+    number(index, parameters) {
+      return numericResult(bytes, Math.floor(index), parameters);
     },
     spectrum(kind, position) {
       if (!bins) return 0;
@@ -275,8 +349,10 @@ export async function pointFactors(
           ? Math.floor((index * job.length) / bins)
           : Math.floor((i * job.length) / count);
       if (sample >= job.length) continue;
-      let value = bytes?.[sample] ?? 0,
-        metric = metrics?.[sample] ?? 0;
+      let value = readByte(sample) ?? 0,
+        metric = sparse
+          ? sparse.quantizedEntropy(sample)
+          : (metrics?.[sample] ?? 0);
       if (average) {
         const end = Math.floor(((i + 1) * job.length) / count);
         value = metric = 0;
@@ -301,9 +377,10 @@ export async function pointFactors(
         values[slots.row] = coordinates[1];
         values[slots.slice] = coordinates[2];
       }
-      if (nextByte) values[slots.byte2] = (bytes[sample + 1] ?? 0) / 255;
-      if (thirdByte) values[slots.byte3] = (bytes[sample + 2] ?? 0) / 255;
-      if (previousByte) values[slots.previous] = (bytes[sample - 1] ?? 0) / 255;
+      if (nextByte) values[slots.byte2] = (readByte(sample + 1) ?? 0) / 255;
+      if (thirdByte) values[slots.byte3] = (readByte(sample + 2) ?? 0) / 255;
+      if (previousByte)
+        values[slots.previous] = (readByte(sample - 1) ?? 0) / 255;
       if (byteCounts)
         values[slots.byteCount] = occurrenceFactor(counts.byte[bytes[sample]]);
       if (pairCounts)
@@ -345,9 +422,9 @@ export async function pointFactors(
       const label = !text
         ? undefined
         : job.shaders.includes("hex")
-          ? bytes[sample].toString(16).padStart(2, "0").toUpperCase()
+          ? readByte(sample).toString(16).padStart(2, "0").toUpperCase()
           : byteCharacter(
-              bytes[sample],
+              readByte(sample),
               job.encoding,
               job.blankSpaces,
               job.blankNulls,
@@ -363,6 +440,16 @@ export async function pointFactors(
   visit.provenance = {
     window: needBytes ? cache.factorWindow : undefined,
     bytes,
+    readByte,
+    rootRange: sparse
+      ? sparse.rootRange
+      : needBytes
+        ? (start, end) =>
+            cache.factorWindow.data.subarray(
+              start - cache.factorWindow.start,
+              end - cache.factorWindow.start,
+            )
+        : undefined,
     spectrum,
     counts,
     grid,

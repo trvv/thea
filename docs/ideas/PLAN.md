@@ -5,6 +5,11 @@ supersedes the ordering in the older roadmap and next-steps proposals. It is a
 backlog with useful stopping points, not a commitment to build every extension
 in one pass. Update the status and evidence here as increments land.
 
+Current user scope: complete the browser app for fixed-file exploration. External
+Ghidra/IDA adapters and live-input transports are outside the critical path;
+ordinary navigation events can support an adapter later. Device validation must
+report available environments rather than claim unperformed hardware tests.
+
 The inputs are the [analysis implementation review](analysis-implementation.md),
 the [infrastructure review](infrastructure-implementation.md), and the
 [CantorDust comparison](cantordust-comparison.md). Those reviews explain the
@@ -126,9 +131,33 @@ inspection, presets and navigation. Formatting and local documentation links
 are checked. Browser/GPU claims retain the environment limits documented in
 [development](../development.md).
 
-**Next: step 5.** At fixed 256 representative marks, provider typed storage grows
-from 393,246 bytes for 64 KiB to 6,291,456 bytes for a 1 MiB selection in the new
-benchmark. Start predictable representative byte/entropy lookups with dense
-equivalence tests; preserve default averaged buckets via an explicit fallback.
-Steps 5–27 remain pending. The first batch does not implement CantorDust-inspired
-features merely by documenting them.
+- **Step 5 delivered:** [sparse preparation](../sparse-providers.md), merged exact
+  root ranges, entropy quantization, on-demand provenance accessors, dense
+  fallbacks and allocation estimates. The 1 MiB/256-mark case retains 8,176
+  source bytes rather than 6,291,456 provider typed bytes; 256 small reads and
+  Map/object overhead remain. Averaged buckets keep their dense reference.
+- **Step 6 delivered first boundary:** [streaming scans](../bounded-scans.md),
+  atomic histogram deltas, real task yields, cooperative worker cancellation and
+  configurable operation-level budgets, including FFT workspace estimates.
+  Exact distinct result storage remains data-dependent; long FFT butterflies
+  are still synchronous and are not claimed to be interruptible mid-transform.
+- **Step 7 delivered:** [overview sharing](../overview-sharing.md), concurrent
+  read deduplication, retry and bounded immutable per-source caches. Workers
+  still own separate execution contexts; no process-wide shared cache claim.
+- **Step 8 delivered:** complete-span availability and native integer/float32
+  interpretations, byte order, explicit normalization before f32 conversion,
+  float classifications, raw inspection and provider shader interfaces. See
+  [recipes](../recipes.md). Numeric reads initially use dense byte preparation.
+- **Step 11 delivered Morton:** exact 2D/3D interleaving vectors, shared scalar
+  projections, menus and CPU/executed GLSL parity. H-curve remains a separately
+  evaluated extension requiring a defined traversal contract.
+- **Steps 12–13 foundations delivered:** first/last representative addresses keep
+  population order stable. Atomic factor rename/delete, bounded menu-edit
+  undo/redo and validated profile JSON editing are documented in
+  [profile editing](../profile-editing.md). Occurrence browsing, file transfer
+  and bookmarks are still pending.
+
+The second batch passes 34 Bun suites and 22 executed GLSL graphs, plus Chromium
+integration checks. Next work: byte-frequency population/table, packed pixels,
+occurrence navigation and the selected statistical-provider families. Remaining
+steps are still active; a documented proposal is not an implementation.

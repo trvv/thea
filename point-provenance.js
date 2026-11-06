@@ -4,6 +4,7 @@ const range = (start, endExclusive) => ({ start, endExclusive });
 export function sampleProvenance(job, data, factors, context) {
   const { bytes, spectrum, counts, grid, average, bins, count, available } =
     data;
+  const readByte = data.readByte || ((index) => bytes?.[index]);
   const sample = context.offset,
     absolute = job.offset + sample;
   const end = average
@@ -21,7 +22,7 @@ export function sampleProvenance(job, data, factors, context) {
     return {
       selectionOffset: index,
       sourceOffset: job.offset + index,
-      value: valid ? bytes?.[index] : 0,
+      value: valid ? readByte(index) : 0,
       ...(valid ? {} : { boundary: "zero outside selection" }),
     };
   };
@@ -75,10 +76,12 @@ export function sampleProvenance(job, data, factors, context) {
     const center = job.offset + index,
       start = Math.max(0, center - Math.floor(size / 2));
     const end = Math.min(job.source.size, center + size - Math.floor(size / 2));
-    const values = data.window.data.subarray(
-      start - data.window.start,
-      end - data.window.start,
-    );
+    const values = data.rootRange
+      ? data.rootRange(start, end)
+      : data.window.data.subarray(
+          start - data.window.start,
+          end - data.window.start,
+        );
     const frequencies = new Map();
     for (const byte of values)
       frequencies.set(byte, (frequencies.get(byte) || 0) + 1);
@@ -210,7 +213,7 @@ export function sampleProvenance(job, data, factors, context) {
           selectionOffset: sample,
           ...(population === "bytes"
             ? {
-                byteValue: bytes?.[sample],
+                byteValue: readByte(sample),
                 ...(end > sample + 1
                   ? {
                       sampleRange: range(absolute, job.offset + end),
@@ -220,13 +223,15 @@ export function sampleProvenance(job, data, factors, context) {
                   : {}),
               }
             : {
-                tuple: [
-                  ...bytes.subarray(
-                    sample,
-                    sample + (population === "pairs" ? 2 : 3),
-                  ),
-                ],
-                representative: "first occurrence",
+                tuple: bytes
+                  ? [
+                      ...bytes.subarray(
+                        sample,
+                        sample + (population === "pairs" ? 2 : 3),
+                      ),
+                    ]
+                  : undefined,
+                representative: `${job.configuration.tupleRepresentative || "first"} occurrence`,
               }),
         }),
   };

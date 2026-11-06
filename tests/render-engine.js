@@ -6,10 +6,15 @@ import { RenderCanvas, cellColor } from "./render-canvas.js";
 
 class TestWorker {
   messages = [];
+  cancellations = [];
   canvas = new RenderCanvas();
   cache = {};
   terminated = false;
   postMessage(message) {
+    if (message.cancel !== undefined) {
+      this.cancellations.push(message.cancel);
+      return;
+    }
     this.messages.push(message);
   }
   terminate() {
@@ -142,6 +147,50 @@ const engine = new RenderEngine(canvas, {
   budget: 0,
   workerFactory: () => worker,
 });
+
+// An incompatible request can stop an obsolete chunked worker scan without poisoning calibration.
+{
+  const canceledWorker = new TestWorker();
+  const canceledEngine = new RenderEngine(new RenderCanvas(), {
+    budget: 0,
+    workerFactory: () => canceledWorker,
+  });
+  const first = canceledEngine.render(job);
+  const second = canceledEngine.render({ ...job, offset: job.offset + 1 });
+  const id = canceledWorker.messages[0].id;
+  assert(canceledWorker.cancellations.includes(id));
+  canceledWorker.onmessage({ data: { id, canceled: true } });
+  assert.equal(await first, false);
+  await canceledWorker.complete(1);
+  assert.equal(await second, true);
+  assert(Number.isFinite(canceledEngine.estimate(job)));
+  canceledEngine.cancel();
+}
+
+// A valid worker may reject an analysis budget; that is not a worker capability failure.
+{
+  const rejectedWorker = new TestWorker();
+  const rejectedEngine = new RenderEngine(new RenderCanvas(), {
+    budget: 0,
+    workerFactory: () => rejectedWorker,
+  });
+  const failed = rejectedEngine.render(job);
+  failed.catch(() => {});
+  rejectedWorker.onmessage({
+    data: {
+      id: rejectedWorker.messages[0].id,
+      error: "Provider budget exceeded",
+      jobError: true,
+    },
+  });
+  await assert.rejects(failed, /budget/);
+  assert(rejectedEngine.supported);
+  assert(!rejectedWorker.terminated);
+  const next = rejectedEngine.render(job);
+  await rejectedWorker.complete(1);
+  assert(await next);
+  rejectedEngine.cancel();
+}
 const initial = canvas.snapshot();
 const first = engine.render(job);
 const second = engine.render({ ...job, offset: 64 });
