@@ -212,3 +212,17 @@ configurations, with normal worker routing and explicit GPU fallback.
 Final browser regression evidence: 51 Bun scripts, 25 executed GLSL graphs, and
 Chromium integration checks. The device matrix retains the untested physical-GPU,
 Firefox/Safari and WGSL limitations; those are not represented as passing tests.
+
+### Curve choice resolved
+
+The user requested support for all curve choices. H-curve is now implemented
+alongside Hilbert and Morton, using CantorDust's pinned traversal/orientation as
+the compatibility contract. It uses constant-memory affine descent and shared
+vector expressions, with exact index and CPU/shader contracts. H-Curve, Morton
+and Morton 3D are directly available under Load; existing Hilbert presets remain.
+See [curve coordinates](../curves.md). Earlier H-curve gate entries above record
+the prior planning state and are superseded by this decision and delivery.
+
+The regression set now contains 52 Bun scripts and 29 executed GLSL fixtures.
+Physical-GPU, other-browser and WGSL-device limits remain explicitly recorded,
+without changing the CPU default or claiming unavailable validation.

@@ -481,3 +481,11 @@ step. That validates examples, not every graph or browser integration. WGSL is
 structurally checked but has not been validated on a WebGPU device in this
 workspace. The opt-in WebGL point rasterizer uses prepared CPU results; it does not execute
 these emitted recipe functions. WebGPU drawing and provider compute are not integrated.
+
+## H-curve coordinate expressions
+
+`{op: "hcurve", input: {op: "pointIndex"}, order: 0}` returns a shared vec2.
+Use ordinary component projections or `hCurveCoordinate(axis, input, order)`.
+Its exact-index/scalar/automatic-order convention matches the other explicit
+curve expressions, with order capped at 15. [Curve coordinates](curves.md)
+documents CantorDust-compatible orientation, closure, presets and validation.

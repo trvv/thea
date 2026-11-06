@@ -71,9 +71,14 @@ function coordinateCount(mapping, count, fallback, definitions, depth = 0) {
   if (byteSources.has(factor)) return 256;
   if (
     mapping?.op === "component" &&
-    ["hilbert", "hilbert3d"].includes(mapping.input?.op)
+    ["hilbert", "hilbert3d", "hcurve", "morton"].includes(mapping.input?.op)
   ) {
-    const dimensions = mapping.input.op === "hilbert3d" ? 3 : 2;
+    const dimensions =
+      mapping.input.op === "morton"
+        ? (mapping.input.dimensions ?? 2)
+        : mapping.input.op === "hilbert3d"
+          ? 3
+          : 2;
     return (
       2 **
       (mapping.input.order ||

@@ -17,7 +17,10 @@ session-only token. Bookmarks for a different identity remain unavailable until
 that source is loaded; no local path is reopened automatically. The bounded
 library is `thea.bookmarks`, independent from presets and source bytes.
 
-`host.setSourceMetadata({segments, annotations})` accepts source-bound metadata:
+Advanced → Source Metadata imports, edits or clears JSON mappings and annotations.
+Metadata files are bounded to 16 MiB before reading; native validation happens
+before state changes. `host.setSourceMetadata({segments, annotations})` also accepts
+source-bound metadata programmatically:
 
 ```js
 host.setSourceMetadata({

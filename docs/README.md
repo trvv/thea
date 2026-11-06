@@ -71,6 +71,8 @@ factors remain freely mixable with positions and other analyses. RGB is an
 appearance choice, not a dedicated painter. See [device evidence](device-matrix.md)
 for actual acceleration/browser coverage.
 
+- [Curve coordinates](curves.md): Hilbert, Morton and H-curve semantics, presets and exact indices.
+
 ## Read next
 
 - [Architecture and source map](architecture.md): ownership, element APIs,

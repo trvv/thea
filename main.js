@@ -22,6 +22,7 @@ import * as referenceModels from "./reference-models.js";
 import * as bookmarks from "./bookmarks.js";
 import { validateSourceMetadata } from "./source-metadata.js";
 import { validateDensity } from "./density.js";
+import { curveTemplate } from "./curve-templates.js";
 import { assertProviderBudget } from "./provider-budget.js";
 import { dimensionNames, defaultDimension, pointGrid } from "./dimensions.js";
 import { validateProfile, parseProfile } from "./profiles.js";
@@ -1960,6 +1961,8 @@ export class DataScroll extends HTMLElement {
       else if (library.selected?.startsWith("builtin:")) {
         const name = library.selected.slice(8);
         if (name === "byte-frequency") this.applyTemplate(byteFrequencyTable());
+        else if (["hcurve", "morton2d", "morton3d"].includes(name))
+          this.applyTemplate(curveTemplate(name));
         else if (name.startsWith("pixels-"))
           this.applyTemplate(packedPixels({ format: name.slice(7) }));
         else this.editingView.applyPreset(name);
@@ -2085,6 +2088,17 @@ export class DataScroll extends HTMLElement {
               presetLibrary.selectPreset("builtin:byte-frequency");
             }),
           },
+          ...[
+            ["hcurve", "H-Curve"],
+            ["morton2d", "Morton"],
+            ["morton3d", "Morton 3D"],
+          ].map(([name, label]) => ({
+            label,
+            action: action(() => {
+              this.applyTemplate(curveTemplate(name));
+              presetLibrary.selectPreset(`builtin:${name}`);
+            }),
+          })),
           {
             label: "Packed Pixels",
             items: Object.keys(pixelFormats).map((format) => ({
@@ -2186,6 +2200,8 @@ export class DataScroll extends HTMLElement {
         action: action(async () => {
           const file = await chooseFile(".json,application/json");
           if (!file) return;
+          if (file.size > 4 * 1048576)
+            throw new RangeError("Preset JSON exceeds 4 MiB");
           const value = presetLibrary.parsePreset(await file.text());
           return name("Preset name", unusedName(value.name), (name) => {
             const entry = presetLibrary.savePreset({ ...value, name });
@@ -2222,20 +2238,18 @@ export class DataScroll extends HTMLElement {
         if (!source) throw new Error("No source is loaded");
         assertProviderBudget(
           { configuration: view.pointConfiguration },
-          length + 256 ** order * 16,
+          Math.min(length, 65536) + 256 ** order * 64,
           "Reference training",
         );
         const current = () =>
           view.source === source &&
           view.offset === offset &&
           view.length === length;
-        const bytes = new Uint8Array(
-          await source.slice(offset, offset + length).arrayBuffer(),
-        );
-        if (!current()) return;
-        const model = await referenceModels.trainReference(
+        const model = await referenceModels.trainReferenceSource(
           {
-            bytes,
+            source,
+            start: offset,
+            end: offset + length,
             name,
             order,
             provenance: {
@@ -2269,8 +2283,8 @@ export class DataScroll extends HTMLElement {
       {
         label: "Train Selection",
         items: [
-          { label: "Bytes", action: () => train(1) },
-          { label: "Pairs", action: () => train(2) },
+          { label: "Bytes", historyAction: true, action: () => train(1) },
+          { label: "Pairs", historyAction: true, action: () => train(2) },
         ],
       },
       ...models.map((model) => ({
@@ -2304,6 +2318,10 @@ export class DataScroll extends HTMLElement {
         action: () =>
           this.presetAction(async () => {
             const file = await chooseFile(".json,application/json");
+            if (file && file.size > referenceModels.defaultLibraryBudget)
+              throw new RangeError(
+                "Reference artifact exceeds its JSON budget",
+              );
             if (file)
               referenceModels.saveModel(
                 referenceModels.parseModel(await file.text()),
@@ -2737,6 +2755,52 @@ export class DataScroll extends HTMLElement {
       {
         label: "Advanced",
         items: [
+          {
+            label: "Source Metadata",
+            items: [
+              {
+                label: "Import File",
+                action: () =>
+                  this.presetAction(async () => {
+                    const source = this.source;
+                    if (!source) throw new Error("No source is loaded");
+                    const file = await chooseFile(".json,application/json");
+                    if (!file) return;
+                    if (file.size > 16 * 1048576)
+                      throw new RangeError("Source metadata exceeds 16 MiB");
+                    const value = JSON.parse(await file.text());
+                    if (this.source === source) this.setSourceMetadata(value);
+                  }),
+              },
+              {
+                label: "Edit JSON",
+                action: () =>
+                  this.presetAction(() => {
+                    const json = globalThis.prompt?.(
+                      "Source metadata JSON",
+                      JSON.stringify(
+                        this.view.sourceMetadata || {
+                          segments: [],
+                          annotations: [],
+                        },
+                        null,
+                        2,
+                      ),
+                    );
+                    if (json !== null && json !== undefined)
+                      this.setSourceMetadata(JSON.parse(json));
+                  }),
+              },
+              {
+                label: "Clear",
+                disabled: !this.view.sourceMetadata,
+                action: () => {
+                  this.setSourceMetadata({ segments: [], annotations: [] });
+                  this.refreshMenu();
+                },
+              },
+            ],
+          },
           { label: "References", items: this.referenceItems() },
           { label: "Bookmarks", items: this.bookmarkItems() },
           {

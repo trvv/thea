@@ -208,7 +208,7 @@ if (
     ["Bars", "Sample Limit", "Footprint", "Backend"].includes(item.label),
   ) ||
   String(menu.at(-1).items.map((item) => item.label)) !==
-    "References,Bookmarks,Open File,Comparison View,Undo,Redo,Edit Profile JSON,Bars,Sample Limit,Provider Budget (MiB),Footprint,Backend"
+    "Source Metadata,References,Bookmarks,Open File,Comparison View,Undo,Redo,Edit Profile JSON,Bars,Sample Limit,Provider Budget (MiB),Footprint,Backend"
 )
   throw Error("Advanced controls are misplaced");
 bars().action(2);
@@ -1056,4 +1056,49 @@ if (editor.view.sourceMetadata || editor.exactSelectionLength !== undefined)
   throw Error("New source retained annotations/bookmark scope");
 console.log(
   "Source ranges/annotations pass: exact restored intervals and source-bound metadata cleanup.",
+);
+
+// All curve templates coexist under Load and survive refresh without introducing renderer enums.
+const curveStorageDescriptor = Object.getOwnPropertyDescriptor(
+  globalThis,
+  "localStorage",
+);
+const curveStorage = new Map();
+Object.defineProperty(globalThis, "localStorage", {
+  configurable: true,
+  value: {
+    getItem: (key) => curveStorage.get(key) ?? null,
+    setItem: (key, value) => curveStorage.set(key, value),
+  },
+});
+try {
+  for (const [label, operation] of [
+    ["H-Curve", "hcurve"],
+    ["Morton", "morton"],
+    ["Morton 3D", "morton"],
+  ]) {
+    const host = new DataScroll(source, 65);
+    const load = host
+      .contextItems()
+      .find((item) => item.label === "Preset")
+      .items.find((item) => item.label === "Load");
+    await load.items.find((item) => item.label === label).action();
+    if (host.view.pointConfiguration.position[0].input.op !== operation)
+      throw Error("Curve template did not apply");
+    const restored = new DataScroll(source, 65);
+    if (restored.view.pointConfiguration.position[0].input.op !== operation)
+      throw Error("Curve template was not restored");
+    if (
+      label === "Morton 3D" &&
+      restored.view.pointConfiguration.space !== "cube"
+    )
+      throw Error("3D Morton space was lost");
+  }
+} finally {
+  if (curveStorageDescriptor)
+    Object.defineProperty(globalThis, "localStorage", curveStorageDescriptor);
+  else delete globalThis.localStorage;
+}
+console.log(
+  "Curve preset menus pass: H-curve/Morton coexist, normal configuration and refresh restoration.",
 );

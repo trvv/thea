@@ -322,6 +322,12 @@ try {
     const assert=(condition,message)=>{if(!condition)throw Error(message)};
     const host=new DataScroll(new Blob([Uint8Array.from([255,0,0,255,0,255,0,255,0,0,255,255,255,255,255,255])]),16);
     host.barCount=0;document.body.append(host);
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    for(const [label,operation] of [['H-Curve','hcurve'],['Morton','morton'],['Morton 3D','morton']]){
+      const load=host.contextItems().find(item=>item.label==='Preset').items.find(item=>item.label==='Load');
+      await load.items.find(item=>item.label===label).action();await host.view.render();
+      assert(host.view.renderer.presentedJob.configuration.position[0].input.op===operation,'Curve preset did not render '+label);
+    }
     host.applyTemplate(packedPixels({format:'rgba32',width:2}));
     await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
     await host.view.render();

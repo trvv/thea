@@ -40,6 +40,43 @@ const pair = await references.trainReference({
   name: "Pairs",
   order: 2,
 });
+const streamedBytes = Uint8Array.from(
+  { length: 150000 },
+  (_, index) => (index * 17) % 251,
+);
+const streamSource = new Blob([streamedBytes]);
+const reads = [];
+const trackedSource = {
+  size: streamSource.size,
+  slice(start, end) {
+    reads.push([start, end]);
+    return streamSource.slice(start, end);
+  },
+};
+for (const order of [1, 2]) {
+  const streamed = await references.trainReferenceSource({
+    source: trackedSource,
+    start: 13,
+    end: 140013,
+    order,
+    name: "Streamed",
+  });
+  const buffered = await references.trainReference({
+    bytes: streamedBytes.subarray(13, 140013),
+    order,
+    name: "Buffered",
+  });
+  assert.deepEqual(streamed.counts, buffered.counts);
+  assert.equal(streamed.training.itemCount, buffered.training.itemCount);
+}
+assert(reads.every(([start, end]) => end - start <= 65536));
+await assert.rejects(
+  references.trainReferenceSource({
+    source: { size: 10, slice: () => new Blob() },
+    name: "Short",
+  }),
+  /ended/,
+);
 assert.equal(pair.counts[258], 2);
 assert.equal(pair.counts[513], 1);
 assert.throws(() => references.scoreReferences([low, pair], heldOut), /order/);

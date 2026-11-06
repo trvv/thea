@@ -1,5 +1,6 @@
 /** Exact user-trained reference distributions and versioned, source-independent model artifacts. */
 import { scanChunkSize, yieldScan } from "./scan.js";
+import { readProviderBytes } from "./provider-diagnostics.js";
 
 export const storageKey = "thea.referenceModels";
 export const defaultLibraryBudget = 1024 * 1024;
@@ -145,6 +146,67 @@ export async function trainReference(
     training: {
       byteCount: bytes.length,
       itemCount: bytes.length - order + 1,
+      provenance: trainingProvenance,
+    },
+  });
+}
+
+/** Fit a Blob interval without allocating the complete training selection. */
+export async function trainReferenceSource(
+  {
+    source,
+    start = 0,
+    end = source.size,
+    name,
+    order = 1,
+    priorMass = 1,
+    provenance,
+    id,
+  },
+  current = () => true,
+) {
+  integer(start, 0, source.size, "training start");
+  integer(end, start, source.size, "training end");
+  integer(order, 1, 2, "reference order");
+  if (end - start < order)
+    throw new TypeError("Reference training needs a complete item");
+  name = nameOf(name);
+  priorMass = priorOf(priorMass);
+  const trainingProvenance = provenanceOf(
+    provenance ?? { sourceRange: { start, endExclusive: end } },
+    end - start,
+  );
+  if (!current()) return null;
+  const counts = new Float64Array(256 ** order);
+  let previous = 0,
+    seen = 0;
+  for (let offset = start; offset < end;) {
+    const limit = Math.min(end, offset + scanChunkSize);
+    const bytes = await readProviderBytes(source, offset, limit);
+    if (!current()) return null;
+    if (bytes.length !== limit - offset)
+      throw new Error("Training source ended before its declared size");
+    for (const byte of bytes) {
+      if (order === 1) counts[byte]++;
+      else if (seen) counts[previous * 256 + byte]++;
+      previous = byte;
+      seen++;
+    }
+    offset = limit;
+    if (offset < end && !(await yieldScan(current))) return null;
+  }
+  if (!current()) return null;
+  return validateModel({
+    version: 1,
+    id: id ?? `reference:${token()}`,
+    revision: token(),
+    name,
+    order,
+    priorMass,
+    counts: [...counts],
+    training: {
+      byteCount: end - start,
+      itemCount: end - start - order + 1,
       provenance: trainingProvenance,
     },
   });
@@ -352,8 +414,7 @@ export function deleteModel(
   writeLibrary(library, storage, maxBytes);
   return model;
 }
-export const serializeModel = (model) =>
-  JSON.stringify(validateModel(model), null, 2);
+export const serializeModel = (model) => JSON.stringify(validateModel(model));
 export function parseModel(json, { maxBytes = defaultLibraryBudget } = {}) {
   if (typeof json !== "string")
     throw new TypeError("Reference JSON must be a string");

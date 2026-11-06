@@ -147,7 +147,11 @@ export async function inspectPoint(
         };
         if (node.op === "factor")
           entry.source = provenance.describeFactor(node.name);
-        if (node.op === "hilbert" || node.op === "hilbert3d") {
+        if (
+          node.op === "hilbert" ||
+          node.op === "hilbert3d" ||
+          node.op === "hcurve"
+        ) {
           const dimensions = node.op === "hilbert3d" ? 3 : 2,
             exact = program.nodes[node.args[0]].type === "index";
           const size =
@@ -159,7 +163,11 @@ export async function inspectPoint(
               Math.ceil(Math.log2(Math.max(1, size)) / dimensions),
             );
           const cells = 2 ** (entry.resolvedOrder * dimensions),
-            input = nodes[node.args[0]].value;
+            input =
+              node.op === "hcurve" &&
+              !Number.isFinite(nodes[node.args[0]].value)
+                ? 0
+                : nodes[node.args[0]].value;
           entry.curveIndex = exact
             ? Math.max(0, Math.min(cells - 1, input))
             : Math.min(

@@ -19,7 +19,9 @@ validate before publication. Profiles store model IDs, not large model tables;
 export/import the reference artifacts alongside presets that use them. A missing
 model is an explicit analysis error and does not silently become a zero score.
 
-`trainReference` yields between bounded chunks. `prepareReference` builds one
+`trainReference` yields between bounded chunks; the browser uses
+`trainReferenceSource` to read Blob intervals in 64 KiB chunks, carrying pair
+boundaries without allocating the entire selection. `prepareReference` builds one
 log-probability table per artifact revision, while the provider prepares only
 requested score windows. Models and windows are shared across projections.
 Source reads and model/result estimates participate in provider budgets. The

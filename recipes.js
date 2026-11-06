@@ -5,6 +5,7 @@
  * @see docs/recipes.md
  */
 import { hilbert3D, hilbert3DMaxOrder } from "./hilbert.js";
+import { hCurve } from "./hcurve.js";
 import { spaces } from "./spaces.js";
 import { numericParameters, spanAvailable } from "./numeric-interpretation.js";
 import { analysisParameters } from "./analysis-parameters.js";
@@ -35,6 +36,11 @@ export const constant = (value) => ({ op: "constant", value });
  * Use an explicit reference node so a custom name cannot shadow a built-in factor string.
  */
 export const reference = (name) => ({ op: "ref", name });
+export const hCurveCoordinate = (
+  component,
+  input = { op: "pointIndex" },
+  order = 0,
+) => ({ op: "component", component, input: { op: "hcurve", input, order } });
 /**
  * Return a scalar projection of a shared vec2 expression; X and Y can intern the same Hilbert
  * operation even after serialization.
@@ -272,9 +278,10 @@ export function compileRecipes(roots, definitions = {}) {
         break;
       case "linear":
       case "hilbert":
+      case "hcurve":
         args = [scalar(child("input"))];
         type = "vec2";
-        if (op === "hilbert") {
+        if (op === "hilbert" || op === "hcurve") {
           params.order = expression.order ?? 0;
           if (
             !Number.isInteger(params.order) ||
@@ -282,7 +289,7 @@ export function compileRecipes(roots, definitions = {}) {
             params.order > 15
           )
             throw new TypeError(
-              "Hilbert order must be between 0 (automatic) and 15",
+              "Curve order must be between 0 (automatic) and 15",
             );
         }
         break;
@@ -602,6 +609,7 @@ export function compileRecipes(roots, definitions = {}) {
                 values[target + axis] = (values[target + axis] + 0.5) / side;
             };
           case "hilbert":
+          case "hcurve":
             return (_, context) => {
               const exact = nodes[node.args[0]].type === "index";
               const count = exact
@@ -614,6 +622,20 @@ export function compileRecipes(roots, definitions = {}) {
                     15,
                     Math.ceil(Math.log2(Math.sqrt(Math.max(1, count)))),
                   ));
+              if (node.op === "hcurve") {
+                const index = exact
+                  ? Math.max(0, Math.min(side * side - 1, values[a]))
+                  : Math.min(
+                      side * side - 1,
+                      Math.floor(
+                        (Number.isFinite(values[a]) ? clamp(values[a]) : 0) *
+                          side *
+                          side,
+                      ),
+                    );
+                hCurve(index, Math.log2(side), values, target);
+                return;
+              }
               let remaining = exact
                   ? Math.max(0, Math.min(side * side - 1, values[a]))
                   : Math.min(
@@ -738,6 +760,8 @@ export function recipeLabel(expression) {
       return `Morton${expression.dimensions ?? 2}D(${input()})`;
     case "hilbert":
       return `Hilbert(${input()})`;
+    case "hcurve":
+      return `H-Curve(${input()})`;
     case "linear":
       return `Linear(${input()})`;
     case "byte":

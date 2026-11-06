@@ -15,6 +15,7 @@ import {
   constant,
   reference,
   hilbertCoordinate,
+  hCurveCoordinate,
   hilbert3DCoordinate,
   mortonCoordinate,
   recipeLabel,
@@ -224,6 +225,13 @@ export function recipeMenu(label, value, definitions, change, save, depth = 0) {
       action: () => set(hilbertCoordinate(component, expression)),
     })),
     {
+      label: "H-Curve",
+      items: axes.slice(0, 2).map(({ value: component, label }) => ({
+        label,
+        action: () => set(hCurveCoordinate(component, expression)),
+      })),
+    },
+    {
       label: "Hilbert 3D",
       items: axes.map(({ value: component, label }) => ({
         label,
@@ -278,7 +286,11 @@ export function recipeMenu(label, value, definitions, change, save, depth = 0) {
           (component) => set({ ...expression, component }),
         ),
       );
-      if (["hilbert", "hilbert3d", "morton"].includes(expression.input.op))
+      if (
+        ["hilbert", "hilbert3d", "morton", "hcurve"].includes(
+          expression.input.op,
+        )
+      )
         parameters.push({
           label: "Order",
           input: "number",
@@ -295,7 +307,7 @@ export function recipeMenu(label, value, definitions, change, save, depth = 0) {
             set({ ...expression, input: { ...expression.input, order } }),
         });
       if (
-        ["hilbert", "hilbert3d", "linear", "morton"].includes(
+        ["hilbert", "hilbert3d", "linear", "morton", "hcurve"].includes(
           expression.input.op,
         )
       )

@@ -9,6 +9,7 @@ import {
   hilbertCoordinate,
   hilbert3DCoordinate,
   mortonCoordinate,
+  hCurveCoordinate,
 } from "../recipes.js";
 import { emitRecipeShader } from "../recipe-shaders.js";
 import { numericResult } from "../numeric-interpretation.js";
@@ -222,6 +223,43 @@ cases.morton2D = {
   x: mortonCoordinate(0),
   y: mortonCoordinate(1),
   z: constant(0),
+  w: constant(1),
+};
+cases.hcurve = {
+  x: hCurveCoordinate(0),
+  y: hCurveCoordinate(1),
+  z: constant(0),
+  w: constant(1),
+};
+cases.hcurveScalar = {
+  x: hCurveCoordinate(0, "position", 3),
+  y: hCurveCoordinate(1, "position", 3),
+  z: constant(0),
+  w: constant(1),
+};
+const largeCurveIndex = {
+  op: "add",
+  a: { op: "pointIndex" },
+  b: { op: "multiply", a: { op: "pointCount" }, b: constant(262144) },
+};
+const curveAmplify = (component) => ({
+  op: "fract",
+  input: {
+    op: "multiply",
+    a: hCurveCoordinate(component, largeCurveIndex, 15),
+    b: constant(4096),
+  },
+});
+cases.hcurveLarge = {
+  x: curveAmplify(0),
+  y: curveAmplify(1),
+  z: constant(0),
+  w: constant(1),
+};
+cases.hcurveEndpoints = {
+  x: hCurveCoordinate(0, constant(1), 15),
+  y: hCurveCoordinate(1, constant(1), 15),
+  z: hCurveCoordinate(0, constant(-1), 15),
   w: constant(1),
 };
 cases.morton3D = {

@@ -469,6 +469,53 @@ return (${vector3}(axes) + ${vector3}(0.5)) / ${scalar}(${side});`,
         expression = `recipeHilbert3D(${index}, ${order})`;
         break;
       }
+      case "hcurve": {
+        const variable = (name, value) =>
+          wgsl
+            ? `var ${name}: ${integer} = ${value};`
+            : `${integer} ${name} = ${value};`;
+        const body = [
+          variable("t", "index"),
+          variable("n", "side"),
+          variable("x", "0"),
+          variable("y", "0"),
+          variable("sx", "1"),
+          variable("sy", "1"),
+          `for (${variable("level", "0")} level < 16; level++) {`,
+          declaration(integer, "triangle", "n * n / 2"),
+          "if (n > 1 && t >= triangle) { x += sx * (n - 1); y += sy * (n - 1); sx = -sx; sy = -sy; t -= triangle; }",
+          "if (t < 2) { y += sy * t; break; }",
+          declaration(integer, "part", "4 * t / triangle"),
+          "if (part == 1) { t = triangle / 2 - 1 - t; y += sy * (n - 1); sy = -sy; }",
+          "else if (part == 2) { t = 3 * triangle / 4 - 1 - t; x += sx * (n / 2 - 1); sx = -sx; y += sy * (n / 2); }",
+          "else if (part == 3) { t -= 3 * triangle / 4; x += sx * (n / 2); y += sy * (n / 2); }",
+          "n /= 2;",
+          "}",
+          `return (${vector}(${scalar}(x), ${scalar}(y)) + ${vector}(0.5)) / ${scalar}(side);`,
+        ].join("\n");
+        helpers.set(
+          "hcurve",
+          fn(
+            vector,
+            "recipeHCurve",
+            [
+              [integer, "index"],
+              [integer, "side"],
+            ],
+            body,
+          ),
+        );
+        const exact = program.nodes[node.args[0]].type === "index";
+        const count = exact ? "pointCount" : "selectionLength";
+        const side = node.order
+          ? String(2 ** node.order)
+          : `${integer}(exp2(min(15.0, ceil(log2(sqrt(max(1.0, ${scalar}(${count}))))))))`;
+        const index = exact
+          ? `clamp(r${node.args[0]}, 0, (${side}) * (${side}) - 1)`
+          : `min((${side}) * (${side}) - 1, ${integer}(floor(${unit(a)} * ${scalar}((${side}) * (${side})))))`;
+        expression = `recipeHCurve(${index}, ${side})`;
+        break;
+      }
       case "hilbert": {
         const variable = (type, name, value) =>
           wgsl
