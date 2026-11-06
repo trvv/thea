@@ -152,3 +152,8 @@ all-contribution mode, plus 8 for percentile references and 1 for front ownershi
 Unused buffers are released when switching options. At 1080p, fixed/all storage
 is about 71 MiB; default percentile/all is about 87 MiB. Budgets use the same
 option-dependent allocation estimate.
+
+Adaptive resolution is now opt-in under Advanced → Adaptive Resolution, saved
+with each preset. Missing settings in older profiles mean disabled. Normal 3D
+interaction keeps full resolution; enabling the flag restores the existing
+feedback controller and idle restoration. Point sampling remains independent.

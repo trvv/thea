@@ -87,6 +87,13 @@ assert.equal(jobs.at(-1).columns, 3600);
 assert.equal(jobs.at(-1).rows, 2000);
 assert.equal(jobs.at(-1).pointScale, 2);
 
+view.noteMovement();
+assert.equal(view.resolution.moving, false);
+view.pointConfiguration = {
+  ...view.pointConfiguration,
+  adaptiveResolution: true,
+};
+
 // Deterministic input-idle timers and animation frames avoid timing-sensitive tests.
 const nativeSetTimeout = globalThis.setTimeout,
   nativeClearTimeout = globalThis.clearTimeout;

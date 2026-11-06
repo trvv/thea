@@ -48,6 +48,7 @@ export function presetConfiguration(
             ? "bins"
             : "bytes",
     backend: "cpu",
+    adaptiveResolution: false,
     footprint: ["linear", "hilbert", "hilbert3d"].includes(region)
       ? "grid"
       : "point",
@@ -120,6 +121,9 @@ export function validateConfiguration(configuration) {
     !["first", "last"].includes(tupleRepresentative)
   )
     throw new TypeError("Unknown tuple representative");
+  const adaptiveResolution = configuration.adaptiveResolution ?? false;
+  if (typeof adaptiveResolution !== "boolean")
+    throw new TypeError("Adaptive resolution must be a boolean");
   const backend = configuration.backend ?? "cpu";
   if (!["cpu", "webgl"].includes(backend))
     throw new TypeError("Unknown point backend");
@@ -170,6 +174,7 @@ export function validateConfiguration(configuration) {
     throw new TypeError("Invalid position direction");
   return {
     backend,
+    adaptiveResolution,
     ...(providerBudget === undefined ? {} : { providerBudget }),
     population,
     ...recordParameters,

@@ -25,6 +25,7 @@ export function preparationKey(job) {
     : undefined;
   if (configuration) {
     delete configuration.backend;
+    delete configuration.adaptiveResolution;
     delete configuration.footprint;
   }
   return JSON.stringify([
@@ -50,7 +51,8 @@ export function presentationKey(job) {
 
 /** Color, shape, size, encoding, backend, and footprint do not alter world coordinates. */
 export function geometryKey(job) {
-  const { backend, footprint, ...configuration } = job.configuration;
+  const { backend, footprint, adaptiveResolution, ...configuration } =
+    job.configuration;
   return JSON.stringify([
     job.sourceId,
     job.offset,

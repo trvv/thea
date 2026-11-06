@@ -165,3 +165,20 @@ assert.equal(
 console.log(
   "Point configuration checks pass: all 25 preset/space combinations, factor reuse, inversion, validation, camera cache, scrolling, text, layouts, cancellation.",
 );
+
+assert.equal(presetConfiguration("trigraph").adaptiveResolution, false);
+assert.equal(
+  validateConfiguration({
+    ...presetConfiguration("trigraph"),
+    adaptiveResolution: true,
+  }).adaptiveResolution,
+  true,
+);
+assert.throws(
+  () =>
+    validateConfiguration({
+      ...presetConfiguration("trigraph"),
+      adaptiveResolution: "yes",
+    }),
+  /boolean/,
+);

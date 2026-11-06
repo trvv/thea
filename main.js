@@ -814,7 +814,7 @@ export class DataScrollView extends ByteCanvas {
    * stops.
    */
   noteMovement() {
-    if (!this.spatial) return;
+    if (!this.spatial || !this.pointConfiguration.adaptiveResolution) return;
     this.resolution.touch();
     clearTimeout(this.resolutionTimer);
     this.resolutionTimer = setTimeout(() => {
@@ -1402,7 +1402,11 @@ export class DataScrollView extends ByteCanvas {
     }
     const { columns, rows } = layout;
     const resolutionScale =
-      this.spatial && this.resolution.moving ? this.resolution.scale : 1;
+      this.spatial &&
+      this.pointConfiguration.adaptiveResolution &&
+      this.resolution.moving
+        ? this.resolution.scale
+        : 1;
     try {
       const program = compileRecipes(
         recipeRoots(this.pointConfiguration, this.effectiveAppearance),
@@ -2908,6 +2912,12 @@ export class DataScroll extends HTMLElement {
             options(["grid", "point"]),
             (footprint) => change({ footprint }),
           ),
+          {
+            label: "Adaptive Resolution",
+            checked: config.adaptiveResolution,
+            action: () =>
+              change({ adaptiveResolution: !config.adaptiveResolution }),
+          },
           choose(
             "Backend",
             config.backend,

@@ -227,6 +227,7 @@ try {
   assert(view.effectiveAppearance.lightness==='value'&&view.pointConfiguration.position[2].input.op==='hilbert3d','Hilbert 3D preset lost its coordinate or shading mappings');
   view.pointConfiguration={...view.pointConfiguration,sampleLimit:64};await view.render();
   const range=[view.offset,view.length];
+  view.pointConfiguration={...view.pointConfiguration,adaptiveResolution:true};
   view.noteMovement();view.resolution.scale=0.5;await view.render();
   assert(view.offset===range[0]&&view.length===range[1],'Quality changed selection');
   assert(view.resolvedSampleLayout.columns*view.resolvedSampleLayout.rows<=64,'Sample budget exceeded');
