@@ -156,6 +156,7 @@ sentinel, not an arithmetic expression; use a constant inside a recipe.
 | `byte`                                  | `offset`                                                   | Raw byte at a floored, selection-relative offset; outside the selection returns zero.        |
 | `available`                             | `offset`, `width`                                          | One if the complete selected byte span is available; zero otherwise, without reading bytes.  |
 | `number`                                | `offset`, `format`, `endian`, `kind`, optional `min`/`max` | Native numeric interpretation normalized/classified before float32 display conversion.       |
+| `analysis`                              | `offset`, `family`, `kind`, family parameters              | Explicit selected-scope conditional, lag, distribution or bit statistics.                    |
 | `entropy`                               | `offset`, `window`                                         | Local normalized entropy at an explicit byte offset.                                         |
 | `spectrum`                              | `input`, `kind`                                            | Sample normalized one-sided spectrum position; kind is `phase`, `frequency`, or `amplitude`. |
 | `linear`                                | `input`                                                    | vec2 cell center from a normalized traversal input and current sample grid.                  |
@@ -203,8 +204,8 @@ const word = {
 };
 ```
 
-`number` uses native DataView reads for `uint16`, `int16`, `uint32`, `int32` and
-`float32`, with `little` (default) or `big` byte order. Addresses are floored,
+`number` uses native DataView reads for `uint16`, `int16`, `uint32`, `int32`, `uint64`, `int64`, `float32` and
+`float64`, with `little` (default) or `big` byte order. Addresses are floored,
 selection-relative, and need no alignment. An incomplete span returns zero for
 every projection, including `valid`. Reading actual addressed bytes is separate
 from averaging a rendered sample's byte values. Numeric recipes currently use
@@ -212,7 +213,7 @@ the dense byte provider; they do not add an FFT or histogram dependency.
 
 The default projection, `normalized`, computes the decoded Number's mapping to
 the given finite increasing bounds **before** float32 conversion. Integers default
-to their full type range. Float32 requires explicit bounds. Numeric bounds may
+to their full type range. Floating formats require explicit bounds. Numeric bounds may
 exceed the ordinary expression parameter limit of one million; only this operation
 has that exception. The range difference must remain finite. Thus adjacent large
 uint32 values can map distinctly under a narrow range, rather than being rounded
@@ -221,13 +222,43 @@ uint32 scalar through the float32 arithmetic IR.
 
 Other projections are `valid`, `finite`, `nan`, `infinite`, `negativeZero` and
 `sign`. `valid` means a complete span, independently of whether its decoded float
-is finite. Float32 `sign` exposes its sign bit (including negative NaNs/zero);
+is finite. Floating `sign` exposes its sign bit (including negative NaNs/zero);
 integer `sign` is one for a negative value. Float32 additionally exposes
 `exponent` (raw eight-bit exponent divided by 255) and `fraction` (raw 23-bit
-fraction divided by 8,388,607). Nonfinite `normalized` results are zero; their
+fraction divided by 8,388,607). Float64 exposes its eleven-bit exponent divided
+by 2047 and its 52-bit fraction divided by 4,503,599,627,370,495. Nonfinite `normalized` results are zero; their
 classification can control opacity independently. Inspection preserves exact
 integer values, special-float strings, raw bits and contributing bytes. Float64
-and integer64 remain separate future work.
+normalization also runs before visual float32 rounding, allowing a narrow range
+to distinguish neighboring doubles that would otherwise collapse.
+
+For `uint64` and `int64`, normalization bounds are canonical decimal **strings**
+within the chosen type's full range. Numbers and JavaScript BigInt parameters are
+rejected, so saved recipes remain JSON-safe. Defaults are `"0"` through
+`"18446744073709551615"` for uint64 and `"-9223372036854775808"` through
+`"9223372036854775807"` for int64. Subtraction occurs in exact BigInt arithmetic
+before converting the nonnegative numerator/range to Number for the visual ratio.
+No raw 64-bit integer is routed through a float32 scalar. Inspection uses exact
+raw decimal strings and sixteen-digit bit hex; negative zero/NaNs/infinities and
+float64 payload bits remain distinct. Native text fields preserve long decimal
+bounds without numeric input coercion.
+
+```js
+const adjacent64 = {
+  op: "number",
+  offset: { op: "offset" },
+  format: "uint64",
+  min: "18446744073709551614",
+  max: "18446744073709551615",
+};
+```
+
+The final visual ratio still has float32 precision. Full-range normalization is
+not a way to display all 2^64 distinct integers at once; use narrow bounds for
+small differences and inspect raw values for exact evidence. Shader provider
+bindings carry the string bounds unchanged and require a host-supplied normalized
+projection. Generated shader interfaces do not imply native GPU float64/int64
+arithmetic or storage support.
 
 The menu exposes Available Span and Read Number under Transform. Numeric format,
 byte order, projection and normalization bounds remain ordinary expression data.
@@ -256,6 +287,53 @@ expressions, independent of population, source order and other analyses. Morton
 does not preserve Hilbert's neighboring-cell adjacency. Menus expose Morton 2D/3D
 and editable order; H-curve remains deferred pending a complete algorithm contract.
 
+### Statistical analyses
+
+`analysis` has an explicit selection-relative byte address and a serialized
+definition independent of point population, space, camera and rendered sample
+count. The menu exposes its analysis families under Transform → Statistical Analysis.
+All currently support `scope: "selection"`; root-source or external training
+scope is rejected rather than silently changing the measured interval.
+
+```js
+const surprise = {
+  op: "analysis",
+  family: "conditional",
+  kind: "surprise",
+  offset: { op: "offset" },
+  scope: "selection",
+  alpha: 1 / 256,
+};
+const hue = { op: "normalize", input: surprise, min: 0, max: 16 };
+```
+
+| Family         | Parameters                                                                                                            | Projections                                                                                        |
+| -------------- | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `conditional`  | Positive finite `alpha` up to one million, default `1/256`.                                                           | `probability` (default), `surprise` in bits, `valid`.                                              |
+| `lag`          | Positive `lag` up to one million, default one; `window` 0–4096, default 32. Window zero requests the whole selection. | `equality` (default), `difference` divided by 255, raw `information` in bits, `pairs`, `valid`.    |
+| `distribution` | `window` 1–4096, default 32; `gap` 0–one million, default zero.                                                       | `variation` (default total variation), `divergence` (base-two Jensen–Shannon divergence), `valid`. |
+| `bit`          | `window` 1–4096, default 32; `bit` 0–7, default zero.                                                                 | `bias` (default), binary `entropy`, `count` of set bits, `valid`.                                  |
+| `repetition`   | Exact four-byte nearest match; `history`, `overlap`, `maxLength`.                                                     | `distance` (default), `length`, `valid`.                                                           |
+| `spectral`     | Explicit frame/window/hop/origin/taper/preprocessing/edge/DC and frequency band.                                      | `energy` (default), `valid`, `power`, `totalPower`.                                                |
+| `occurrence`   | Exact width-one/two/three counts and fixed/percentile exposure reference.                                             | `count` (default), `probability`, `exposure`, `valid`.                                             |
+
+Raw surprise, mutual information and counts remain raw intermediate scalars;
+normalize them deliberately before a terminal display channel clamps to 0–1.
+Conditional validity distinguishes the first selected byte from a valid zero
+surprise. Lag comparisons include only real pairs and keep the numeric-difference
+and categorical-information questions separate. Distribution windows normalize
+their clipped populations independently; empty contributing windows are invalid.
+Bit bias distinguishes stable zero/one values even though both have zero entropy.
+
+The compiler declares canonical provider requests only for reachable operations.
+Provider preparation can share models/windows across projections; it must not run
+a full model fit inside every scalar instruction. `context.analysis(index, node)`
+returns the chosen projection. Inspection preserves model/window ranges, raw
+counts, clipping, validity and normalization parameters independently of a display
+mapping. These are not new exclusive analysis domains or dedicated painters.
+
+See [nonlocal analyses](nonlocal-analyses.md) for repetition, local spectra and complex global-spectrum interpolation contracts.
+
 ### Local entropy boundaries
 
 `entropy` uses surrounding root-file bytes where available, including outside the
@@ -279,7 +357,7 @@ running an FFT.
 
 Built-in spectral factors use the sample's relative byte offset to choose a bin;
 explicit spectrum recipes can define a different relationship. This is not a
-localized FFT or a claim that a coefficient describes one particular byte.
+localized FFT or a claim that a coefficient describes one particular byte. Explicit `interpolation: "complex"` blends real/imaginary coefficients before deriving phase and amplitude; nearest remains the legacy default. See [the interpolation contract](nonlocal-analyses.md#global-spectrum-interpolation).
 All views use the shared point renderer; changing the mappings does not switch
 to a separate DFT image painter.
 
@@ -375,6 +453,7 @@ descriptors identify externally supplied functions:
 | `recipeReadSpectrumPhase(index)`     | Normalized one-sided phase.                                                                      |
 | `recipeReadSpectrumAmplitude(index)` | Normalized one-sided amplitude.                                                                  |
 | `recipeReadNumber<ID>(index)`        | Numeric projection defined by that binding descriptor, decoded/normalized before f32 conversion. |
+| `recipeReadAnalysis<ID>(index)`      | Statistical projection described by family, scope, parameters and projection fields.             |
 
 Indices are signed integers. Generated wrappers bound-check byte/entropy offsets
 and turn normalized spectral positions into bin indices. Frequency-only sampling

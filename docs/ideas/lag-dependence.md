@@ -1,5 +1,7 @@
 # Lag dependence and periodic structure
 
+Current delivery: Explicit lag equality/difference/mutual information are implemented. Automatic lag search remains a separate extension. See [implemented behavior](../statistical-analyses.md) and [PLAN audit](PLAN.md#browser-delivery-audit). The remainder retains the original design discussion.
+
 Proposal: compare byte positions separated by a configurable lag. Simple lagged
 lookups already work through recipes; aggregate equality and dependence measures
 would be new providers. See [lagged coordinate plots](lagged-coordinate-plots.md)

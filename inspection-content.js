@@ -87,7 +87,7 @@ function fields(data) {
   }
   return table;
 }
-export function inspectionContent(info) {
+export function inspectionContent(info, actions = {}) {
   const body = element("div"),
     point = info.point;
   body.className = "point-inspection";
@@ -103,17 +103,33 @@ export function inspectionContent(info) {
  `,
   );
   body.append(style);
-  const heading =
-    point.population === "bytes"
-      ? point.sampleRange
-        ? `Bytes [${point.sampleRange.start}, ${point.sampleRange.endExclusive})`
-        : `Byte 0x${point.byteValue.toString(16).padStart(2, "0").toUpperCase()} @ 0x${point.sourceOffset.toString(16)}`
+  const heading = ["bytes", "symbols"].includes(point.population)
+    ? point.sampleRange
+      ? `Bytes [${point.sampleRange.start}, ${point.sampleRange.endExclusive})`
+      : `Byte 0x${point.byteValue.toString(16).padStart(2, "0").toUpperCase()} @ 0x${point.sourceOffset.toString(16)}`
+    : point.population === "records"
+      ? `Record ${point.index} @ 0x${point.sourceOffset.toString(16)}`
       : point.population === "bins"
         ? `Bin ${point.bin.bin} / ${point.bin.binCount}`
         : `${point.population === "pairs" ? "Pair" : "Triple"} [${point.tuple.join(", ")}] @ 0x${point.sourceOffset.toString(16)}`;
   const origin = element("details");
   origin.append(element("summary", "Point"), fields(point));
   body.append(element("strong", heading), origin);
+  if (actions.occurrence) {
+    const occurrences = element("details");
+    occurrences.append(element("summary", "Occurrences"));
+    for (const direction of ["previous", "next"]) {
+      const button = element(
+        "button",
+        direction === "previous" ? "Previous" : "Next",
+      );
+      button.type = "button";
+      button.addEventListener("click", () => actions.occurrence(direction));
+      occurrences.append(button);
+    }
+    if (info.navigation) occurrences.append(fields(info.navigation));
+    body.append(occurrences);
+  }
   const nodeContent = (id, seen) => {
     const node = info.nodes[id],
       details = element("details");

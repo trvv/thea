@@ -1,5 +1,7 @@
 # Bit structure and bit changes
 
+Current delivery: Compact bit operations and shared rolling bit bias/entropy are implemented; current behavior is linked below. See [implemented behavior](../statistical-analyses.md) and [PLAN audit](PLAN.md#browser-delivery-audit). The remainder retains the original design discussion.
+
 Idea: expose relationships that disappear when a byte is treated only as an
 unsigned number. Single-bit extraction is already expressible with arithmetic
 recipes; compact bit operations and rolling bit statistics would be additions.

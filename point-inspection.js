@@ -1,6 +1,6 @@
 /** Hit testing and recipe provenance for a particular displayed frame, computed only on request. */
 import { compileRecipes, recipeRoots } from "./recipes.js";
-import { appearanceChannels } from "./factor-catalog.js";
+import { appearanceChannelsFor } from "./factor-catalog.js";
 import { defaultAppearance } from "./appearance.js";
 import { preparePoints } from "./point-renderer.js";
 import { projectPoints } from "./point-projection.js";
@@ -9,8 +9,12 @@ import { resolveViewJob, spaces } from "./point-configuration.js";
 import { dimensionCoordinate, dimensionNames } from "./dimensions.js";
 import { frameKey } from "./render-identity.js";
 import { sampleProvenance } from "./point-provenance.js";
-import { inspectUtf8 } from "./byte-interpretation.js";
+import { inspectEncodings } from "./byte-interpretation.js";
+import { inspectUTF8Grapheme } from "./grapheme-inspection.js";
+import { describeSpectrumSample } from "./spectrum-sampling.js";
 import { interpretNumber } from "./numeric-interpretation.js";
+import { inspectByteContext } from "./occurrences.js";
+import { describeSourceOffset } from "./source-metadata.js";
 
 /** Same footprint/probe rules as the CPU and WebGL rasterizers; later/deeper marks win overlap. */
 export function hitPoint(prepared, projection, x, y) {
@@ -149,6 +153,11 @@ export async function inspectPoint(
         if (node.op === "linear") entry.grid = context.grid;
         if (node.op === "byte")
           entry.source = provenance.describeByte(nodes[node.args[0]].value);
+        if (node.op === "analysis")
+          entry.source = provenance.describeAnalysis(
+            nodes[node.args[0]].value,
+            node,
+          );
         if (node.op === "number") {
           const offset = Math.floor(nodes[node.args[0]].value);
           const interpreted = interpretNumber(
@@ -170,7 +179,21 @@ export async function inspectPoint(
             nodes[node.args[0]].value,
             node.window,
           );
-        if (node.op === "spectrum")
+        if (node.op === "spectrum" && node.interpolation === "complex")
+          entry.source = {
+            ...describeSpectrumSample(
+              visit.provenance.spectrum,
+              job.length,
+              node.kind,
+              nodes[node.args[0]].value,
+              "complex",
+            ),
+            selection: {
+              start: job.offset,
+              endExclusive: job.offset + job.length,
+            },
+          };
+        else if (node.op === "spectrum")
           entry.source = provenance.describeSpectrum(
             Math.min(
               visit.provenance.bins - 1,
@@ -207,13 +230,14 @@ export async function inspectPoint(
           },
         });
       }
-      for (const name of appearanceChannels) {
+      for (const name of appearanceChannelsFor(appearance)) {
         const value =
           program.bindings[name] === undefined
             ? undefined
             : factors[program.bindings[name]];
-        const rendered =
-          name === "hue"
+        const rendered = ["red", "green", "blue"].includes(name)
+          ? (value ?? 0) * 255
+          : name === "hue"
             ? (value ?? 0) * 300
             : name === "saturation"
               ? (value ?? (appearance.hue === "none" ? 0 : 0.75))
@@ -298,7 +322,8 @@ export async function inspectPoint(
   );
   if (!result || !current()) return null;
   const missingByte =
-    result.point.population === "bytes" && result.point.byteValue === undefined;
+    ["bytes", "symbols"].includes(result.point.population) &&
+    result.point.byteValue === undefined;
   const missingTuple =
     ["pairs", "triples"].includes(result.point.population) &&
     !result.point.tuple;
@@ -318,8 +343,18 @@ export async function inspectPoint(
     else result.point.byteValue = bytes[0];
   }
   const byteOrigin = result.point.byteCorrespondence || result.point;
-  const utf8 = await inspectUtf8(job.source, byteOrigin.sourceOffset, current);
+  if (job.sourceMetadata)
+    byteOrigin.metadata = describeSourceOffset(
+      job.sourceMetadata,
+      byteOrigin.sourceOffset,
+    );
+  const encodings = await inspectEncodings(
+    job.source,
+    byteOrigin.sourceOffset,
+    current,
+  );
   if (!current()) return null;
+  const utf8 = encodings?.find((candidate) => candidate.encoding === "UTF-8");
   if (utf8)
     byteOrigin.utf8 = {
       ...utf8,
@@ -331,7 +366,44 @@ export async function inspectPoint(
             ? "sample representative byte"
             : result.point.population === "bytes"
               ? "source byte"
-              : "first occurrence byte",
+              : result.point.population === "records"
+                ? "record start byte"
+                : `${result.point.representative || "first occurrence"} byte`,
     };
+  const alternatives =
+    encodings?.filter((candidate) => candidate.encoding !== "UTF-8") || [];
+  if (alternatives.length)
+    byteOrigin.encodings = Object.fromEntries(
+      alternatives.map((candidate, index) => [
+        `Candidate ${index + 1}`,
+        candidate,
+      ]),
+    );
+  if (utf8) {
+    const grapheme = await inspectUTF8Grapheme(
+      job.source,
+      byteOrigin.sourceOffset,
+      {},
+      current,
+    );
+    if (!current()) return null;
+    if (grapheme)
+      byteOrigin.grapheme = {
+        ...grapheme,
+        scalars: Object.fromEntries(
+          grapheme.scalars.map((scalar, index) => [
+            `Scalar ${index + 1}`,
+            scalar,
+          ]),
+        ),
+      };
+  }
+  byteOrigin.context = await inspectByteContext(
+    job.source,
+    byteOrigin.sourceOffset,
+    {},
+    current,
+  );
+  if (!current()) return null;
   return result;
 }

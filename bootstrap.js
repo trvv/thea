@@ -22,7 +22,16 @@ function onDOMContentLoaded() {
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const source = await response.blob();
-      if (!request.signal.aborted) scroll.source = source;
+      if (!request.signal.aborted) {
+        scroll.source = source;
+        scroll.sourceIdentity = JSON.stringify([
+          "url",
+          new URL(path, document.baseURI).href,
+          source.size,
+          response.headers.get("etag"),
+          response.headers.get("last-modified"),
+        ]);
+      }
     } catch (error) {
       if (!request.signal.aborted)
         console.error("Unable to load binary data:", error);

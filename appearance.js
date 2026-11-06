@@ -5,7 +5,8 @@
  */
 import { validateRecipe } from "./recipes.js";
 import {
-  appearanceChannels as channels,
+  appearanceChannels as defaultChannels,
+  appearanceChannelsFor,
   factorIndices,
   factorOptions,
 } from "./factors.js";
@@ -56,11 +57,23 @@ export function validateAppearance(region, mapping, definitions = {}) {
   if (!mapping || !["square", "circle"].includes(mapping.shape))
     throw new TypeError("Invalid appearance mapping");
   const copy = { shape: mapping.shape };
-  for (const channel of channels)
+  if (
+    mapping.colorSpace !== undefined &&
+    !["hsl", "rgb"].includes(mapping.colorSpace)
+  )
+    throw new TypeError("Unknown appearance color space");
+  for (const channel of defaultChannels)
     copy[channel] =
       mapping[channel] === "none"
         ? "none"
         : validateRecipe(mapping[channel], definitions);
+  if (mapping.colorSpace !== undefined) copy.colorSpace = mapping.colorSpace;
+  if (mapping.colorSpace === "rgb")
+    for (const channel of ["red", "green", "blue"])
+      copy[channel] =
+        mapping[channel] === "none"
+          ? "none"
+          : validateRecipe(mapping[channel], definitions);
   return copy;
 }
 
@@ -76,11 +89,14 @@ const compiled = new Map();
  * mapping with at most two color inputs; non-quantized values use exact scalar conversion.
  */
 export function compileAppearance(mapping) {
+  const channels = appearanceChannelsFor(mapping);
+  const rgb = mapping.colorSpace === "rgb";
   const numeric = channels.every(
     (channel) =>
       mapping[channel] === "none" || typeof mapping[channel] === "number",
   );
   const key = JSON.stringify([
+    rgb ? "rgb" : "hsl",
     ...channels.map((channel) => mapping[channel]),
     mapping.shape,
   ]);
@@ -100,6 +116,13 @@ export function compileAppearance(mapping) {
   );
   const hasColor = h >= 0 || s >= 0;
   const scalar = (values, out, offset = 0) => {
+    if (rgb) {
+      out[offset] = h < 0 ? 0 : Math.round(255 * values[h]);
+      out[offset + 1] = s < 0 ? 0 : Math.round(255 * values[s]);
+      out[offset + 2] = l < 0 ? 0 : Math.round(255 * values[l]);
+      out[offset + 3] = a < 0 ? 255 : Math.round(255 * values[a]);
+      return;
+    }
     const hue = h < 0 ? 0 : values[h] * 300;
     const saturation = s < 0 ? (h < 0 ? 0 : 0.75) : values[s];
     const lightness =

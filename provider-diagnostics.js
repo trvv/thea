@@ -58,9 +58,24 @@ export function retainedProviderStorage(cache) {
   for (const value of Object.values(cache.factorSpectrum || {})) add(value);
   add(cache.population?.offsets);
   add(cache.population?.keys);
+  add(cache.population?.counts);
   for (const range of cache.factorSparse?.ranges || []) add(range.data);
   for (const values of cache.factorSparse?.entropyValues?.values() || [])
     add(values);
+  add(cache.analysisProviders?.conditional?.joint);
+  add(cache.analysisProviders?.conditional?.rows);
+  for (const group of cache.analysisProviders?.groups?.values() || []) {
+    add(group.results);
+    add(group.reference?.negativeLogProbabilities);
+  }
+  for (const model of cache.analysisProviders?.occurrences?.values() || []) {
+    add(model.counts);
+    add(model.sorted);
+  }
+  for (const model of cache.analysisProviders?.reductions?.values() || []) {
+    add(model.counts);
+    add(model.sums);
+  }
   return {
     typedArrayBytes: [...buffers].reduce(
       (sum, buffer) => sum + buffer.byteLength,

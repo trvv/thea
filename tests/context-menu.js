@@ -115,6 +115,7 @@ class Node {
     };
   }
   checkValidity() {
+    if (this.type !== "number") return true;
     return (
       Number.isInteger(Number(this.value)) &&
       Number(this.value) >= Number(this.min)
@@ -338,6 +339,26 @@ try {
   globalThis.clearTimeout = realClearTimeout;
   root.close();
 }
+const textMenu = new ContextMenu();
+let exactBound;
+textMenu.items = [
+  {
+    label: "Minimum",
+    input: "text",
+    value: "0",
+    action: (value) => {
+      exactBound = value;
+    },
+  },
+];
+const exactField = textMenu.children[0].children[0];
+exactField.value = "18446744073709551614";
+exactField.emit("change");
+assert.equal(
+  exactBound,
+  "18446744073709551614",
+  "Native text parameters lost integer64 precision",
+);
 console.log(
   "Context-menu checks pass: popover submenus, no selects, current choices, nested keyboard navigation, close/focus behavior, hover, numeric input, viewport flipping, dismissal/reopening, cleanup.",
 );

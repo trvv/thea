@@ -102,6 +102,18 @@ export function validateConfiguration(configuration) {
     throw new TypeError("Unknown sampling policy");
   const dimensions = validateDimensions(configuration.dimensions);
   const population = configuration.population ?? "bytes";
+  const recordParameters = {};
+  for (const [name, fallback, minimum] of [
+    ["recordStride", 1, 1],
+    ["recordOrigin", 0, 0],
+    ["recordWidth", configuration.recordStride ?? 1, 1],
+  ]) {
+    if (population !== "records" && configuration[name] === undefined) continue;
+    const value = configuration[name] ?? fallback;
+    if (!Number.isSafeInteger(value) || value < minimum)
+      throw new TypeError(`Invalid ${name}`);
+    recordParameters[name] = value;
+  }
   const tupleRepresentative = configuration.tupleRepresentative;
   if (
     tupleRepresentative !== undefined &&
@@ -160,6 +172,7 @@ export function validateConfiguration(configuration) {
     backend,
     ...(providerBudget === undefined ? {} : { providerBudget }),
     population,
+    ...recordParameters,
     ...(tupleRepresentative === undefined ? {} : { tupleRepresentative }),
     footprint,
     sampleLimit,

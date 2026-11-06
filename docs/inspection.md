@@ -29,6 +29,14 @@ coefficient. Other contributing recipe lookups do not each get a decoded entry.
 This is a local code-point interpretation, not a file encoding classifier or a
 grapheme decoder. All sections still start collapsed.
 
+Wider interpretations now add UTF-16/32 candidates in both byte orders and
+alignments, plus a bounded UTF-8 grapheme preview. Clipped context remains explicit;
+see [text interpretations](text-interpretations.md). Pattern-origin popups include
+bounded context and Previous/Next occurrence actions. Bin byte correspondences
+remain separately identified and have no fabricated coefficient occurrence.
+Source annotations, address mappings and new statistical/numeric providers retain
+raw inputs and definitions in collapsed sections; see [source navigation](source-navigation.md).
+
 The point summary identifies the population and exact unsampled ordinal. Byte
 points include their absolute source offset and raw byte. Averaged byte samples
 identify their full half-open source interval, sample count and mean rather than

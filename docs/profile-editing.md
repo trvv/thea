@@ -16,6 +16,11 @@ state and is not persisted in presets.
 The JSON editor uses the existing versioned profile validator. Cancel and invalid
 JSON leave the active profile intact. Named preset saving remains explicit.
 
+Preset → Import File and Export File use the same versioned payload as clipboard
+transfer. Sources load separately with Advanced → Open File. Source range bookmarks
+remain separate from presets; see [source navigation](source-navigation.md).
+Each comparison pane owns its history.
+
 Advanced also offers Provider Budget (MiB). Zero means no configured limit;
 a positive value is serialized as `configuration.providerBudget` in bytes.
 Eligible providers check conservative operation-level working estimates before

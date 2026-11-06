@@ -1,5 +1,7 @@
 # Localized spectral energy
 
+Current delivery: Explicit local spectral frames and band energy are implemented; a dedicated spectrogram population remains separate. See [implemented behavior](../nonlocal-analyses.md) and [PLAN audit](PLAN.md#browser-delivery-audit). The remainder retains the original design discussion.
+
 Proposal: analyze spectra around explicit byte addresses. The current spectrum
 provider transforms the selected interval as a whole; sampling one of its bins
 at an address does not make that coefficient a local statistic.

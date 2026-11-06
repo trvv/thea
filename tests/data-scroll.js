@@ -208,7 +208,7 @@ if (
     ["Bars", "Sample Limit", "Footprint", "Backend"].includes(item.label),
   ) ||
   String(menu.at(-1).items.map((item) => item.label)) !==
-    "Undo,Redo,Edit Profile JSON,Bars,Sample Limit,Provider Budget (MiB),Footprint,Backend"
+    "References,Bookmarks,Open File,Comparison View,Undo,Redo,Edit Profile JSON,Bars,Sample Limit,Provider Budget (MiB),Footprint,Backend"
 )
   throw Error("Advanced controls are misplaced");
 bars().action(2);
@@ -468,7 +468,8 @@ scroll.events.contextmenu({
 });
 const available = menu
   .find((item) => item.label === "Points")
-  .items[0].items[0].items.map((item) => item.label);
+  .items.find((item) => item.label === "Hue")
+  .items[0].items.map((item) => item.label);
 if (
   String(available) !==
   String(
@@ -997,4 +998,62 @@ if (!Object.hasOwn(editor.view.pointConfiguration.recipes, "New"))
 editor.view.deleteFactor("New");
 console.log(
   "Profile menu editing passes: bounded undo/redo, factor rename/delete and navigation isolation.",
+);
+
+// One host owns selection; the comparison owns an independent profile/camera.
+editor.toggleComparison();
+const comparison = editor.comparisonView;
+if (
+  comparison.source !== editor.source ||
+  comparison.offset !== editor.view.offset ||
+  comparison.length !== editor.view.length
+)
+  throw Error("Comparison selection is not linked");
+const primaryProfile = JSON.stringify(editor.view.exportProfile());
+comparison.applyPreset("hilbert3d");
+if (JSON.stringify(editor.view.exportProfile()) !== primaryProfile)
+  throw Error("Comparison changed primary settings");
+editor.barCount = 2;
+editor.seek(1234);
+if (
+  comparison.offset !== editor.view.offset ||
+  comparison.length !== editor.view.length
+)
+  throw Error("Comparison seek drifted");
+editor.activeView = comparison;
+editor.applyTemplate(
+  (await import("../byte-frequency.js")).byteFrequencyTable(),
+);
+if (
+  comparison.pointConfiguration.population !== "symbols" ||
+  editor.view.pointConfiguration.population === "symbols"
+)
+  throw Error("Template did not target active view");
+editor.source = new Blob([new Uint8Array(5000)]);
+if (
+  comparison.source !== editor.source ||
+  comparison.length !== editor.view.length
+)
+  throw Error("Comparison source replacement drifted");
+editor.toggleComparison();
+if (editor.comparisonView || editor.editingView !== editor.view)
+  throw Error("Comparison removal retained ownership");
+console.log(
+  "Comparison views pass: shared source/selection, independent profiles, active-view edits, source replacement and cleanup.",
+);
+
+editor.view.applyPreset("linear");
+editor.selectRange(123, 65);
+if (editor.view.offset !== 123 || editor.view.length !== 65)
+  throw Error("Bookmarked range did not preserve exact bytes");
+editor.setSourceMetadata({
+  segments: [{ start: 100, endExclusive: 200, address: "0x1000" }],
+});
+if (editor.view.sourceMetadata.segments[0].address !== "0x1000")
+  throw Error("Source metadata not attached");
+editor.source = new Blob([new Uint8Array(1000)]);
+if (editor.view.sourceMetadata || editor.exactSelectionLength !== undefined)
+  throw Error("New source retained annotations/bookmark scope");
+console.log(
+  "Source ranges/annotations pass: exact restored intervals and source-bound metadata cleanup.",
 );

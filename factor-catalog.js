@@ -53,3 +53,10 @@ export const appearanceChannels = [
   "opacity",
   "size",
 ];
+
+/** Color interpretation is separate from position space and provider domains. */
+export function appearanceChannelsFor(mapping) {
+  return mapping?.colorSpace === "rgb"
+    ? ["red", "green", "blue", "opacity", "size"]
+    : appearanceChannels;
+}

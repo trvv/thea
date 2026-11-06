@@ -29,11 +29,12 @@ Tests are executable Bun scripts using assertions, not a `bun test` discovery
 suite. Run from the repository root:
 
 ```sh
-for test in provider-budget sparse-providers numeric-recipes morton-recipes overview-sharing population-streaming profile-edits recipes bit-recipes recipe-experiments recipe-shaders byte-interpretation provider-diagnostics hilbert dimensions pipeline point-factors point-configuration appearance \
-  data-scroll context-menu render-engine render-thread-smoke render-pipeline rasterization point-inspection preset-library trigraph \
-  trigraph-opacity coordinates adaptive-resolution scroll-performance digraph fourier
+for test in tests/*.js
 do
-  bun "tests/$test.js" || exit 1
+  case "$test" in
+    tests/browser-smoke.js|tests/render-canvas.js|tests/render-thread.js|tests/provider-benchmark.js|tests/scroll-benchmark.js) continue ;;
+  esac
+  bun "$test" || exit 1
 done
 ```
 

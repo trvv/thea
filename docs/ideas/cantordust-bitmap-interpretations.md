@@ -1,6 +1,8 @@
 # Packed pixels and bitmap interpretations
 
-Status: proposal. This adds an interpretation of bytes, not another renderer.
+Current delivery: Packed RGB/alpha formats and strided records are implemented; palette and planar extensions below remain proposals. See [implemented behavior](../packed-pixels.md) and [PLAN audit](PLAN.md#browser-delivery-audit). The remainder retains the original design discussion.
+
+Original proposal: This adds an interpretation of bytes, not another renderer.
 
 ## What CantorDust implements
 

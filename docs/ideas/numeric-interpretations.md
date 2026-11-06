@@ -1,5 +1,7 @@
 # Numeric interpretations of byte spans
 
+Current delivery: Native 16/32/64-bit interpretations and complete-span validity are implemented. Integer64 uses decimal strings and exact BigInt subtraction before display normalization. See [implemented behavior](../recipes.md) and [PLAN audit](PLAN.md#browser-delivery-audit). The remainder retains the original design discussion.
+
 Proposal: parameterized integer/float reads and useful projections of their raw
 representation. This is a lookup interpretation, not a record parser or an
 assertion that the source contains those numeric types.

@@ -57,6 +57,20 @@ The lower-level `view.exportProfile()` / `view.importProfile(profileOrJSON)` API
 still handles version 3 view profiles and migrates versions 1 and 2. Preset
 snapshots add bar count without persisting source files or selected byte ranges.
 
+Further implemented tools include [byte-frequency tables](byte-frequency.md),
+[packed RGB pixels and strided records](packed-pixels.md),
+[scoped statistical factors](statistical-analyses.md),
+[repetition and local spectra](nonlocal-analyses.md),
+[wide numeric and text interpretations](text-interpretations.md),
+[reference resemblance](reference-models.md), and an optional
+[comparison pane](comparison-views.md). Native files, bookmarks and annotations
+are described in [source navigation](source-navigation.md).
+
+Advanced → Open File loads a native File without storing its bytes. Statistical
+factors remain freely mixable with positions and other analyses. RGB is an
+appearance choice, not a dedicated painter. See [device evidence](device-matrix.md)
+for actual acceleration/browser coverage.
+
 ## Read next
 
 - [Architecture and source map](architecture.md): ownership, element APIs,

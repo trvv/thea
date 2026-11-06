@@ -211,28 +211,49 @@ export function sampleProvenance(job, data, factors, context) {
       : {
           sourceOffset: absolute,
           selectionOffset: sample,
-          ...(population === "bytes"
+          ...(population === "records"
             ? {
                 byteValue: readByte(sample),
-                ...(end > sample + 1
-                  ? {
-                      sampleRange: range(absolute, job.offset + end),
-                      sampleCount: end - sample,
-                      meanByteValue: factors[factorIndices.value] * 255,
-                    }
-                  : {}),
+                record: {
+                  width: data.records.width,
+                  stride: data.records.stride,
+                  origin: data.records.origin,
+                  sourceRange: range(absolute, absolute + data.records.width),
+                },
               }
-            : {
-                tuple: bytes
-                  ? [
-                      ...bytes.subarray(
-                        sample,
-                        sample + (population === "pairs" ? 2 : 3),
-                      ),
-                    ]
-                  : undefined,
-                representative: `${job.configuration.tupleRepresentative || "first"} occurrence`,
-              }),
+            : population === "symbols"
+              ? {
+                  byteValue:
+                    readByte(sample) ??
+                    data.populationKeys?.[context.pointIndex],
+                  occurrences:
+                    data.symbolCounts?.[
+                      data.populationKeys?.[context.pointIndex]
+                    ],
+                  representative: `${job.configuration.tupleRepresentative || "first"} occurrence`,
+                }
+              : population === "bytes"
+                ? {
+                    byteValue: readByte(sample),
+                    ...(end > sample + 1
+                      ? {
+                          sampleRange: range(absolute, job.offset + end),
+                          sampleCount: end - sample,
+                          meanByteValue: factors[factorIndices.value] * 255,
+                        }
+                      : {}),
+                  }
+                : {
+                    tuple: bytes
+                      ? [
+                          ...bytes.subarray(
+                            sample,
+                            sample + (population === "pairs" ? 2 : 3),
+                          ),
+                        ]
+                      : undefined,
+                    representative: `${job.configuration.tupleRepresentative || "first"} occurrence`,
+                  }),
         }),
   };
   return {
@@ -241,5 +262,7 @@ export function sampleProvenance(job, data, factors, context) {
     describeByte,
     describeEntropy,
     describeSpectrum,
+    describeAnalysis: (index, parameters) =>
+      data.analysis.describe(index, parameters),
   };
 }

@@ -1,7 +1,8 @@
 # Conditional surprise
 
-Proposal: a new statistical provider. No conditional-probability model currently
-runs in the application. See the [ideas index](README.md) for related proposals.
+Current delivery: The selected first-order conditional model is implemented. Alternative training scopes and higher-order contexts below remain extensions. See [implemented behavior](../statistical-analyses.md) and [PLAN audit](PLAN.md#browser-delivery-audit). The remainder retains the original design discussion.
+
+Proposal: a new statistical provider. The original design below describes its scope and possible extensions. See the [ideas index](README.md) for related proposals.
 
 ## Question and useful patterns
 

@@ -1,5 +1,7 @@
 # Occurrence navigation and bounded byte context
 
+Current delivery: Bounded occurrence navigation, byte context, metadata mappings and cancellable address events are implemented; external tool transport is outside the clarified scope. See [implemented behavior](../source-navigation.md) and [PLAN audit](PLAN.md#browser-delivery-audit). The remainder retains the original design discussion.
+
 Status: proposal, extending existing point inspection rather than replacing it.
 
 ## What CantorDust implements

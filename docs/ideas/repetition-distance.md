@@ -1,5 +1,7 @@
 # Repetition distance and match length
 
+Current delivery: Bounded exact nearest-block matching and chosen-candidate extension are implemented; global longest-match and approximate indexing remain separate. See [implemented behavior](../nonlocal-analyses.md) and [PLAN audit](PLAN.md#browser-delivery-audit). The remainder retains the original design discussion.
+
 Proposal: locate earlier occurrences of the byte block at an address. This would
 add nonlocal structure that byte frequencies and local entropy do not capture.
 

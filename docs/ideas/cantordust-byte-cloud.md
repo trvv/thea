@@ -1,6 +1,8 @@
 # Byte-value population and frequency table
 
-Status: proposal. The frequency provider already exists; this concerns which
+Current delivery: The observed-symbol population and exact frequency table are implemented; unconditional absent-symbol cells remain a separate policy. See [implemented behavior](../byte-frequency.md) and [PLAN audit](PLAN.md#browser-delivery-audit). The remainder retains the original design discussion.
+
+Original proposal: The frequency provider already exists; this concerns which
 marks exist and how their identities are inspected.
 
 ## What CantorDust implements

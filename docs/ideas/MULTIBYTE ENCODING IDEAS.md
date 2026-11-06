@@ -1,10 +1,9 @@
 # Multibyte encoding ideas
 
-The first UTF-8 inspection increment is implemented; see
-[point inspection](../inspection.md). It strictly decodes a bounded root-source
-neighborhood at the point's origin or bin byte correspondence and shows exact
-code-point/byte provenance. UTF-16/32, graphemes, decoding each contributing recipe
-lookup, and encoding-derived factors below remain proposals.
+UTF-8/16/32 candidates, a bounded grapheme preview and explicit encoding factors
+are implemented; see [text interpretations](../text-interpretations.md). This
+preserves local validity rather than claiming a file-wide encoding. The design
+below also discusses further contextual/decoding extensions.
 
 The purpose is to show useful interpretations of the bytes under inspection.
 False positives are acceptable, just as a printable ASCII byte does not establish

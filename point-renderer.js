@@ -4,7 +4,7 @@
  * @module point-renderer
  */
 import { compileRecipes, recipeRoots } from "./recipes.js";
-import { appearanceChannels } from "./factor-catalog.js";
+import { appearanceChannelsFor } from "./factor-catalog.js";
 import { compileAppearance, defaultAppearance } from "./appearance.js";
 import { compilePosition } from "./point-configuration.js";
 import { projectPoints } from "./point-projection.js";
@@ -51,10 +51,24 @@ export async function preparePoints(job, cache, current) {
     geometryReused = Boolean(geometry);
     const roots = recipeRoots(config, appearance);
     if (geometry) for (let i = 0; i < 3; i++) delete roots[`p${i}`];
+    const colorKey = preparationKey({
+      ...job,
+      appearance: { ...appearance, size: "none", shape: "square" },
+    });
+    const colorsReused =
+      geometry &&
+      prepared?.source === (job.sourceId ?? job.source) &&
+      prepared.colorKey === colorKey;
+    if (colorsReused)
+      for (const channel of appearanceChannelsFor(appearance))
+        if (channel !== "size") delete roots[channel];
     const program = compileRecipes(roots, config.recipes);
     const evaluate = program.createEvaluator();
-    const mapped = { shape: appearance.shape };
-    for (const channel of appearanceChannels)
+    const mapped = {
+      shape: appearance.shape,
+      colorSpace: appearance.colorSpace,
+    };
+    for (const channel of appearanceChannelsFor(appearance))
       mapped[channel] = program.bindings[channel] ?? "none";
     const style = compileAppearance(mapped);
     let position;
@@ -85,7 +99,7 @@ export async function preparePoints(job, cache, current) {
         positions[p + 2] = xyz[2];
         indices[size] = index;
       }
-      style.rgba(factors, colors, size * 4);
+      if (!colorsReused) style.rgba(factors, colors, size * 4);
       sizes[size] = style.size(factors);
       if (text) labels.push(label);
       size++;
@@ -101,7 +115,9 @@ export async function preparePoints(job, cache, current) {
     if (!visit || !current()) return null;
     positions = geometry?.positions || new Float32Array(visit.count * 3);
     indices = geometry?.indices || new Uint32Array(visit.count);
-    colors = new Uint8ClampedArray(visit.count * 4);
+    colors = colorsReused
+      ? prepared.colors
+      : new Uint8ClampedArray(visit.count * 4);
     sizes = new Float32Array(visit.count);
     position = compilePosition(
       {
@@ -129,6 +145,7 @@ export async function preparePoints(job, cache, current) {
     prepared = cache.preparedPoints = {
       source: job.sourceId ?? job.source,
       signature,
+      colorKey,
       geometry: world,
       positions,
       colors,

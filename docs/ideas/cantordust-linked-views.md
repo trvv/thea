@@ -1,6 +1,8 @@
 # Linked views over one source selection
 
-Status: proposal. Multiple independent components are already possible; coordinated
+Current delivery: One linked comparison pane is implemented; detached workspaces and cross-highlighting remain separate extensions. See [implemented behavior](../comparison-views.md) and [PLAN audit](PLAN.md#browser-delivery-audit). The remainder retains the original design discussion.
+
+Original proposal: Multiple independent components are already possible; coordinated
 selection and shared immutable analysis are the missing product behavior.
 
 ## What CantorDust implements

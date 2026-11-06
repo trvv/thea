@@ -187,3 +187,47 @@ assert.deepEqual(
   explicit.pixels,
   "Optional legacy job defaults were not resolved",
 );
+
+// Size/shape edits must not revisit independent color providers or mutate retained color buffers.
+const dependencyCache = {},
+  dependencyCanvas = new RenderCanvas();
+const colorJob = {
+  ...base,
+  region: "linear",
+  configuration: presetConfiguration("linear"),
+  appearance: {
+    ...defaultAppearance("linear"),
+    size: { op: "constant", value: 0.5 },
+  },
+  sampleLayout: { columns: 16, rows: 16 },
+  diagnostics: true,
+};
+await executeRender(dependencyCanvas, colorJob, dependencyCache);
+const retainedColors = dependencyCache.preparedPoints.colors;
+const sizedJob = {
+  ...colorJob,
+  appearance: {
+    ...colorJob.appearance,
+    size: { op: "constant", value: 0.75 },
+    shape: "circle",
+  },
+};
+const sizeFrame = await executeRender(
+  dependencyCanvas,
+  sizedJob,
+  dependencyCache,
+);
+assert.equal(dependencyCache.preparedPoints.colors, retainedColors);
+assert.equal(sizeFrame.diagnostics.source.reads, 0);
+assert.deepEqual(sizeFrame.diagnostics.providers, {});
+const sizeReference = new RenderCanvas();
+await executeRender(sizeReference, sizedJob, {});
+assert.deepEqual(dependencyCanvas.pixels, sizeReference.pixels);
+const recolored = {
+  ...sizedJob,
+  appearance: { ...sizedJob.appearance, hue: "previous" },
+};
+await executeRender(dependencyCanvas, recolored, dependencyCache);
+assert.notEqual(dependencyCache.preparedPoints.colors, retainedColors);
+await executeRender(sizeReference, recolored, {});
+assert.deepEqual(dependencyCanvas.pixels, sizeReference.pixels);

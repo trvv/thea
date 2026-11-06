@@ -1,5 +1,7 @@
 # Implementing the analysis ideas
 
+Historical planning baseline: implementation has since advanced. Consult the [PLAN delivery audit](PLAN.md#browser-delivery-audit) and linked current-behavior documents for delivered features and remaining gates.
+
 This is the analysis workstream for the sequential plan. It describes proposed
 work against the current code, rather than claiming the proposals are implemented.
 The project-wide plan should interleave the source-memory, editing and performance

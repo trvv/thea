@@ -152,6 +152,18 @@ try {
    let maximum=0,total=0;for(let i=0;i<a.length;i++){const difference=Math.abs(a[i]-b[i]);maximum=Math.max(maximum,difference);total+=difference;}
    assert(maximum<=3&&total/a.length<0.1,'CPU/WebGL range mismatch '+mode+'/'+shape+': '+maximum+'/'+total/a.length);
   }
+  const persistent={...spec,configuration:{...spec.configuration,backend:'webgl'}};
+  await executeRender(gpu,persistent,gpuCache);
+  const uploadCount=gpuCache.pointGPU.uploads;
+  await executeRender(gpu,persistent,gpuCache);
+  assert(gpuCache.pointGPU.uploads===uploadCount,'Repeated GPU frame uploaded unchanged instances');
+  const changedCamera={...persistent,rotation:{yaw:1.1,pitch:0.1}};
+  await executeRender(gpu,{...changedCamera,configuration:{...changedCamera.configuration,backend:'cpu'}},gpuCache);
+  await executeRender(gpu,changedCamera,gpuCache);
+  assert(gpuCache.pointGPU.uploads===uploadCount+1,'CPU intermediate projection left stale GPU instances');
+  await executeRender(cpu,changedCamera,{});
+  const cameraCpu=cpu.getContext('2d').getImageData(0,0,96,72).data,cameraGpu=gpu.getContext('2d').getImageData(0,0,96,72).data;
+  assert(cameraCpu.every((value,index)=>Math.abs(value-cameraGpu[index])<=3),'Persistent GPU upload changed coverage');
   const empty={...spec,configuration:{...spec.configuration,dimensions:{width:{start:1000,end:1001,step:1,mode:'truncate',fit:true}}}};
   await executeRender(cpu,empty,{});await executeRender(gpu,{...empty,configuration:{...empty.configuration,backend:'webgl'}},gpuCache);
   assert(gpu.getContext('2d').getImageData(0,0,96,72).data.every((value,index)=>index%4===3?value===255:value===0),'Empty truncation window did not render black');
@@ -302,6 +314,52 @@ try {
   }
   return {sourceBytes:source.size,population:before};
  })()`);
+  await evaluate(`(async()=>{
+    const {DataScroll}=await import('/main.js');
+    const {packedPixels}=await import('/packed-pixels.js');
+    const {byteFrequencyTable}=await import('/byte-frequency.js');
+    const {executeRender}=await import('/rendering.js');
+    const assert=(condition,message)=>{if(!condition)throw Error(message)};
+    const host=new DataScroll(new Blob([Uint8Array.from([255,0,0,255,0,255,0,255,0,0,255,255,255,255,255,255])]),16);
+    host.barCount=0;document.body.append(host);
+    host.applyTemplate(packedPixels({format:'rgba32',width:2}));
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    await host.view.render();
+    const cache={},job=host.view.renderer.presentedJob;
+    await executeRender(document.createElement('canvas'),job,cache);
+    assert(cache.preparedPoints.size===4,'Packed pixel population incorrect');
+    assert([...cache.preparedPoints.colors.slice(0,4)].join(',')==='255,0,0,255','RGB output changed source colors');
+    const p=cache.pointRaster.projected,bounds=host.view.canvas.getBoundingClientRect();
+    await host.view.inspectAt(bounds.left+p[0]*bounds.width/job.columns,bounds.top+p[1]*bounds.height/job.rows);
+    const popup=host.view.inspector;
+    assert(popup.textContent.includes('Record 0')&&popup.textContent.includes('Red:')&&popup.textContent.includes('Green:'),'Packed inspector lacks RGB provenance');
+    assert(popup.textContent.includes('Occurrences')&&popup.textContent.includes('Context'),'Occurrence/context controls missing');
+    host.view.closeInspection();
+    host.toggleComparison();await host.comparisonView.render();
+    const comparison=host.comparisonView;
+    assert(comparison.offset===host.view.offset&&comparison.length===host.view.length,'Comparison selection drift');
+    comparison.canvas.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,composed:true,clientX:100,clientY:100}));
+    assert(host.editingView===comparison,'Comparison context did not target its view');
+    host.menu.closeRoot();
+    host.applyTemplate(byteFrequencyTable());await comparison.render();
+    assert(comparison.pointConfiguration.population==='symbols'&&host.view.pointConfiguration.population==='records','Comparison template changed primary');
+    const left=host.view.getBoundingClientRect(),right=comparison.getBoundingClientRect();
+    assert(left.width>0&&right.width>0&&right.left>=left.right-1,'Comparison panes overlap');
+    host.source=new Blob([new Uint8Array(512).fill(65)]);await Promise.all([host.view.render(),comparison.render()]);
+    assert(comparison.source===host.view.source&&comparison.length===host.view.length,'Comparison replacement source mismatch');
+    const refs=await import('/reference-models.js'),previousPrompt=window.prompt;
+    try{
+      window.prompt=()=> 'Browser Reference';
+      await host.referenceItems()[0].items[0].action();
+      const model=refs.readLibrary().models.find(model=>model.name==='Browser Reference');
+      assert(model,'Reference training menu did not save a model');
+      host.referenceItems().find(item=>item.label==='Browser Reference').items.find(item=>item.label==='Surprise Hue').action();
+      await comparison.render();
+      assert(comparison.renderer.presentedJob.referenceModels[0].id===model.id,'Reference artifact was not resolved into the displayed job');
+      refs.deleteModel(model.id);
+    }finally{window.prompt=previousPrompt;}
+    host.toggleComparison();assert(!comparison.renderer.worker,'Comparison removal retained worker');host.remove();
+  })()`);
   // Real pointer input verifies that capture/preventDefault still allows stationary 3D clicks.
   const pointLocation = await evaluate(`(async()=>{
   const {DataScroll}=await import('/main.js'),{executeRender}=await import('/rendering.js'),{hitPoint}=await import('/point-inspection.js');

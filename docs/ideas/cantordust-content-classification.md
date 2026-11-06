@@ -1,6 +1,8 @@
 # Template-based content resemblance
 
-Status: proposal. A resemblance score can suggest what to investigate; it is not
+Current delivery: User-trained byte/pair reference artifacts and resemblance scores are implemented. A shipped architecture corpus and calibrated classifier remain separate work. See [implemented behavior](../reference-models.md) and [PLAN audit](PLAN.md#browser-delivery-audit). The remainder retains the original design discussion.
+
+Original proposal: A resemblance score can suggest what to investigate; it is not
 a reliable file-type or instruction-set determination.
 
 ## What CantorDust implements

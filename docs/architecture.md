@@ -73,8 +73,7 @@ scroll.seek(1024); // absolute root-source byte offset
 ```
 
 `DataScroll` also wraps non-Blob input in `new Blob([source])`. Reusable presets
-persist in localStorage; source bytes do not. There is no file picker, server API,
-or live stream transport.
+persist in localStorage; source bytes do not. A native file picker is available under Advanced → Open File. There is no server API or live stream transport.
 
 ## Settings: profiles, compatibility, and raw configuration
 

@@ -1,6 +1,8 @@
 # Density accumulation and robust display scaling
 
-Status: proposal. Keep measurement and display normalization separately named.
+Current delivery: Raw counts and fixed/percentile exposure are implemented. Screen-space accumulation retains its distinct optional rendering/contributor contract. See [implemented behavior](../statistical-analyses.md) and [PLAN audit](PLAN.md#browser-delivery-audit). The remainder retains the original design discussion.
+
+Original proposal: Keep measurement and display normalization separately named.
 
 ## What CantorDust implements
 

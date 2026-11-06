@@ -1,6 +1,8 @@
 # Morton coordinates and alternative space-filling curves
 
-Status: proposal. These are explicit expression transforms, never a return of a
+Current delivery: Morton 2D/3D expressions are implemented. H-curve remains behind the original independent-definition/fixture gate. See [implemented behavior](../recipes.md) and [PLAN audit](PLAN.md#browser-delivery-audit). The remainder retains the original design discussion.
+
+Original proposal: These are explicit expression transforms, never a return of a
 global Layout switch.
 
 ## What CantorDust implements

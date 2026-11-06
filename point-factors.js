@@ -14,10 +14,17 @@ import { factorCount, factorIndices as slots } from "./factors.js";
 import { occurrenceFactor } from "./appearance.js";
 import { prepareSpectrum, spectrumComponents } from "./spectrum.js";
 import { windowCounts } from "./histograms.js";
-import { populationOffsets, defaultSampleLimit } from "./populations.js";
+import {
+  populationOffsets,
+  defaultSampleLimit,
+  recordPopulation,
+} from "./populations.js";
 import { prepareSparseProviders } from "./sparse-providers.js";
 import { numericResult } from "./numeric-interpretation.js";
 import { assertProviderBudget } from "./provider-budget.js";
+import { prepareAnalysisProviders } from "./analysis-providers.js";
+import { yieldScan } from "./scan.js";
+import { sampleSpectrum } from "./spectrum-sampling.js";
 
 // Providers are selected from the active channels, including only visible axes.
 // Each cache holds one window; camera/style changes reuse the selected data.
@@ -48,7 +55,11 @@ export async function pointFactors(
   const source = job.sourceId ?? job.source,
     key = `${job.offset}/${job.length}`;
   const population = config.population || "bytes";
-  const tuples = population === "pairs" || population === "triples";
+  const tuples =
+    population === "pairs" ||
+    population === "triples" ||
+    population === "symbols";
+  const records = population === "records" ? recordPopulation(job) : null;
   const entropy = used.has("entropy");
   const windows = new Set(program.providers.entropy);
   if (entropy) windows.add(32);
@@ -272,7 +283,9 @@ export async function pointFactors(
     ? offsets.length
     : population === "bins"
       ? bins
-      : job.length;
+      : records
+        ? records.count
+        : job.length;
   const pointCount = available;
   const grid = pointGrid(config, pointCount, job.sampleLayout),
     coordinates = new Float64Array(3);
@@ -302,6 +315,17 @@ export async function pointFactors(
           : 0;
       };
   const values = new Float64Array(Math.max(factorCount, program.factorCount));
+  const analyses = count
+    ? await prepareAnalysisProviders(
+        job,
+        bytes,
+        program,
+        cache,
+        current,
+        diagnostics,
+      )
+    : undefined;
+  if (analyses === null || !current()) return null;
   const context = {
     offset: 0,
     length: job.length,
@@ -317,17 +341,17 @@ export async function pointFactors(
     number(index, parameters) {
       return numericResult(bytes, Math.floor(index), parameters);
     },
-    spectrum(kind, position) {
-      if (!bins) return 0;
-      const bin = Math.min(
-        bins - 1,
-        Math.floor(Math.max(0, Math.min(1, position)) * bins),
+    analysis(index, parameters) {
+      return analyses.lookup(index, parameters);
+    },
+    spectrum(kind, position, interpolation) {
+      return sampleSpectrum(
+        spectrum,
+        job.length,
+        kind,
+        position,
+        interpolation,
       );
-      return kind === "frequency"
-        ? (2 * bin) / Math.max(1, job.length)
-        : kind === "phase"
-          ? phases[bin]
-          : amplitudes[bin];
     },
   };
   const nextByte = used.has("byte2"),
@@ -347,7 +371,9 @@ export async function pointFactors(
         ? offsets[index]
         : population === "bins"
           ? Math.floor((index * job.length) / bins)
-          : Math.floor((i * job.length) / count);
+          : records
+            ? records.offset(index)
+            : Math.floor((i * job.length) / count);
       if (sample >= job.length) continue;
       let value = readByte(sample) ?? 0,
         metric = sparse
@@ -435,12 +461,40 @@ export async function pointFactors(
       emit(values, label, context);
     }
   };
+  if (analyses) {
+    const evaluate = program.createEvaluator();
+    const passes =
+      program.nodes.filter((node) => node.op === "analysis").length + 1;
+    let complete = false;
+    for (let pass = 0; pass < passes; pass++) {
+      for (let first = 0; first < count; first += 1024) {
+        visit(
+          (factors, label, context) => evaluate(factors, context),
+          first,
+          first + 1024,
+        );
+        if (first + 1024 < count && !(await yieldScan(current))) return null;
+      }
+      if (!analyses.pending) {
+        complete = true;
+        break;
+      }
+      if (!(await analyses.preparePending()) || !current()) return null;
+    }
+    if (!complete)
+      throw new Error("Statistical lookup addresses could not be prepared.");
+    if (!analyses.publish()) return null;
+  }
   visit.grid = grid;
   visit.count = count;
   visit.provenance = {
     window: needBytes ? cache.factorWindow : undefined,
     bytes,
     readByte,
+    analysis: analyses,
+    records,
+    populationKeys: cache.population?.keys,
+    symbolCounts: cache.population?.counts,
     rootRange: sparse
       ? sparse.rootRange
       : needBytes

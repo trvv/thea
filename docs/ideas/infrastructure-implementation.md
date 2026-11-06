@@ -1,5 +1,7 @@
 # Infrastructure implementation sequence
 
+Historical planning baseline: implementation has since advanced. Consult the [PLAN delivery audit](PLAN.md#browser-delivery-audit) and linked current-behavior documents for delivered features and remaining gates.
+
 This is a code-informed planning input to the combined [plan](PLAN.md), not a
 second implementation track. It covers the infrastructure and interaction work
 in [next steps](next-steps.md), [the roadmap](roadmap.md), and the performance

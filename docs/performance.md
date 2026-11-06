@@ -51,6 +51,19 @@ representative byte. See [the implementation plan](ideas/PLAN.md).
 Engine queue lifecycle counters, enqueue-to-composition latency, physical-GPU
 measurements and overview summary accounting remain future instrumentation work.
 
+## Dependency and upload reuse
+
+Immutable color buffers now survive size/shape-only edits. Reduced recipe graphs
+omit color-only providers for that edit; tests assert unchanged buffer identity,
+zero provider work and exact fresh-path pixels, independently of preset names.
+
+WebGL retains instance data while prepared appearance and projected state remain
+unchanged. Repeated frames avoid both the instance loop and upload: 65,536 marks
+avoid a repeated 2 MiB transfer. Camera/appearance changes invalidate the state;
+an intervening CPU camera frame also forces a new upload. Chromium checks actual
+upload counters and coverage parity. CPU projection, sorting and recipes remain
+on CPU; no compositing/coverage change is implied.
+
 ## Earlier shared-renderer comparison
 
 Measurements made during the removal of preset-specific painters, comparing

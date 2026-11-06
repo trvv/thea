@@ -1,5 +1,7 @@
 # Next steps
 
+Historical planning baseline: implementation has since advanced. Consult the [PLAN delivery audit](PLAN.md#browser-delivery-audit) and linked current-behavior documents for delivered features and remaining gates.
+
 These are proposals following the pipeline improvements in `77148df`, not a list
 of features already implemented. The [pipeline contracts](../pipeline.md) describe
 current behavior; the [roadmap](roadmap.md) gives the broader direction.

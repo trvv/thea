@@ -1,5 +1,7 @@
 # Distribution-change scores
 
+Current delivery: Selected-scope total variation and Jensen–Shannon divergence are implemented, with separate validity and exact window provenance. See [implemented behavior](../statistical-analyses.md) and [PLAN audit](PLAN.md#browser-delivery-audit). The remainder retains the original design discussion.
+
 Proposal: a new local histogram-comparison provider. The aim is to locate changes
 in byte composition even when the entropy on each side remains similar.
 

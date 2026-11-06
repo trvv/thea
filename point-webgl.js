@@ -95,7 +95,7 @@ export class PointWebGL {
     prepared,
     projected,
     order,
-    { width, height, spatial, cellWidth, cellHeight },
+    { width, height, spatial, cellWidth, cellHeight, state },
   ) {
     const gl = this.gl;
     if (
@@ -111,19 +111,24 @@ export class PointWebGL {
         Math.max(256, 2 ** Math.ceil(Math.log2(Math.max(1, required)))),
       );
     const instances = this.instances;
-    for (let n = 0; n < prepared.size; n++) {
-      const i = order ? order[n] : n,
-        q = i * 4,
-        p = n * 8;
-      instances[p] = projected[q];
-      instances[p + 1] = projected[q + 1];
-      instances[p + 2] =
-        (spatial ? projected[q + 3] : cellWidth / 2) * prepared.sizes[i];
-      instances[p + 3] =
-        (spatial ? projected[q + 3] : cellHeight / 2) * prepared.sizes[i];
-      for (let c = 0; c < 4; c++)
-        instances[p + 4 + c] = prepared.colors[q + c] / 255;
-    }
+    const upload =
+      !state ||
+      this.uploadedPrepared !== prepared ||
+      this.uploadedProjection !== state;
+    if (upload)
+      for (let n = 0; n < prepared.size; n++) {
+        const i = order ? order[n] : n,
+          q = i * 4,
+          p = n * 8;
+        instances[p] = projected[q];
+        instances[p + 1] = projected[q + 1];
+        instances[p + 2] =
+          (spatial ? projected[q + 3] : cellWidth / 2) * prepared.sizes[i];
+        instances[p + 3] =
+          (spatial ? projected[q + 3] : cellHeight / 2) * prepared.sizes[i];
+        for (let c = 0; c < 4; c++)
+          instances[p + 4 + c] = prepared.colors[q + c] / 255;
+      }
     if (this.canvas.width !== width) this.canvas.width = width;
     if (this.canvas.height !== height) this.canvas.height = height;
     gl.viewport(0, 0, width, height);
@@ -133,11 +138,17 @@ export class PointWebGL {
     gl.useProgram(this.program);
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      instances.subarray(0, required),
-      gl.DYNAMIC_DRAW,
-    );
+    if (upload) {
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        instances.subarray(0, required),
+        gl.DYNAMIC_DRAW,
+      );
+      this.uploadedPrepared = prepared;
+      this.uploadedProjection = state;
+      this.uploads = (this.uploads || 0) + 1;
+      this.uploadBytes = (this.uploadBytes || 0) + required * 4;
+    }
     gl.uniform2f(this.raster, width, height);
     gl.uniform1i(this.circle, prepared.shape === "circle" ? 1 : 0);
     gl.enable(gl.BLEND);

@@ -39,7 +39,7 @@ export function projectPoints(prepared, job, scratch) {
     grid,
   ]);
   if (scratch.geometry === prepared.geometry && scratch.key === key)
-    return { ...scratch.projection, reused: true };
+    return { ...scratch.projection, state: scratch.projection, reused: true };
   const started = performance.now(),
     cy = Math.cos(yaw),
     sy = Math.sin(yaw),
@@ -108,6 +108,7 @@ export function projectPoints(prepared, job, scratch) {
   };
   return {
     ...scratch.projection,
+    state: scratch.projection,
     reused: false,
     projection,
     sorting: performance.now() - sortStarted,

@@ -13,6 +13,7 @@ export function settingsKey(job) {
     job.frequencyOpacity,
     job.coordinateSystem,
     job.axes,
+    job.referenceModels?.map((model) => [model.id, model.revision]),
   ]);
 }
 

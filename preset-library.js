@@ -1,5 +1,6 @@
 /** Named, source-independent presets. Writes replace one validated localStorage value atomically. */
 import { validateProfile } from "./profiles.js";
+import { pixelFormats } from "./packed-pixels.js";
 export const storageKey = "thea.presets";
 const builtins = new Set([
   "linear",
@@ -8,6 +9,8 @@ const builtins = new Set([
   "digraph",
   "dft",
   "trigraph",
+  "byte-frequency",
+  ...Object.keys(pixelFormats).map((format) => `pixels-${format}`),
 ]);
 const nameOf = (value) => {
   if (typeof value !== "string" || !value.trim() || value.trim().length > 80)

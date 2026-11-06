@@ -12,6 +12,8 @@ import {
 } from "../recipes.js";
 import { emitRecipeShader } from "../recipe-shaders.js";
 import { numericResult } from "../numeric-interpretation.js";
+import { sampleSpectrum } from "../spectrum-sampling.js";
+import { spectrumComponents } from "../spectrum.js";
 const fixtures = [];
 const cases = {
   exactHilbert2D: {
@@ -198,6 +200,24 @@ cases.numericFloat = {
   z: { op: "number", offset, format: "float32", kind: "negativeZero" },
   w: { op: "number", offset, format: "float32", min: -2, max: 2 },
 };
+cases.numeric64 = {
+  x: {
+    op: "number",
+    offset,
+    format: "uint64",
+    min: "18446744073709551614",
+    max: "18446744073709551615",
+  },
+  y: { op: "number", offset, format: "int64", kind: "sign" },
+  z: { op: "number", offset, format: "float64", kind: "finite" },
+  w: {
+    op: "number",
+    offset,
+    format: "float64",
+    min: 1 + Number.EPSILON,
+    max: 1 + 2 * Number.EPSILON,
+  },
+};
 cases.morton2D = {
   x: mortonCoordinate(0),
   y: mortonCoordinate(1),
@@ -216,9 +236,87 @@ cases.mortonScalar = {
   z: mortonCoordinate(2, "position", 3, 3),
   w: constant(1),
 };
+cases.statistical = {
+  x: { op: "analysis", offset, family: "lag", kind: "equality", lag: 2 },
+  y: {
+    op: "normalize",
+    input: { op: "analysis", offset, family: "conditional", kind: "surprise" },
+    min: 0,
+    max: 16,
+  },
+  z: {
+    op: "analysis",
+    offset,
+    family: "distribution",
+    kind: "variation",
+    window: 8,
+  },
+  w: {
+    op: "analysis",
+    offset: { op: "subtract", a: offset, b: constant(1) },
+    family: "bit",
+    kind: "bias",
+    bit: 3,
+  },
+};
+cases.complexSpectrum = {
+  x: {
+    op: "spectrum",
+    input: "position",
+    kind: "phase",
+    interpolation: "complex",
+  },
+  y: {
+    op: "spectrum",
+    input: "position",
+    kind: "amplitude",
+    interpolation: "complex",
+  },
+  z: {
+    op: "spectrum",
+    input: "position",
+    kind: "frequency",
+    interpolation: "complex",
+  },
+  w: constant(1),
+};
+const complexSpectrum = spectrumComponents(
+  {
+    real: Float64Array.from({ length: 33 }, (_, index) => (index % 5) - 2),
+    imaginary: Float64Array.from({ length: 33 }, (_, index) => (index % 3) - 1),
+  },
+  64,
+  true,
+  true,
+);
 const numericBytes = (format) => {
   const bytes = new Uint8Array(64);
   const view = new DataView(bytes.buffer);
+  if (["uint64", "int64", "float64"].includes(format)) {
+    for (let offset = 0; offset < 64; offset += 8)
+      if (format === "float64")
+        view.setFloat64(
+          offset,
+          [
+            -0,
+            Number.MIN_VALUE,
+            Number.MAX_VALUE,
+            NaN,
+            Infinity,
+            -Infinity,
+            1 + Number.EPSILON,
+            1 + 2 * Number.EPSILON,
+          ][offset / 8],
+          true,
+        );
+      else
+        view.setBigUint64(
+          offset,
+          18446744073709551614n + BigInt((offset / 8) % 2),
+          true,
+        );
+    return bytes;
+  }
   for (let offset = 0; offset < 64; offset += 4)
     if (format === "float32")
       view.setFloat32(
@@ -237,6 +335,13 @@ for (const [name, roots] of Object.entries(cases)) {
     shader = emitRecipeShader(program, "glsl");
   const bindings = shader.bindings
     .map((binding) => {
+      if (
+        binding.kind === "spectrum" &&
+        ["real", "imaginary", "peakAmplitude"].includes(binding.component)
+      )
+        return `float ${binding.name}(int index) { return ${binding.component === "real" ? "float(index % 5 - 2)" : binding.component === "imaginary" ? "float(index % 3 - 1)" : complexSpectrum.peakAmplitude.toExponential(9)}; }`;
+      if (binding.kind === "analysis")
+        return `float ${binding.name}(int index) { return float(index) / ${binding.projection === "surprise" ? "4.0" : "64.0"}; }`;
       if (binding.kind === "number") {
         const parameters = { ...binding, kind: binding.projection };
         const bytes = numericBytes(binding.format);
@@ -285,8 +390,20 @@ void main(){
       byte: (index) => (large ? index & 255 : index < 64 ? index : 0),
       number: (index, parameters) =>
         numericResult(numericBytes(parameters.format), index, parameters),
+      analysis: (index, parameters) =>
+        index < 0 || index >= selectionLength
+          ? 0
+          : index / (parameters.kind === "surprise" ? 4 : 64),
       entropy: (index) => index / 64,
-      spectrum: (kind, position) => {
+      spectrum: (kind, position, interpolation) => {
+        if (interpolation === "complex")
+          return sampleSpectrum(
+            complexSpectrum,
+            selectionLength,
+            kind,
+            position,
+            interpolation,
+          );
         const index = Math.min(32, Math.floor(position * 33));
         return kind === "frequency"
           ? (2 * index) / 64

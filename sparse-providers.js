@@ -127,7 +127,8 @@ export async function prepareSparseProviders(
     job.length <= 65536 ||
     !count ||
     count > 16384 ||
-    program.providers.numeric
+    program.providers.numeric ||
+    program.providers.analysis?.length
   )
     return undefined;
   const addresses = addressEvaluator(program);

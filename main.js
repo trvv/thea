@@ -13,12 +13,30 @@ import {
   restoreEdit,
 } from "./profile-edits.js";
 import { inspectionContent } from "./inspection-content.js";
+import { appearanceChannelsFor } from "./factor-catalog.js";
+import { byteFrequencyTable } from "./byte-frequency.js";
+import { packedPixels, pixelFormats } from "./packed-pixels.js";
+import { findOccurrences, inspectByteContext } from "./occurrences.js";
+import { chooseFile, downloadJSON } from "./browser-files.js";
+import * as referenceModels from "./reference-models.js";
+import * as bookmarks from "./bookmarks.js";
+import { validateSourceMetadata } from "./source-metadata.js";
+import { assertProviderBudget } from "./provider-budget.js";
 import { dimensionNames, defaultDimension, pointGrid } from "./dimensions.js";
 import { validateProfile, parseProfile } from "./profiles.js";
 import { settingsKey } from "./render-identity.js";
-import { limitedSampleLayout, populations } from "./populations.js";
+import {
+  limitedSampleLayout,
+  populations,
+  recordPopulation,
+} from "./populations.js";
 import { recipeMenu } from "./recipe-menu.js";
-import { validateDefinitions, reference } from "./recipes.js";
+import {
+  validateDefinitions,
+  reference,
+  compileRecipes,
+  recipeRoots,
+} from "./recipes.js";
 import {
   spaces,
   presetConfiguration,
@@ -93,8 +111,8 @@ export class PointPopup extends Popup {
     this.setAttribute("aria-label", "Point information");
     this.tabIndex = -1;
   }
-  show(info, x, y) {
-    this.replaceChildren(inspectionContent(info));
+  show(info, x, y, actions) {
+    this.replaceChildren(inspectionContent(info, actions));
     this.open(x, y);
     this.focus();
   }
@@ -214,7 +232,7 @@ export class ContextMenu extends Popup {
           return;
         }
         try {
-          action(Number(field.value));
+          action(input === "number" ? Number(field.value) : field.value);
         } catch (error) {
           field.value = value;
           this.dispatchEvent(
@@ -680,6 +698,7 @@ export class DataScrollView extends ByteCanvas {
   /** Inspect raster coordinates from the currently displayed frame, independent of DPR/quality. */
   async inspectAt(clientX, clientY) {
     this.closeInspection();
+    const job = this.renderer.presentedJob;
     const version = this.inspectionVersion,
       bounds = this.canvas.getBoundingClientRect();
     if (!bounds.width || !bounds.height) return;
@@ -701,7 +720,82 @@ export class DataScrollView extends ByteCanvas {
         });
         this.shadowRoot.append(this.inspector);
       }
-      this.inspector.show(info, clientX, clientY);
+      const origin = info.point.byteCorrespondence || info.point;
+      const recordWidth = info.point.record?.width ?? 1;
+      const recordBytes = origin.context?.bytes.slice(
+        origin.context.byteIndex,
+        origin.context.byteIndex + Math.min(32, recordWidth),
+      );
+      const pattern =
+        info.point.population === "bins"
+          ? undefined
+          : info.point.tuple ||
+            (recordBytes?.length === recordWidth
+              ? recordBytes
+              : origin.context
+                ? [origin.context.bytes[origin.context.byteIndex]]
+                : undefined);
+      let cursor = origin.sourceOffset;
+      const current = () =>
+        version === this.inspectionVersion &&
+        this.isConnected &&
+        this.renderer.presentedJob === job;
+      const actions = pattern
+        ? {
+            occurrence: async (direction) => {
+              try {
+                const result = await findOccurrences(
+                  job.source,
+                  {
+                    pattern,
+                    start: info.point.selection.start,
+                    end: info.point.selection.endExclusive,
+                    after: cursor,
+                    direction,
+                    limit: 1,
+                    wrap: true,
+                  },
+                  current,
+                );
+                if (!current() || !result?.matches.length) return;
+                cursor = result.matches[0].start;
+                const context = await inspectByteContext(
+                  job.source,
+                  cursor,
+                  {},
+                  current,
+                );
+                if (!current()) return;
+                info.navigation = {
+                  sourceRange: result.matches[0],
+                  pattern,
+                  context,
+                };
+                this.inspector.show(info, clientX, clientY, actions);
+                const selected = new CustomEvent("address-select", {
+                  detail: {
+                    source: job.source,
+                    sourceOffset: cursor,
+                    length: pattern.length,
+                    frame: this.renderer.presented,
+                    relationship: "pattern occurrence",
+                  },
+                  bubbles: true,
+                  composed: true,
+                  cancelable: true,
+                });
+                this.dispatchEvent(selected);
+                if (!selected.defaultPrevented)
+                  this.dispatchEvent(
+                    new CustomEvent("seek", { detail: cursor }),
+                  );
+              } catch (error) {
+                if (current()) this.failure(error);
+              }
+            },
+          }
+        : undefined;
+      this.inspector.show(info, clientX, clientY, actions);
     } catch (error) {
       if (version === this.inspectionVersion) this.failure(error);
     }
@@ -934,15 +1028,29 @@ export class DataScrollView extends ByteCanvas {
     )
       return structuredClone(frame.values);
     const count =
-      configuration.population === "bins"
-        ? Math.floor((this.length || 0) / 2) + 1
-        : this.length || 1;
+      configuration.population === "records"
+        ? recordPopulation({ length: this.length || 0, configuration }).count
+        : configuration.population === "bins"
+          ? Math.floor((this.length || 0) / 2) + 1
+          : this.length || 1;
     return pointGrid(configuration, count, this.resolvedSampleLayout)
       .dimensions;
   }
 
   get navigationGrid() {
     const configuration = this.pointConfiguration;
+    if (configuration.population === "records") {
+      const records = recordPopulation({
+        length: this.length || 0,
+        configuration,
+      });
+      const grid = pointGrid(
+        configuration,
+        records.count,
+        this.resolvedSampleLayout,
+      );
+      return { columns: grid.columns * records.stride, rows: grid.rows };
+    }
     return configuration?.population === "bytes"
       ? pointGrid(configuration, this.length, this.resolvedSampleLayout)
       : this.resolvedSampleLayout;
@@ -1293,6 +1401,13 @@ export class DataScrollView extends ByteCanvas {
     const resolutionScale =
       this.spatial && this.resolution.moving ? this.resolution.scale : 1;
     try {
+      const program = compileRecipes(
+        recipeRoots(this.pointConfiguration, this.effectiveAppearance),
+        this.pointConfiguration.recipes,
+      );
+      const referenceIDs = (program.providers.analysis || [])
+        .filter((request) => request.family === "reference")
+        .map((request) => request.modelID);
       const rendered = await this.renderer.render({
         kind: "view",
         progressive: true,
@@ -1310,6 +1425,8 @@ export class DataScrollView extends ByteCanvas {
         width: this.clientWidth,
         height: this.clientHeight,
         scale: globalThis.devicePixelRatio || 1,
+        referenceModels: referenceModels.resolveModels(referenceIDs),
+        sourceMetadata: this.sourceMetadata,
       });
       if (rendered && version === this.version)
         Object.assign(this, { columns, rows });
@@ -1691,6 +1808,9 @@ export class DataScroll extends HTMLElement {
     this.shadowRoot.append(this.menu);
     this.addEventListener("contextmenu", (event) => {
       event.preventDefault();
+      this.activeView = event.composedPath?.().includes(this.comparisonView)
+        ? this.comparisonView
+        : this.view;
       this.refreshMenu();
       this.menu.open(event.clientX, event.clientY);
     });
@@ -1751,13 +1871,14 @@ export class DataScroll extends HTMLElement {
         if (item.items) next.items = wrap(item.items);
         if (item.action && !item.historyAction)
           next.action = (...args) => {
-            const before = this.view.exportProfile();
+            const editedView = this.editingView;
+            const before = editedView.exportProfile();
             const result = item.action(...args);
             const record = () => {
               const changed = rememberEdit(
-                this.view.editHistory,
+                editedView.editHistory,
                 before,
-                this.view.exportProfile(),
+                editedView.exportProfile(),
               );
               if (changed) this.refreshMenu();
             };
@@ -1774,19 +1895,59 @@ export class DataScroll extends HTMLElement {
     this.menu.items = wrap(this.contextItems());
   }
 
+  get editingView() {
+    return this.activeView || this.view;
+  }
+
+  toggleComparison() {
+    if (this.comparisonView) {
+      this.comparisonView.remove();
+      this.comparisonView = undefined;
+      this.activeView = this.view;
+      this.style.gridTemplateColumns = "";
+      this.barContainer.style.gridColumn = "";
+      return;
+    }
+    const comparison = (this.comparisonView = new DataScrollView());
+    comparison.className = "comparison";
+    comparison.style.gridColumn = "2";
+    comparison.style.gridRow = "1";
+    comparison.importProfile(this.view.exportProfile());
+    comparison.addEventListener("seek", (event) => this.seek(event.detail));
+    comparison.addEventListener("layout-change", () => this.syncComparison());
+    this.style.gridTemplateColumns = "minmax(0, 1fr) minmax(0, 1fr) auto";
+    this.barContainer.style.gridColumn = "3";
+    this.shadowRoot.append(comparison);
+    this.syncComparison();
+  }
+
+  syncComparison() {
+    const comparison = this.comparisonView;
+    if (!comparison || !this.source) return;
+    const length = this.view.length;
+    comparison.wholeBuffer = this.view.wholeBuffer;
+    comparison.requestedLength = length;
+    comparison.sourceMetadata = this.view.sourceMetadata;
+    comparison.setWindow(this.source, this.view.offset, length, {
+      ...comparison.layout(length, length),
+      length,
+      limit: length,
+    });
+  }
+
   /** Resolve snapshots through the same validated profile API used by JSON import. */
   presetSnapshot() {
-    const profile = this.view.exportProfile();
+    const profile = this.editingView.exportProfile();
     profile.appearance = validateAppearance(
       profile.region,
-      this.view.effectiveAppearance,
+      this.editingView.effectiveAppearance,
       profile.recipes,
     );
     return { profile, barCount: this.barCount };
   }
   applySavedPreset(entry) {
     if (this.barCount !== entry.barCount) this.barCount = entry.barCount;
-    this.view.importProfile(entry.profile);
+    this.editingView.importProfile(entry.profile);
     this.savedPresetId = entry.id;
   }
   restorePreset() {
@@ -1794,8 +1955,13 @@ export class DataScroll extends HTMLElement {
       const library = presetLibrary.readLibrary(),
         entry = library.presets.find((entry) => entry.id === library.selected);
       if (entry) this.applySavedPreset(entry);
-      else if (library.selected?.startsWith("builtin:"))
-        this.view.applyPreset(library.selected.slice(8));
+      else if (library.selected?.startsWith("builtin:")) {
+        const name = library.selected.slice(8);
+        if (name === "byte-frequency") this.applyTemplate(byteFrequencyTable());
+        else if (name.startsWith("pixels-"))
+          this.applyTemplate(packedPixels({ format: name.slice(7) }));
+        else this.editingView.applyPreset(name);
+      }
     } catch (error) {
       this.presetStorageError = error;
     }
@@ -1838,6 +2004,17 @@ export class DataScroll extends HTMLElement {
     } catch {}
     if (globalThis.prompt) globalThis.prompt("Preset JSON", json);
     else throw new Error("Copying preset JSON is unavailable.");
+  }
+  applyTemplate(template) {
+    const recipes = this.editingView.pointConfiguration.recipes;
+    this.editingView.applyPreset("linear");
+    this.editingView.pointConfiguration = {
+      ...template.configuration,
+      recipes,
+    };
+    this.editingView.shaders = template.shaders;
+    this.editingView.appearance = template.appearance;
+    this.savedPresetId = undefined;
   }
   presetItems() {
     let library;
@@ -1891,13 +2068,31 @@ export class DataScroll extends HTMLElement {
               trigraph: "Trigraph",
             }[region],
             checked:
-              !this.view._pointConfiguration && this.view.region === region,
+              !this.editingView._pointConfiguration &&
+              this.editingView.region === region,
             action: action(() => {
-              this.view.applyPreset(region);
+              this.editingView.applyPreset(region);
               this.savedPresetId = undefined;
               presetLibrary.selectPreset(`builtin:${region}`);
             }),
           })),
+          {
+            label: "Byte Frequency",
+            action: action(() => {
+              this.applyTemplate(byteFrequencyTable());
+              presetLibrary.selectPreset("builtin:byte-frequency");
+            }),
+          },
+          {
+            label: "Packed Pixels",
+            items: Object.keys(pixelFormats).map((format) => ({
+              label: format.toUpperCase(),
+              action: action(() => {
+                this.applyTemplate(packedPixels({ format }));
+                presetLibrary.selectPreset(`builtin:pixels-${format}`);
+              }),
+            })),
+          },
           {
             label: "Saved",
             disabled: library.presets.length === 0,
@@ -1984,7 +2179,211 @@ export class DataScroll extends HTMLElement {
           });
         }),
       },
+      {
+        label: "Import File",
+        action: action(async () => {
+          const file = await chooseFile(".json,application/json");
+          if (!file) return;
+          const value = presetLibrary.parsePreset(await file.text());
+          return name("Preset name", unusedName(value.name), (name) => {
+            const entry = presetLibrary.savePreset({ ...value, name });
+            this.applySavedPreset(entry);
+          });
+        }),
+      },
+      {
+        label: "Export File",
+        action: action(() => {
+          const name =
+            library.presets.find((entry) => entry.id === this.savedPresetId)
+              ?.name || "Custom Preset";
+          downloadJSON(
+            name,
+            presetLibrary.serializePreset({ name, ...this.presetSnapshot() }),
+          );
+        }),
+      },
     ];
+  }
+
+  referenceItems() {
+    const view = this.editingView;
+    let models = [];
+    try {
+      models = referenceModels.readLibrary().models;
+    } catch {}
+    const train = (order) =>
+      this.presetAction(async () => {
+        const name = globalThis.prompt?.("Reference name");
+        if (name === null || name === undefined) return;
+        const { source, offset, length } = view;
+        if (!source) throw new Error("No source is loaded");
+        assertProviderBudget(
+          { configuration: view.pointConfiguration },
+          length + 256 ** order * 16,
+          "Reference training",
+        );
+        const current = () =>
+          view.source === source &&
+          view.offset === offset &&
+          view.length === length;
+        const bytes = new Uint8Array(
+          await source.slice(offset, offset + length).arrayBuffer(),
+        );
+        if (!current()) return;
+        const model = await referenceModels.trainReference(
+          {
+            bytes,
+            name,
+            order,
+            provenance: {
+              sourceRange: { start: offset, endExclusive: offset + length },
+            },
+          },
+          current,
+        );
+        if (model) referenceModels.saveModel(model);
+      });
+    const use = (model, kind) => {
+      const expression = {
+        op: "analysis",
+        family: "reference",
+        modelID: model.id,
+        kind,
+        window: 32,
+        offset: { op: "offset" },
+      };
+      view.appearance = {
+        ...view.effectiveAppearance,
+        colorSpace: "hsl",
+        [kind === "coverage" ? "lightness" : "hue"]:
+          kind === "surprise"
+            ? { op: "normalize", input: expression, min: 0, max: 16 }
+            : expression,
+      };
+      this.refreshMenu();
+    };
+    return [
+      {
+        label: "Train Selection",
+        items: [
+          { label: "Bytes", action: () => train(1) },
+          { label: "Pairs", action: () => train(2) },
+        ],
+      },
+      ...models.map((model) => ({
+        label: model.name,
+        items: [
+          { label: "Surprise Hue", action: () => use(model, "surprise") },
+          { label: "Coverage Lightness", action: () => use(model, "coverage") },
+          {
+            label: "Rename",
+            action: () =>
+              this.presetAction(() => {
+                const name = globalThis.prompt?.("Reference name", model.name);
+                if (name !== null && name !== undefined)
+                  referenceModels.renameModel(model.id, name);
+              }),
+          },
+          {
+            label: "Export File",
+            action: () =>
+              downloadJSON(model.name, referenceModels.serializeModel(model)),
+          },
+          {
+            label: "Delete",
+            action: () =>
+              this.presetAction(() => referenceModels.deleteModel(model.id)),
+          },
+        ],
+      })),
+      {
+        label: "Import File",
+        action: () =>
+          this.presetAction(async () => {
+            const file = await chooseFile(".json,application/json");
+            if (file)
+              referenceModels.saveModel(
+                referenceModels.parseModel(await file.text()),
+              );
+          }),
+      },
+    ];
+  }
+
+  bookmarkItems() {
+    let entries = [];
+    try {
+      entries = bookmarks.readBookmarks();
+    } catch {}
+    return [
+      {
+        label: "Save Range",
+        action: () =>
+          this.presetAction(() => {
+            const name = globalThis.prompt?.("Bookmark name");
+            if (name !== null && name !== undefined)
+              bookmarks.saveBookmark({
+                name,
+                source: this.sourceIdentity,
+                offset: this.view.offset,
+                length: this.view.length,
+              });
+          }),
+      },
+      ...entries.map((entry) => ({
+        label: entry.name,
+        items: [
+          {
+            label: "Load",
+            disabled: entry.source !== this.sourceIdentity,
+            action: () =>
+              this.presetAction(() =>
+                this.selectRange(entry.offset, entry.length),
+              ),
+          },
+          {
+            label: "Rename",
+            action: () =>
+              this.presetAction(() => {
+                const name = globalThis.prompt?.("Bookmark name", entry.name);
+                if (name !== null && name !== undefined)
+                  bookmarks.saveBookmark({ ...entry, name });
+              }),
+          },
+          {
+            label: "Delete",
+            action: () =>
+              this.presetAction(() => bookmarks.deleteBookmark(entry.id)),
+          },
+        ],
+      })),
+    ];
+  }
+
+  selectRange(offset, length) {
+    if (
+      !this.source ||
+      !Number.isSafeInteger(offset) ||
+      !Number.isSafeInteger(length) ||
+      offset < 0 ||
+      length < 1 ||
+      offset + length > this.source.size
+    )
+      throw new RangeError("Range lies outside the loaded source");
+    this.windowSize = length;
+    this.exactSelectionLength = length;
+    if (!this.barCount) this.barCount = 1;
+    this.resetLevels(offset);
+  }
+
+  setSourceMetadata(value) {
+    if (!this.source) throw new Error("No source is loaded");
+    const metadata = validateSourceMetadata(value, this.source.size);
+    this.view.sourceMetadata = metadata;
+    if (this.comparisonView) this.comparisonView.sourceMetadata = metadata;
+    this.view.render();
+    this.comparisonView?.render();
   }
 
   /**
@@ -1992,7 +2391,7 @@ export class DataScroll extends HTMLElement {
    * visualization settings.
    */
   contextItems() {
-    const view = this.view,
+    const view = this.editingView,
       config = view.pointConfiguration;
     const ranges = view.dimensionRanges;
     const definitions = config.recipes || {};
@@ -2100,19 +2499,40 @@ export class DataScroll extends HTMLElement {
       {
         label: "Points",
         items: [
-          ...["hue", "saturation", "lightness", "opacity", "size"].map(
-            (channel) =>
-              edit(
-                channel[0].toUpperCase() + channel.slice(1),
-                view.effectiveAppearance[channel],
-                (value) => {
-                  view.appearance = {
-                    ...view.effectiveAppearance,
-                    [channel]: value,
-                  };
-                  this.refreshMenu();
-                },
-              ),
+          choose(
+            "Color Space",
+            view.effectiveAppearance.colorSpace ?? "hsl",
+            [
+              { value: "hsl", label: "HSL" },
+              { value: "rgb", label: "RGB" },
+            ],
+            (colorSpace) => {
+              view.appearance = {
+                ...view.effectiveAppearance,
+                colorSpace,
+                ...(colorSpace === "rgb"
+                  ? {
+                      red: view.effectiveAppearance.red ?? "value",
+                      green: view.effectiveAppearance.green ?? "value",
+                      blue: view.effectiveAppearance.blue ?? "value",
+                    }
+                  : {}),
+              };
+              this.refreshMenu();
+            },
+          ),
+          ...appearanceChannelsFor(view.effectiveAppearance).map((channel) =>
+            edit(
+              channel[0].toUpperCase() + channel.slice(1),
+              view.effectiveAppearance[channel],
+              (value) => {
+                view.appearance = {
+                  ...view.effectiveAppearance,
+                  [channel]: value,
+                };
+                this.refreshMenu();
+              },
+            ),
           ),
           choose(
             "Shape",
@@ -2237,6 +2657,24 @@ export class DataScroll extends HTMLElement {
       {
         label: "Advanced",
         items: [
+          { label: "References", items: this.referenceItems() },
+          { label: "Bookmarks", items: this.bookmarkItems() },
+          {
+            label: "Open File",
+            action: () =>
+              this.presetAction(async () => {
+                const file = await chooseFile();
+                if (file) this.source = file;
+              }),
+          },
+          {
+            label: "Comparison View",
+            checked: !!this.comparisonView,
+            action: () => {
+              this.toggleComparison();
+              this.refreshMenu();
+            },
+          },
           {
             label: "Undo",
             disabled: !view.editHistory.past.length,
@@ -2303,6 +2741,23 @@ export class DataScroll extends HTMLElement {
                 ),
               ]
             : []),
+          ...(config.population === "records"
+            ? ["recordStride", "recordOrigin", "recordWidth"].map(
+                (parameter) => ({
+                  label: {
+                    recordStride: "Record Stride",
+                    recordOrigin: "Record Origin",
+                    recordWidth: "Record Width",
+                  }[parameter],
+                  input: "number",
+                  min: parameter === "recordOrigin" ? 0 : 1,
+                  step: 1,
+                  value:
+                    config[parameter] ?? (parameter === "recordOrigin" ? 0 : 1),
+                  action: (value) => change({ [parameter]: value }),
+                }),
+              )
+            : []),
           choose(
             "Footprint",
             config.footprint,
@@ -2352,7 +2807,10 @@ export class DataScroll extends HTMLElement {
       bar.addEventListener("window-change", (event) => {
         level.requested = event.detail.length;
         level.offset = event.detail.offset;
-        if (index === this.levels.length - 1) this.windowSize = level.requested;
+        if (index === this.levels.length - 1) {
+          this.windowSize = level.requested;
+          this.exactSelectionLength = undefined;
+        }
         this.wheelRows = 0;
         this.updateLevels(
           level,
@@ -2376,6 +2834,10 @@ export class DataScroll extends HTMLElement {
    */
   set source(source) {
     this._source = source instanceof Blob ? source : new Blob([source]);
+    this.sourceIdentity = bookmarks.sourceIdentity(this._source);
+    this.exactSelectionLength = undefined;
+    this.view.sourceMetadata = undefined;
+    if (this.comparisonView) this.comparisonView.sourceMetadata = undefined;
     for (const level of this.levels) level.bar.stopAuto();
     this.resetLevels(0);
   }
@@ -2424,6 +2886,7 @@ export class DataScroll extends HTMLElement {
       };
       this.view.requestedLength = this.source.size;
       this.view.setWindow(this.source, 0, this.source.size, layout);
+      this.syncComparison();
       return;
     }
     let source = this.source,
@@ -2435,7 +2898,13 @@ export class DataScroll extends HTMLElement {
         level === changed ? (anchorEnd ?? source.size) : source.size,
       );
       const layout = inner
-        ? { ...this.view.layout(this.windowSize, limit), limit }
+        ? {
+            ...this.view.layout(
+              this.windowSize,
+              Math.min(limit, this.exactSelectionLength ?? limit),
+            ),
+            limit: Math.min(limit, this.exactSelectionLength ?? limit),
+          }
         : null;
       const length = inner
         ? layout.length
@@ -2468,6 +2937,7 @@ export class DataScroll extends HTMLElement {
         source = level.slice;
       }
     });
+    this.syncComparison();
   }
 
   /**

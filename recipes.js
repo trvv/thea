@@ -7,8 +7,9 @@
 import { hilbert3D, hilbert3DMaxOrder } from "./hilbert.js";
 import { spaces } from "./spaces.js";
 import { numericParameters, spanAvailable } from "./numeric-interpretation.js";
+import { analysisParameters } from "./analysis-parameters.js";
 import {
-  appearanceChannels,
+  appearanceChannelsFor,
   factorIndices,
   factorCount,
 } from "./factor-catalog.js";
@@ -77,7 +78,7 @@ export function recipeRoots(configuration, appearance) {
     position = configuration.position;
   for (let i = 0; i < dimensions; i++)
     if (position[i] !== "none") roots[`p${i}`] = position[i];
-  for (const channel of appearanceChannels)
+  for (const channel of appearanceChannelsFor(appearance))
     if (appearance[channel] !== "none") roots[channel] = appearance[channel];
   return roots;
 }
@@ -235,6 +236,19 @@ export function compileRecipes(roots, definitions = {}) {
         providers.byte = true;
         providers.numeric = true;
         break;
+      case "analysis": {
+        args = [scalar(child("offset"))];
+        params = analysisParameters(expression);
+        providers.byte = true;
+        const requests = (providers.analysis ||= []);
+        if (
+          !requests.some(
+            (request) => JSON.stringify(request) === JSON.stringify(params),
+          )
+        )
+          requests.push(params);
+        break;
+      }
       case "entropy":
         args = [scalar(child("offset"))];
         params.window = expression.window;
@@ -251,6 +265,9 @@ export function compileRecipes(roots, definitions = {}) {
         params.kind = expression.kind;
         if (!["phase", "frequency", "amplitude"].includes(params.kind))
           throw new TypeError("Unknown spectrum component");
+        params.interpolation = expression.interpolation ?? "nearest";
+        if (!["nearest", "complex"].includes(params.interpolation))
+          throw new TypeError("Unknown spectrum interpolation");
         providers.spectrum.add(params.kind);
         break;
       case "linear":
@@ -498,13 +515,21 @@ export function compileRecipes(roots, definitions = {}) {
             return (_, context) => {
               values[target] = context.number(values[a], node);
             };
+          case "analysis":
+            return (_, context) => {
+              values[target] = context.analysis(values[a], node);
+            };
           case "entropy":
             return (_, context) => {
               values[target] = context.entropy(values[a], node.window);
             };
           case "spectrum":
             return (_, context) => {
-              values[target] = context.spectrum(node.kind, values[a]);
+              values[target] = context.spectrum(
+                node.kind,
+                values[a],
+                node.interpolation,
+              );
             };
           case "component":
             return () => {
@@ -721,6 +746,10 @@ export function recipeLabel(expression) {
       return `Available(${expression.width ?? 1}, ${recipeLabel(expression.offset)})`;
     case "number":
       return `${expression.format ?? "uint16"} ${expression.kind ?? "normalized"}(${recipeLabel(expression.offset)})`;
+    case "analysis": {
+      const parameters = analysisParameters(expression);
+      return `${parameters.family} ${parameters.kind}(${recipeLabel(expression.offset)})`;
+    }
     case "entropy":
       return `Entropy(${expression.window}, ${recipeLabel(expression.offset)})`;
     case "spectrum":

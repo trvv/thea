@@ -6,6 +6,7 @@
  */
 import { factorIndices as indices, factorCount } from "./factor-catalog.js";
 import { numericFormats } from "./numeric-interpretation.js";
+import { analysisParameters } from "./analysis-parameters.js";
 // Shader libraries, not draw pipelines: the backend supplies source-factor
 // attributes and indexed provider functions using textures/storage buffers.
 /**
@@ -255,11 +256,93 @@ export function emitRecipeShader(program, language = "glsl") {
         expression = `${wrapper}(${asIndex(node.args[0])}, selectionLength)`;
         break;
       }
+      case "analysis": {
+        const name = `recipeReadAnalysis${node.id}`;
+        const { kind, ...parameters } = analysisParameters(node);
+        external.set(name, {
+          name,
+          kind: "analysis",
+          ...parameters,
+          projection: kind,
+          input: "i32",
+          output: "f32",
+        });
+        const wrapper = `recipeSampleAnalysis${node.id}`;
+        helpers.set(
+          wrapper,
+          fn(
+            scalar,
+            wrapper,
+            [
+              [integer, "offset"],
+              [integer, "length"],
+            ],
+            `if (offset < 0 || offset >= length) { return 0.0; }\nreturn ${name}(offset);`,
+          ),
+        );
+        expression = `${wrapper}(${asIndex(node.args[0])}, selectionLength)`;
+        break;
+      }
       case "entropy":
         expression = `${provider("entropy", node.window)}(${asIndex(node.args[0])}, selectionLength)`;
         break;
       case "spectrum":
-        if (node.kind === "frequency")
+        if (node.interpolation === "complex" && node.kind === "frequency")
+          expression = `(2.0 * clamp(${a}, 0.0, 1.0) * floor(${scalar}(selectionLength) / 2.0) / max(1.0, ${scalar}(selectionLength)))`;
+        else if (node.interpolation === "complex") {
+          const coefficient = (component) => {
+            const name = `recipeReadSpectrum${component[0].toUpperCase() + component.slice(1)}`;
+            external.set(name, {
+              name,
+              kind: "spectrum",
+              component,
+              input: "i32",
+              output: "f32",
+            });
+            return name;
+          };
+          const real = coefficient("real"),
+            imaginary = coefficient("imaginary");
+          const peak =
+            node.kind === "amplitude"
+              ? coefficient("peakAmplitude")
+              : undefined;
+          const name = `recipeComplexSpectrum${node.kind === "phase" ? "Phase" : "Amplitude"}`;
+          const body = `if (length < 1) { return 0.0; }
+${declaration(integer, "bins", "length / 2 + 1")}
+${declaration(scalar, "coordinate", `clamp(position, 0.0, 1.0) * ${scalar}(bins - 1)`)}
+${declaration(integer, "lower", `${integer}(floor(coordinate))`)}
+${declaration(integer, "upper", "min(bins - 1, lower + 1)")}
+${declaration(scalar, "fraction", `coordinate - ${scalar}(lower)`)}
+${declaration(scalar, "real", `mix(${real}(lower), ${real}(upper), fraction)`)}
+${declaration(scalar, "imaginary", `mix(${imaginary}(lower), ${imaginary}(upper), fraction)`)}
+${declaration(scalar, "magnitude", "sqrt(real * real + imaginary * imaginary)")}
+${
+  node.kind === "phase"
+    ? `if (magnitude == 0.0) { return 0.5; }
+if (abs(imaginary) < magnitude * 1e-12) { return ${select("real >= 0.0", "0.5", "1.0")}; }
+return (${wgsl ? "atan2" : "atan"}(imaginary, real) + ${literal(Math.PI)}) / ${literal(2 * Math.PI)};`
+    : `${declaration(scalar, "lowerWeight", select("lower == 0 || lower * 2 == length", "1.0", "2.0"))}
+${declaration(scalar, "upperWeight", select("upper == 0 || upper * 2 == length", "1.0", "2.0"))}
+${declaration(scalar, "amplitude", `magnitude * mix(lowerWeight, upperWeight, fraction) / ${scalar}(length)`)}
+${declaration(scalar, "peak", `${peak}(0)`)}
+if (peak <= 0.0 || amplitude < peak * 1e-10) { return 0.0; }
+return log(1.0 + amplitude) / log(1.0 + peak);`
+}`;
+          helpers.set(
+            name,
+            fn(
+              scalar,
+              name,
+              [
+                [scalar, "position"],
+                [integer, "length"],
+              ],
+              body,
+            ),
+          );
+          expression = `${name}(${a}, selectionLength)`;
+        } else if (node.kind === "frequency")
           expression = `(2.0 * min(floor(${scalar}(selectionLength) / 2.0), floor(clamp(${a}, 0.0, 1.0) * (floor(${scalar}(selectionLength) / 2.0) + 1.0))) / max(1.0, ${scalar}(selectionLength)))`;
         else
           expression = `${provider("spectrum", node.kind)}(${a}, ${scalar}(selectionLength))`;

@@ -161,3 +161,43 @@ The second batch passes 34 Bun suites and 22 executed GLSL graphs, plus Chromium
 integration checks. Next work: byte-frequency population/table, packed pixels,
 occurrence navigation and the selected statistical-provider families. Remaining
 steps are still active; a documented proposal is not an implementation.
+
+## Browser delivery audit
+
+This records the bounded delivery in each remaining row, rather than silently
+promoting optional research branches into implemented features.
+
+| Steps | Delivered browser behavior                                                        | Evidence and limits                                                                                                                                                                                           |
+| ----- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 9     | Observed byte-symbol population and editable frequency table under Load           | Exact counts, first/last, 00/FF retained; no fabricated absent-symbol addresses. `byte-frequency`.                                                                                                            |
+| 10    | RGB appearance, eight packed formats and complete strided records                 | Exact channels/alpha, endian/stride/origin/completeness and popup provenance; `packed-pixels` and Chromium.                                                                                                   |
+| 11    | 2D/3D Morton                                                                      | Executed CPU/shader parity. H-curve evaluated as a later experiment: the upstream class alone does not supply an independent orientation/inverse contract. Retain that gate.                                  |
+| 12    | Bounded next/previous/wrapped occurrence search and hex context                   | Exact tuple/symbol/record patterns, no full index, freshness checks, no fake bin occurrence. `occurrences`.                                                                                                   |
+| 13    | Atomic factors, per-pane history, JSON editing/file transfer and bookmarks        | Validated storage, source matching and exact restored intervals. `profile-edits`, `bookmarks`, component tests.                                                                                               |
+| 14–17 | Conditional surprise; lag equality/difference/MI; TV/JS; rolling bit bias/entropy | Selected scopes, raw units, validity, rolling/shared models, direct oracles and provenance. `analysis-providers`.                                                                                             |
+| 18    | Exact nearest fixed-width repetition and chosen-candidate extension               | History/overlap/expiration, budgets/cancellation and real spans; `repetition`. Not a global longest-match search.                                                                                             |
+| 19    | Local spectral energy                                                             | Explicit frames, tapers, preprocessing, edges, DC/bands; deduplicated reductions and direct DFT/Parseval references. `local-spectrum`.                                                                        |
+| 20    | UTF-16/32, bounded graphemes, encoding factors, float64/int64                     | Exact BigInt strings/bounds before normalization; scalar validity/spans. `byte-interpretation`, `grapheme-inspection`, `encoding-analysis`, `numeric64-recipes`.                                              |
+| 21    | All-occurrence entropy reduction and complex spectral interpolation               | Streaming per-key sums/counts, explicit selected entropy, phase-safe blend and endpoint weights. `occurrence-reductions`, `spectrum-sampling`.                                                                |
+| 22    | Raw counts/probabilities and fixed/percentile exposure                            | Sampling-independent references, zero-category policy and pre-f32 normalization. `occurrence-analysis`. Screen accumulation remains explicitly optional because it changes contributor/compositing semantics. |
+| 23    | One linked comparison pane                                                        | Shared source/range, independent profile/camera/history, active-pane menus and cleanup; component/Chromium. Worker analysis caches remain separately owned.                                                   |
+| 24    | Source address/annotation contract and cancellable event                          | Wide addresses, overlapping spaces, half-open spans and replacement. External host transport is outside the clarified scope.                                                                                  |
+| 25    | User-trained byte/pair reference artifacts and resemblance                        | No bundled corpus; IDs in recipes, bounded artifact storage, evidence/margin/uncertainty, held-out fixtures, provenance and real worker tests.                                                                |
+| 26    | Dependency-based color reuse and persistent WebGL uploads                         | Buffer/counter assertions and exact reference pixels. GPU projection/compute and a fused grid kernel remain measured alternatives rather than preset painters.                                                |
+| 27    | Native File opening and explicit device matrix                                    | CPU remains default; Chromium/SwiftShader and GLES evidence recorded. Firefox/Safari/physical GPUs untested here. Range/live/external adapters are outside fixed-file focus.                                  |
+
+Current behavior: [statistics](../statistical-analyses.md),
+[nonlocal analyses](../nonlocal-analyses.md), [packed pixels](../packed-pixels.md),
+[text](../text-interpretations.md), [references](../reference-models.md),
+[comparison](../comparison-views.md), [source navigation](../source-navigation.md)
+and [device evidence](../device-matrix.md).
+
+### Original gates retained
+
+H-curve needs an agreed independent contract; screen-space accumulation needs a
+compositing/contributor model; GPU projection/compute needs end-to-end benefit
+and real-device evidence. Automatic lag search, record parsers, global longest
+matches, spectral populations and workspace persistence are further extensions,
+not hidden changes to the delivered measurements. These remain identified as
+such rather than being described as done. The browser milestones are usable
+without those branches.

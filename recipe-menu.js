@@ -4,7 +4,13 @@
  * @module recipe-menu
  */
 import { factorOptions } from "./factor-catalog.js";
-import { numericFormats, numericKinds } from "./numeric-interpretation.js";
+import {
+  numericFormats,
+  numericKinds,
+  integer64Format,
+  floatingFormat,
+} from "./numeric-interpretation.js";
+import { analysisKinds, analysisParameters } from "./analysis-parameters.js";
 import {
   constant,
   reference,
@@ -177,7 +183,31 @@ export function recipeMenu(label, value, definitions, change, save, depth = 0) {
             format,
             endian: "little",
             kind: "normalized",
-            ...(format === "float32" ? { min: 0, max: 1 } : {}),
+            ...(floatingFormat(format) ? { min: 0, max: 1 } : {}),
+          }),
+      })),
+    },
+    {
+      label: "Statistical Analysis",
+      items: Object.keys(analysisKinds).map((family) => ({
+        label: {
+          conditional: "Conditional Probability",
+          lag: "Lag Comparison",
+          distribution: "Distribution Change",
+          bit: "Bit Statistics",
+          repetition: "Repetition Distance",
+          spectral: "Local Spectral Energy",
+          occurrence: "Occurrence Statistics",
+          reduction: "Occurrence Mean Entropy",
+          reference: "Reference Resemblance",
+          encoding: "Text Interpretation",
+          reference: "Reference Resemblance",
+        }[family],
+        action: () =>
+          set({
+            op: "analysis",
+            offset: expression,
+            ...analysisParameters({ family }),
           }),
       })),
     },
@@ -292,6 +322,124 @@ export function recipeMenu(label, value, definitions, change, save, depth = 0) {
       parameters.push(parameter("Window", "window", 1, 4096, 1));
     if (expression.op === "available")
       parameters.push(parameter("Width", "width", 1, 8, 1));
+    if (expression.op === "analysis") {
+      const canonical = analysisParameters(expression);
+      const labels = {
+        probability: "Probability",
+        surprise: "Surprise",
+        valid: "Valid",
+        equality: "Equality",
+        difference: "Mean Absolute Difference",
+        information: "Mutual Information",
+        pairs: "Valid Pairs",
+        variation: "Total Variation",
+        divergence: "Jensen–Shannon Divergence",
+        bias: "Bit Bias",
+        entropy: "Bit Entropy",
+        count: canonical.family === "bit" ? "Set Bit Count" : "Count",
+        distance: "Distance",
+        length: "Match Length",
+        energy: "Band Energy",
+        power: "Band Power",
+        totalPower: "Total Power",
+        exposure: "Exposure",
+        mean: "Mean Entropy",
+        sum: "Entropy Sum",
+        coverage: "Coverage",
+        codePoint: "Code Point",
+        byteIndex: "Byte Index",
+      };
+      parameters.push(
+        choose(
+          "Projection",
+          canonical.kind,
+          analysisKinds[canonical.family].map((value) => ({
+            value,
+            label: labels[value],
+          })),
+          (kind) => set({ ...expression, kind }),
+        ),
+      );
+      if (canonical.family === "reference")
+        parameters.push({
+          label: "Model ID",
+          input: "text",
+          value: canonical.modelID,
+          action: (modelID) => set({ ...expression, modelID }),
+        });
+      if (canonical.family === "encoding")
+        parameters.push(
+          choose(
+            "Encoding",
+            canonical.encoding,
+            ["utf8", "utf16le", "utf16be", "utf32le", "utf32be"].map(
+              (value) => ({ value, label: value.toUpperCase() }),
+            ),
+            (encoding) => set({ ...expression, encoding }),
+          ),
+        );
+      for (const [key, label, min, max, step] of [
+        ["alpha", "Smoothing", Number.MIN_VALUE, 1000000, "any"],
+        ["window", "Window", canonical.family === "lag" ? 0 : 1, 4096, 1],
+        ["lag", "Lag", 1, 1000000, 1],
+        ["gap", "Gap", 0, 1000000, 1],
+        ["bit", "Bit", 0, 7, 1],
+        ["history", "History", 1, 1000000, 1],
+        ["maxLength", "Maximum Match Length", 4, 4096, 1],
+        ["hop", "Hop", 1, 1000000, 1],
+        ["origin", "Origin", 0, 1000000, 1],
+        ["low", "Band Minimum", 0, canonical.high ?? 0.5, "any"],
+        ["high", "Band Maximum", canonical.low ?? 0, 0.5, "any"],
+        [
+          "width",
+          "Tuple Width",
+          canonical.family === "reduction" ? 2 : 1,
+          3,
+          1,
+        ],
+        [
+          "referenceValue",
+          "Reference Count",
+          Number.MIN_VALUE,
+          Number.MAX_SAFE_INTEGER,
+          "any",
+        ],
+        ["percentile", "Percentile", 0, 1, "any"],
+        ["compression", "Compression", Number.MIN_VALUE, 1000000, "any"],
+        ["exposure", "Exposure", Number.MIN_VALUE, 1000000, "any"],
+      ])
+        if (canonical[key] !== undefined)
+          parameters.push({
+            ...parameter(label, key, min, max, step),
+            value: canonical[key],
+          });
+      for (const [key, label, values] of [
+        ["taper", "Taper", ["rectangular", "hann"]],
+        ["preprocessing", "Preprocessing", ["unsigned", "centered", "mean"]],
+        ["edge", "Edges", ["omit", "zero"]],
+        ["reference", "Reference", ["fixed", "percentile"]],
+      ])
+        if (canonical[key] !== undefined)
+          parameters.push(
+            choose(
+              label,
+              canonical[key],
+              values.map((value) => ({ value, label: value })),
+              (value) => set({ ...expression, [key]: value }),
+            ),
+          );
+      for (const [key, label] of [
+        ["overlap", "Overlap"],
+        ["dc", "Include DC"],
+        ["includeZero", "Include Zero Counts"],
+      ])
+        if (canonical[key] !== undefined)
+          parameters.push({
+            label,
+            checked: canonical[key],
+            action: () => set({ ...expression, [key]: !canonical[key] }),
+          });
+    }
     if (expression.op === "number") {
       const format = expression.format ?? "uint16";
       const kind = expression.kind ?? "normalized";
@@ -305,11 +453,12 @@ export function recipeMenu(label, value, definitions, change, save, depth = 0) {
               ...expression,
               format,
               kind:
-                ["exponent", "fraction"].includes(kind) && format !== "float32"
+                ["exponent", "fraction"].includes(kind) &&
+                !floatingFormat(format)
                   ? "normalized"
                   : kind,
-              min: format === "float32" ? 0 : undefined,
-              max: format === "float32" ? 1 : undefined,
+              min: floatingFormat(format) ? 0 : undefined,
+              max: floatingFormat(format) ? 1 : undefined,
             }),
         ),
         choose(
@@ -327,7 +476,7 @@ export function recipeMenu(label, value, definitions, change, save, depth = 0) {
           numericKinds
             .filter(
               (value) =>
-                format === "float32" ||
+                floatingFormat(format) ||
                 !["exponent", "fraction"].includes(value),
             )
             .map((value) => ({ value, label: value })),
@@ -335,7 +484,7 @@ export function recipeMenu(label, value, definitions, change, save, depth = 0) {
             set({
               ...expression,
               kind,
-              ...(kind === "normalized" && format === "float32"
+              ...(kind === "normalized" && floatingFormat(format)
                 ? { min: expression.min ?? 0, max: expression.max ?? 1 }
                 : {}),
             }),
@@ -344,17 +493,45 @@ export function recipeMenu(label, value, definitions, change, save, depth = 0) {
       if (kind === "normalized") {
         const min = expression.min ?? numericFormats[format].min;
         const max = expression.max ?? numericFormats[format].max;
-        parameters.push(
-          {
-            ...parameter("Minimum", "min", -Number.MAX_VALUE, max),
-            value: min,
-          },
-          { ...parameter("Maximum", "max", min, Number.MAX_VALUE), value: max },
-        );
+        if (integer64Format(format)) {
+          parameters.push(
+            {
+              label: "Minimum",
+              input: "text",
+              value: min,
+              action: (value) => set({ ...expression, min: value }),
+            },
+            {
+              label: "Maximum",
+              input: "text",
+              value: max,
+              action: (value) => set({ ...expression, max: value }),
+            },
+          );
+        } else
+          parameters.push(
+            {
+              ...parameter("Minimum", "min", -Number.MAX_VALUE, max),
+              value: min,
+            },
+            {
+              ...parameter("Maximum", "max", min, Number.MAX_VALUE),
+              value: max,
+            },
+          );
       }
     }
     if (expression.op === "spectrum")
       parameters.push(
+        choose(
+          "Interpolation",
+          expression.interpolation ?? "nearest",
+          [
+            { value: "nearest", label: "Nearest" },
+            { value: "complex", label: "Complex" },
+          ],
+          (interpolation) => set({ ...expression, interpolation }),
+        ),
         choose(
           "Component",
           expression.kind,

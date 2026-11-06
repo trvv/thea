@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { utf8At, inspectUtf8 } from "../byte-interpretation.js";
+import {
+  utf8At,
+  utf16At,
+  utf32At,
+  inspectUtf8,
+  inspectEncodings,
+} from "../byte-interpretation.js";
 
 const encoder = new TextEncoder();
 for (const scalar of [
@@ -149,6 +155,151 @@ current = false;
 finish(Uint8Array.of(65).buffer);
 assert.equal(await pending, null);
 
+// Every byte of a valid code unit/surrogate pair resolves the original scalar in both byte orders.
+for (const littleEndian of [true, false]) {
+  for (const scalar of [
+    0, 0x41, 0xe9, 0x20ac, 0xd7ff, 0xe000, 0xfeff, 0xfffd, 0xffff, 0x10000,
+    0x1f600, 0x10ffff,
+  ]) {
+    const text = String.fromCodePoint(scalar);
+    const encoded16 = new Uint8Array(text.length * 2);
+    const data16 = new DataView(encoded16.buffer);
+    for (let n = 0; n < text.length; n++)
+      data16.setUint16(n * 2, text.charCodeAt(n), littleEndian);
+    const encoded32 = new Uint8Array(4);
+    new DataView(encoded32.buffer).setUint32(0, scalar, littleEndian);
+    for (const [bytes, decode, unit] of [
+      [encoded16, utf16At, 2],
+      [encoded32, utf32At, 4],
+    ]) {
+      const padded = Uint8Array.from([255, 255, 255, ...bytes, 255, 255, 255]);
+      for (let byte = 0; byte < bytes.length; byte++) {
+        const candidates = decode(padded, 3 + byte, 100, littleEndian);
+        const candidate = candidates.find(
+          (value) => value.sourceRange.start === 103,
+        );
+        assert(
+          candidate,
+          `Missing UTF-${unit * 8} candidate for ${scalar} byte ${byte}`,
+        );
+        assert.equal(candidate.scalar, scalar);
+        assert.equal(candidate.encodedLength, bytes.length);
+        assert.equal(candidate.byteIndex, byte);
+        assert.equal(candidate.alignment, 103 % unit);
+        assert.equal(candidate.alignmentOrigin, 0);
+        assert.equal(candidate.byteOrder, littleEndian ? "little" : "big");
+        assert.deepEqual(candidate.bytes, [...bytes]);
+      }
+    }
+  }
+  for (const scalar of [0xd800, 0xdfff, 0x110000, 0xffffffff]) {
+    const bytes = new Uint8Array(4);
+    new DataView(bytes.buffer).setUint32(0, scalar, littleEndian);
+    for (let index = 0; index < 4; index++)
+      assert(
+        !utf32At(bytes, index, 0, littleEndian).some(
+          (value) => value.sourceRange.start === 0,
+        ),
+      );
+  }
+  for (const unit of [0xd800, 0xdbff, 0xdc00, 0xdfff]) {
+    const bytes = new Uint8Array(2);
+    new DataView(bytes.buffer).setUint16(0, unit, littleEndian);
+    assert.deepEqual(utf16At(bytes, 0, 0, littleEndian), []);
+  }
+}
+assert.deepEqual(utf16At(new Uint8Array(), 0), []);
+assert.deepEqual(utf32At(Uint8Array.of(0, 0, 0), 1), []);
+assert.throws(() => utf16At(Uint8Array.of(0, 0), 0, 0, "little"), /Byte order/);
+assert.throws(() => utf32At(new Uint8Array(4), 0, 0, 1), /Byte order/);
+const unalignedStorage = Uint8Array.of(255, 0x3d, 0xd8, 0, 0xde, 255);
+assert(
+  utf16At(unalignedStorage.subarray(1, 5), 3).some(
+    (value) => value.scalar === 0x1f600,
+  ),
+);
+
+// Fatal native UTF-16 decoders independently verify every locally viable candidate.
+for (const littleEndian of [true, false]) {
+  const native = new TextDecoder(littleEndian ? "utf-16le" : "utf-16be", {
+    fatal: true,
+    ignoreBOM: true,
+  });
+  for (let n = 0; n < 2048; n++) {
+    const bytes = Uint8Array.from({ length: 7 }, random);
+    const index = n % bytes.length;
+    const expected = [];
+    for (let start = Math.max(0, index - 3); start <= index; start++) {
+      for (const length of [2, 4]) {
+        if (start + length > bytes.length || index >= start + length) continue;
+        try {
+          const decoded = [
+            ...native.decode(bytes.subarray(start, start + length)),
+          ];
+          if (decoded.length === 1)
+            expected.push([start, start + length, decoded[0].codePointAt(0)]);
+        } catch {}
+      }
+    }
+    const actual = utf16At(bytes, index, 0, littleEndian).map((value) => [
+      value.sourceRange.start,
+      value.sourceRange.endExclusive,
+      value.scalar,
+    ]);
+    assert.deepEqual(actual, expected);
+  }
+}
+const combinedReads = [];
+const utf16Source = new Blob([Uint8Array.of(0xff, 0x3d, 0xd8, 0, 0xde, 0xff)]);
+const combinedSource = {
+  size: utf16Source.size,
+  slice(start, end) {
+    combinedReads.push([start, end]);
+    return utf16Source.slice(start, end);
+  },
+};
+for (const offset of [1, 2, 3, 4]) {
+  const candidates = await inspectEncodings(combinedSource, offset);
+  const match = candidates.find(
+    (value) => value.encoding === "UTF-16LE" && value.scalar === 0x1f600,
+  );
+  assert(match);
+  assert.equal(match.byteIndex, offset - 1);
+  assert.equal(match.alignment, 1);
+  assert(candidates.length <= 13);
+}
+assert.equal(
+  combinedReads.length,
+  4,
+  "Encoding candidates should share one read per inspection",
+);
+assert(
+  combinedReads.every(
+    ([start, end]) => start >= 0 && end <= utf16Source.size && end - start <= 7,
+  ),
+);
+assert.equal(await inspectEncodings(combinedSource, 0, () => false), null);
+assert.equal(await inspectEncodings(combinedSource, -1), null);
+let encodingCurrent = true;
+const encodingPending = inspectEncodings(
+  {
+    size: 4,
+    slice: () => ({
+      async arrayBuffer() {
+        encodingCurrent = false;
+        return new ArrayBuffer(4);
+      },
+    }),
+  },
+  1,
+  () => encodingCurrent,
+);
+assert.equal(await encodingPending, null);
+await assert.rejects(
+  inspectEncodings({ size: 10, slice: () => new Blob([Uint8Array.of(0)]) }, 4),
+  /ended before/,
+);
+
 console.log(
-  "Byte interpretation checks pass: strict UTF-8, scalar boundaries, all clicked bytes, fatal-decoder reference, escaped controls, bounded root reads and stale replies.",
+  "Byte interpretation checks pass: strict UTF-8/16/32, both endian/alignment candidates, all clicked bytes, fatal-decoder references, escaped controls, bounded shared root reads and stale replies.",
 );

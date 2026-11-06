@@ -35,10 +35,7 @@ population relationships, performance, inspection and acceptance fixtures. Any
 API sketches in those documents are proposals unless explicitly marked as current
 recipe examples.
 
-Delivered first increments: compact bit operations, bounded UTF-8 origin
-inspection, and [parameterized recipe experiments](../recipe-experiments.md).
-The broader rolling/text/numeric/statistical proposals remain pending; consult
-[PLAN progress](PLAN.md#progress) rather than treating a whole proposal as done.
+Delivered browser milestones now include the statistical, numeric/text, packed-pixel, reference, occurrence and comparison features. Consult the [PLAN delivery audit](PLAN.md#browser-delivery-audit) for exact boundaries and the optional research gates, rather than treating every proposed extension as done.
 
 ## Experiments using current recipes
 
