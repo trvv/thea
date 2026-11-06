@@ -345,6 +345,5 @@ worker structured cloning, cache identity and stale-frame rejection. Hidden or
 unused providers remain lazy. Keep correctness fixtures small and deterministic;
 performance reports use larger representative fixtures and avoid timing gates.
 
-The pre-commit formatter hook owns commit-time formatting. Format modified work
-before tests only when needed; use `bun fmt --check` to verify. No new on-page
+Run `bun fmt` before final checks and committing; use `bun fmt --check` to verify. No new on-page
 performance labels or explanatory UI are needed for this infrastructure work.

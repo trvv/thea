@@ -21,9 +21,8 @@ page requires an intentional host-layout change.
 
 ## Test commands
 
-The tracked pre-commit hook runs `bun fmt --staged`. Enable it in a new checkout
-with `git config core.hooksPath .githooks`. Use `bun fmt --check` to verify formatting;
-format before tests only when needed. The hook handles the commit-time pass.
+Run `bun fmt` before final checks and committing. Use `bun fmt --check` to verify
+formatting.
 
 Tests are executable Bun scripts using assertions, not a `bun test` discovery
 suite. Run from the repository root:
