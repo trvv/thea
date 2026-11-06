@@ -120,3 +120,35 @@ fixtures retain about 3.5 MiB, excluding source/provider arrays and plan/color
 caches. Sparse entropy/byte preparation and incremental tuple representative
 discovery remain useful ways to reduce full-selection work; camera projection on
 GPU and dependency-specific color/size buffers are separate opportunities.
+
+## Overlapping selections and exact depth ordering
+
+Engine-local source and entropy pages now survive selection movement. Pages are
+64 KiB, indexed by source identity, absolute address, entropy window and its
+existing quantization contract. Entropy interiors use source-clipped halos;
+selection-trained statistics keep their own selection keys. An LRU bounds retained
+page buffers to 8 MiB per engine, reduced by the remaining byte/entropy provider
+budget. Small sources and tight budgets retain the original dense path. Sparse
+preparation releases this page cache. Diagnostics include retained page buffers.
+This trades bounded duplicate page storage and page-sized cold reads for reuse;
+selection-sized output arrays are still assembled, not eliminated. Separate workers
+still own separate caches. FFTs and tuple scans are not made incremental by this.
+
+3D depth ordering uses stable four-pass radix ordering of Float32 depth keys,
+including equal depths, signed zero and infinities. Nonfinite NaN projections
+retain the former comparison-sort behavior. The sorter retains two Uint32 scratch
+arrays (8 bytes per allocated mark) and 1 KiB of counters. This is additional to
+older benchmark mark/raster accounting. No depth approximation is introduced.
+
+A same-machine CPU/canvas-double run with 65,536 marks measured cube camera frames
+at approximately 11 ms versus the preceding 26 ms, with sorting around 1.3 ms
+versus 16 ms. Cube scrolling measured 58 ms versus 80 ms and square scrolling
+23 ms versus 31 ms. These are indicative non-gating runs, not browser or physical
+GPU latency guarantees. `tests/performance-reuse.js` verifies ordering and page
+reuse against independent full-source entropy calculations.
+
+Density storage now follows the enabled options: 36 bytes/pixel for fixed-reference
+all-contribution mode, plus 8 for percentile references and 1 for front ownership.
+Unused buffers are released when switching options. At 1080p, fixed/all storage
+is about 71 MiB; default percentile/all is about 87 MiB. Budgets use the same
+option-dependent allocation estimate.

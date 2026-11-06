@@ -47,6 +47,7 @@ export function retainedProviderStorage(cache) {
       buffers.add(value.buffer);
     } else if (value instanceof Map) maps.add(value);
   };
+  for (const values of cache.providerPages?.entries.values() || []) add(values);
   add(cache.factorWindow?.data);
   add(cache.factorEntropy?.values);
   const entropyWindows = cache.recipeEntropy?.values;

@@ -1,5 +1,6 @@
 /** Projection and depth ordering depend on geometry and the camera, never on preset identity. */
 import { dimensionCellSize } from "./dimensions.js";
+import { depthOrder } from "./depth-order.js";
 import { spaces } from "./spaces.js";
 
 export const projectedPointSize = (depth) => (1.5 * 3.5) / (3.5 - depth);
@@ -92,8 +93,7 @@ export function projectPoints(prepared, job, scratch) {
     sortStarted = performance.now();
   const order = spatial ? scratch.order.subarray(0, prepared.size) : null;
   if (order) {
-    for (let i = 0; i < order.length; i++) order[i] = i;
-    order.sort((a, b) => projected[a * 4 + 2] - projected[b * 4 + 2]);
+    depthOrder(projected, order, scratch);
   }
   scratch.geometry = prepared.geometry;
   scratch.key = key;

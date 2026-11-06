@@ -1,3 +1,4 @@
+import { providerPages } from "./provider-pages.js";
 /**
  * Lazy window providers and per-sample inputs. File-relative reads, selection-relative recipe
  * offsets, and normalized spectrum positions have distinct contracts.
@@ -157,11 +158,24 @@ export async function pointFactors(
       windowLength + entropyStorage,
       "Byte and entropy preparation",
     );
+    const pageBudget = Math.min(
+      8 * 1048576,
+      Math.max(
+        0,
+        (job.configuration.providerBudget ?? Infinity) -
+          windowLength -
+          entropyStorage,
+      ),
+    );
+    const pages = providerPages(cache, job.source, source, pageBudget);
     let window = cache.factorWindow;
     if (!matches(window) || window.start > start || window.end < end) {
-      const data = await readProviderBytes(job.source, start, end, diagnostics);
+      const data =
+        job.source.size > 65536 && pageBudget >= 3 * 65536
+          ? await pages.range(start, end, 0, diagnostics, current)
+          : await readProviderBytes(job.source, start, end, diagnostics);
       rebuilt = true;
-      if (!current()) return null;
+      if (!data || !current()) return null;
       if (data.length < job.length + job.offset - start)
         throw new Error("Byte source ended before its declared size.");
       window = cache.factorWindow = { source, key, start, end, data };
@@ -174,15 +188,27 @@ export async function pointFactors(
     if (windows.has(32)) {
       const entropyStarted = diagnostics ? performance.now() : 0;
       const entropyRebuilt = !matches(cache.factorEntropy);
-      if (entropyRebuilt)
+      if (entropyRebuilt) {
+        const values =
+          job.source.size > 65536 && pageBudget >= 3 * 65536
+            ? await pages.range(
+                job.offset,
+                job.offset + job.length,
+                32,
+                diagnostics,
+                current,
+              )
+            : entropyShading(window.data).subarray(
+                job.offset - window.start,
+                job.offset - window.start + job.length,
+              );
+        if (!values || !current()) return null;
         cache.factorEntropy = {
           source,
           key,
-          values: entropyShading(window.data).subarray(
-            job.offset - window.start,
-            job.offset - window.start + job.length,
-          ),
+          values,
         };
+      }
       recordProvider(
         diagnostics,
         "entropy:32:quantized",
@@ -205,13 +231,31 @@ export async function pointFactors(
             Float32Array.from(metrics, (value) => value / 255),
           );
         else {
-          const window = cache.factorWindow;
-          const normalized = windowEntropy(window.data, size);
-          const first = job.offset - window.start;
-          cache.recipeEntropy.values.set(
-            size,
-            normalized.slice(first, first + job.length),
+          const pageBudget = Math.min(
+            8 * 1048576,
+            Math.max(
+              0,
+              (job.configuration.providerBudget ?? Infinity) -
+                job.length * 4 * windows.size -
+                cache.factorWindow.data.byteLength,
+            ),
           );
+          const pages = providerPages(cache, job.source, source, pageBudget);
+          const values =
+            job.source.size > 65536 && pageBudget >= 3 * 65536
+              ? await pages.range(
+                  job.offset,
+                  job.offset + job.length,
+                  size,
+                  diagnostics,
+                  current,
+                )
+              : windowEntropy(cache.factorWindow.data, size).slice(
+                  job.offset - cache.factorWindow.start,
+                  job.offset - cache.factorWindow.start + job.length,
+                );
+          if (!values || !current()) return null;
+          cache.recipeEntropy.values.set(size, values);
         }
       }
       recordProvider(diagnostics, `entropy:${size}`, started, rebuilt);

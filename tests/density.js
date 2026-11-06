@@ -31,6 +31,8 @@ const context = canvas.getContext("2d"),
 let settings = validateDensity({});
 const all = paintDensity(context, prepared, projection, scratch, settings, job);
 assert.equal(scratch.density.count[4], 2);
+assert.equal(scratch.density.covered, null);
+assert.ok(scratch.density.sorted instanceof Float64Array);
 assert.equal(all.referenceValue, 2);
 assert.deepEqual([...canvas.pixels.slice(16, 20)], [128, 0, 128, 255]);
 assert.equal(
@@ -61,6 +63,8 @@ settings = validateDensity({
 });
 paintDensity(context, prepared, projection, scratch, settings, job);
 assert.equal(scratch.density.count[4], 1 + 128 / 255);
+assert.equal(scratch.density.covered, null);
+assert.equal(scratch.density.sorted, null);
 const allocated = scratch.density.count;
 paintDensity(context, prepared, projection, scratch, settings, job);
 assert.equal(scratch.density.count, allocated);

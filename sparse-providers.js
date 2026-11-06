@@ -275,6 +275,7 @@ export async function prepareSparseProviders(
   };
   if (!current()) return null;
   cache.factorSparse = sparse;
+  delete cache.providerPages;
   // Releasing dense local caches makes switching to sparse preparation actually release storage.
   delete cache.factorWindow;
   delete cache.factorEntropy;

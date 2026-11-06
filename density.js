@@ -106,7 +106,11 @@ export function assertDensityStorage(job, width, height, settings) {
   );
   return assertProviderBudget(
     { configuration: { providerBudget: limit === Infinity ? null : limit } },
-    width * height * 45,
+    width *
+      height *
+      (36 +
+        (settings.reference === "percentile" ? 8 : 0) +
+        (settings.mode === "front" ? 1 : 0)),
     "Density raster storage",
   );
 }
@@ -132,12 +136,17 @@ export function paintDensity(
       red: new Float64Array(length),
       green: new Float64Array(length),
       blue: new Float64Array(length),
-      sorted: new Float64Array(length),
-      covered: new Uint8Array(length),
+
       image: context.createImageData(width, height),
     };
-  for (const name of ["count", "red", "green", "blue", "covered"])
-    data[name].fill(0);
+  data.sorted =
+    settings.reference === "percentile"
+      ? data.sorted || new Float64Array(length)
+      : null;
+  data.covered =
+    settings.mode === "front" ? data.covered || new Uint8Array(length) : null;
+  for (const name of ["count", "red", "green", "blue"]) data[name].fill(0);
+  data.covered?.fill(0);
   for (let n = prepared.size - 1; n >= 0; n--) {
     const i = order ? order[n] : n;
     const q = i * 4;
