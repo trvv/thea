@@ -5,4 +5,4 @@
 - Prefer native JavaScript primitives over redundant wrapper types.
 
 - Keep code expanded and readable rather than compressing it into dense one-liners.
-- Run `bun fmt` before final checks and committing. Use `bun fmt --check` to verify formatting.
+- Run `bun fmt src` before final checks and committing. Format only the source directory; use `bun fmt --check src` to verify formatting.

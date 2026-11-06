@@ -21,8 +21,8 @@ page requires an intentional host-layout change.
 
 ## Test commands
 
-Run `bun fmt` before final checks and committing. Use `bun fmt --check` to verify
-formatting.
+Run `bun fmt src` before final checks and committing. Format only the source
+directory; use `bun fmt --check src` to verify formatting.
 
 Tests are executable Bun scripts using assertions, not a `bun test` discovery
 suite. Run from the repository root:
