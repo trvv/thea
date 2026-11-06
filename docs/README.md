@@ -8,8 +8,13 @@ visual patterns even when the data's meaning is unknown.
 It is a small vanilla JavaScript application: native custom elements, Canvas 2D,
 ES modules, and optional worker rendering. There is no package manifest, bundler,
 framework, or backend service. CPU rendering is the default. General points also
-have an opt-in WebGL2 rasterizer with CPU fallback. GLSL/WGSL recipe-function
-generators remain separate from that rasterizer; providers and recipes run on CPU.
+have an opt-in WebGL2 rasterizer with CPU fallback. Typed recipes emit GLSL and
+WGSL functions; the optional WebGL recipe backend executes GLSL for eligible
+graphs. Provider construction remains on CPU; CPU recipes and projection are
+the defaults.
+
+Start with the [user manual](user-manual.md) for the interface, workflows, and
+implemented feature reference.
 
 ## Run it
 
@@ -36,14 +41,14 @@ there is no HTTP Range reader or incremental streaming source today.
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Selection          | A full-screen view with two nested overview bars by default (configurable under Advanced → Bars); yellow selectors identify each child scope.                                                                                                      |
 | Navigation         | Wheel and keyboard movement, draggable selector edges, middle-button velocity scrolling/resizing, and 3D rotation.                                                                                                                                 |
-| Presets            | Linear, Hilbert, Hilbert 3D, Digraph, DFT, and Trigraph. All supply ordinary configuration to one shared CPU/WebGL pipeline.                                                                                                                       |
+| Presets            | Linear, Hilbert/Hilbert 3D, H-Curve, Morton/Morton 3D, Digraph, DFT, Trigraph, Byte Frequency and Packed Pixels. All supply ordinary configuration to one shared CPU/WebGL pipeline.                                                                                                                       |
 | Dimensions         | Per-axis ranges/step, Scale or Truncate, and independent Fit; defaults are Scale and Fit on.                                                                                                                                                       |
 | Spaces             | Square, circle, cube, cylinder, sphere; scalar factors map to their positional channels.                                                                                                                                                           |
 | Inspection         | Left-click point provenance grouped by position, shading and text traits; supports mixed analyses and worker rendering.                                                                                                                            |
 | Point appearance   | Hue, saturation, lightness, opacity, size, and square/circle marks. Character or hex overlays are optional.                                                                                                                                        |
 | Factor recipes     | Explicit 2D/3D Hilbert coordinates, exact population indices, primitive sources, arithmetic, byte bit/XOR/popcount operations, byte lookup, local entropy, spectrum sampling, coordinate vectors, named scalar factors, and shared subexpressions. |
-| Scheduling         | Predicted expensive jobs use a worker when supported; ordered presentation and adaptive 3D quality preserve interaction.                                                                                                                           |
-| Point population   | Byte samples, distinct pairs/triples, or spectrum bins; independent analysis factors remain mixable.                                                                                                                                               |
+| Scheduling         | Predicted expensive jobs use a worker when supported; compatible frames present in order. Adaptive 3D quality is opt-in.                                                                                                                           |
+| Point population   | Byte samples, observed symbols, distinct pairs/triples, records or spectrum bins; independent analysis factors remain mixable.                                                                                                                                               |
 | Sampling           | General points default to at most 262,144 samples; selection ranges and exact statistical providers stay independent.                                                                                                                              |
 | Shader preparation | The typed recipe graph emits GLSL and WGSL function libraries with explicit provider interfaces.                                                                                                                                                   |
 

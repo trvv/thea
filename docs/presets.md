@@ -8,7 +8,7 @@ persist in localStorage and the last selected preset is restored when a new
 
 | Path under Preset                                               | Behavior                                                                      |
 | --------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Load → Linear / Hilbert / Hilbert 3D / Digraph / DFT / Trigraph | Apply a built-in view and remember that choice.                               |
+| Load → built-in preset (including curves, Byte Frequency and Packed Pixels) | Apply a built-in view and remember that choice.                               |
 | Load → Saved → name                                             | Load a saved snapshot and its bar count.                                      |
 | Save As                                                         | Save the current configuration under a new name.                              |
 | Manage → name → Update                                          | Replace that saved entry with the current view and bar count.                 |
@@ -18,6 +18,8 @@ persist in localStorage and the last selected preset is restored when a new
 | Manage → name → Copy JSON                                       | Copy that entry's stored settings.                                            |
 | Copy JSON                                                       | Copy the current view and bar count, including unsaved edits.                 |
 | Import JSON                                                     | Validate pasted JSON, ask for a name, then save and load it.                  |
+| Import File | Validate a preset JSON file, ask for a name, then save and load it. |
+| Export File | Download the current view and bar count as preset JSON. |
 
 Names are trimmed, case-sensitive, and limited to 80 characters. Save As, Duplicate
 and Rename reject a name already used by another saved entry. Update is the

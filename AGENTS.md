@@ -6,3 +6,5 @@
 
 - Keep code expanded and readable rather than compressing it into dense one-liners.
 - Run `bun fmt src` before final checks and committing. Format only the source directory; use `bun fmt --check src` to verify formatting.
+
+- Update `docs/user-manual.md` whenever user-facing functionality, controls, defaults, workflows, or persistence behavior is added, changed, or removed. Document implemented behavior only; keep feature proposals in `docs/ideas/`.
